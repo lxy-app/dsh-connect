@@ -58,7 +58,7 @@
         "expo-camera",
         {
           "cameraPermission": "允许 $(PRODUCT_NAME) 使用相机扫描配对二维码。",
-          "microphonePermission": false,
+          "microphonePermission": "允许 $(PRODUCT_NAME) 使用麦克风将你的语音转写为指令。",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
@@ -79,7 +79,9 @@
           "microphonePermission": "允许 $(PRODUCT_NAME) 使用麦克风将你的语音转写为指令。",
           "speechRecognitionPermission": "允许 $(PRODUCT_NAME) 使用系统语音识别将你的语音转写为指令。"
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

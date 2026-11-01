@@ -1,3 +1,4 @@
+import { requestRecordingPermissionsAsync, setAudioModeAsync, useAudioStream } from 'expo-audio';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
@@ -32,6 +33,7 @@ import {
 import { formatTime } from '@/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
 import { openSessionStream } from '@/lib/session-stream';
+import { openVolcAsrSession, type VolcAsrSession } from '@/lib/volc-asr';
 import { useInteractions } from '@/providers/interactions-provider';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useVoice } from '@/providers/voice-provider';
@@ -42,7 +44,7 @@ export function ChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { authorized, session, connection, rememberSession } = useMobileSession();
-  const { settings: voiceSettings, speak } = useVoice();
+  const { settings: voiceSettings, hydrated: voiceHydrated, speak } = useVoice();
   const { interactions, busyId, decide } = useInteractions();
   const params = useLocalSearchParams<{
     sessionId: string;
@@ -82,6 +84,13 @@ export function ChatScreen() {
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const voiceTextRef = useRef('');
   const voiceStopRequested = useRef(false);
+  const voiceStarting = useRef(false);
+  const voiceStartGeneration = useRef(0);
+  const cloudSessionRef = useRef<VolcAsrSession | null>(null);
+  const pendingPcmRef = useRef<Uint8Array | null>(null);
+  const audioStreamOwnerRef = useRef<number | null>(null);
+  const audioStreamStopRef = useRef<() => void>(() => undefined);
+  const voiceFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const speechInitialized = useRef(false);
   const lastSpokenSeq = useRef(0);
   const [sending, setSending] = useState(false);
@@ -99,34 +108,106 @@ export function ChatScreen() {
   const streamClearAfter = useRef(0);
   const scrollRef = useRef<ComponentRef<typeof ScrollView> | null>(null);
   const stickToBottom = useRef(true);
+
+  const resetVoice = useCallback(() => {
+    voiceStarting.current = false;
+    setVoiceListening(false);
+    setVoiceStopping(false);
+    setVoiceMode(false);
+    setVoiceTranscript('');
+    voiceTextRef.current = '';
+    pendingPcmRef.current = null;
+  }, []);
+  const clearVoiceFinishTimer = useCallback(() => {
+    if (voiceFinishTimerRef.current !== null) clearTimeout(voiceFinishTimerRef.current);
+    voiceFinishTimerRef.current = null;
+  }, []);
+  const stopCloudAudio = useCallback((expectedGeneration?: number) => {
+    const owner = audioStreamOwnerRef.current;
+    if (expectedGeneration !== undefined && owner !== null && owner !== expectedGeneration) return;
+    audioStreamStopRef.current();
+    if (expectedGeneration === undefined || owner === expectedGeneration) audioStreamOwnerRef.current = null;
+    void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+  }, []);
+  const finishCloudVoice = useCallback((text: string) => {
+    clearVoiceFinishTimer();
+    cloudSessionRef.current = null;
+    stopCloudAudio();
+    resetVoice();
+    const transcript = text.trim();
+    if (transcript) setDraft((current) => `${current.trim() ? `${current.trim()}\n` : ''}${transcript}`);
+  }, [clearVoiceFinishTimer, resetVoice, stopCloudAudio]);
+  const failCloudVoice = useCallback((cause: unknown) => {
+    clearVoiceFinishTimer();
+    cloudSessionRef.current?.abort();
+    cloudSessionRef.current = null;
+    stopCloudAudio();
+    resetVoice();
+    Alert.alert('语音识别未完成', cause instanceof Error ? cause.message : '请稍后重试。');
+  }, [clearVoiceFinishTimer, resetVoice, stopCloudAudio]);
+
+  const { stream: audioStream } = useAudioStream({
+    sampleRate: 16_000,
+    channels: 1,
+    encoding: 'int16',
+    onBuffer: (buffer) => {
+      const session = cloudSessionRef.current;
+      if (!session) return;
+      if (buffer.sampleRate !== 16_000 || buffer.channels !== 1) {
+        failCloudVoice(new Error(`当前麦克风输出为 ${buffer.sampleRate} Hz / ${buffer.channels} 声道，无法按 16 kHz 单声道识别。`));
+        return;
+      }
+      try {
+        const previous = pendingPcmRef.current;
+        pendingPcmRef.current = new Uint8Array(buffer.data.slice(0));
+        if (previous) session.sendAudio(previous);
+      } catch (cause) {
+        failCloudVoice(cause);
+      }
+    },
+  });
+  useEffect(() => {
+    audioStreamStopRef.current = () => audioStream?.stop();
+  }, [audioStream]);
+
   useSpeechRecognitionEvent('start', () => {
+    if (voiceSettings.asrProvider !== 'system') return;
+    if (voiceStopRequested.current) {
+      ExpoSpeechRecognitionModule.abort();
+      resetVoice();
+      return;
+    }
+    voiceStarting.current = false;
     setVoiceListening(true);
     setVoiceStopping(false);
   });
   useSpeechRecognitionEvent('result', (event) => {
+    if (voiceSettings.asrProvider !== 'system') return;
     const text = event.results[0]?.transcript?.trim() ?? '';
     if (!text) return;
     voiceTextRef.current = text;
     setVoiceTranscript(text);
   });
   useSpeechRecognitionEvent('end', () => {
+    if (voiceSettings.asrProvider !== 'system') return;
     const text = voiceTextRef.current.trim();
-    setVoiceListening(false);
-    setVoiceStopping(false);
-    setVoiceMode(false);
-    setVoiceTranscript('');
+    resetVoice();
     if (text) setDraft((current) => `${current.trim() ? `${current.trim()}\n` : ''}${text}`);
-    voiceTextRef.current = '';
   });
   useSpeechRecognitionEvent('error', (event) => {
-    setVoiceListening(false);
-    setVoiceStopping(false);
-    setVoiceMode(false);
-    voiceTextRef.current = '';
-    setVoiceTranscript('');
+    if (voiceSettings.asrProvider !== 'system') return;
+    resetVoice();
     if (event.error !== 'aborted') Alert.alert('语音识别未完成', event.message || '请检查麦克风权限和系统语音识别服务后重试。');
   });
-  useEffect(() => () => { ExpoSpeechRecognitionModule.abort(); }, []);
+  useEffect(() => () => {
+    voiceStartGeneration.current += 1;
+    voiceStopRequested.current = true;
+    voiceStarting.current = false;
+    clearVoiceFinishTimer();
+    ExpoSpeechRecognitionModule.abort();
+    cloudSessionRef.current?.abort();
+    stopCloudAudio();
+  }, [clearVoiceFinishTimer, stopCloudAudio]);
 
   const canPrompt = scopes.includes('prompt');
   const canCancel = scopes.includes('cancel');
@@ -352,8 +433,12 @@ export function ChatScreen() {
     }
     if (latest.seq === lastSpokenSeq.current) return;
     lastSpokenSeq.current = latest.seq;
-    if (voiceSettings.autoPlay && !transcript?.active && !streamText) speak(markdownToPlainText(latest.text));
-  }, [conversation, speak, streamText, transcript?.active, voiceSettings.autoPlay]);
+    if (voiceHydrated && voiceSettings.autoPlay && !transcript?.active && !streamText) {
+      void speak(markdownToPlainText(latest.text)).catch((cause: unknown) => {
+        Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
+      });
+    }
+  }, [conversation, speak, streamText, transcript?.active, voiceHydrated, voiceSettings.autoPlay]);
 
   const loadOlder = useCallback(async () => {
     if (!olderCursor || loadingOlder) return;
@@ -448,40 +533,135 @@ export function ChatScreen() {
     ]);
   };
 
+  const startCloudVoice = async (generation: number) => {
+    if (Platform.OS === 'web') throw new Error('浏览器无法传递火山 ASR 所需的 WebSocket 鉴权头，请改用系统 ASR 或移动端 Development Build。');
+    const permission = await requestRecordingPermissionsAsync();
+    if (!permission.granted) throw new Error('请允许麦克风权限后重试。');
+    if (generation !== voiceStartGeneration.current || voiceStopRequested.current) return;
+
+    let session: VolcAsrSession;
+    session = openVolcAsrSession(
+      { apiKey: voiceSettings.apiKey, endpoint: voiceSettings.endpoint, protocol: voiceSettings.asrProtocol },
+      {
+        onOpen: () => {
+          void (async () => {
+            try {
+              if (generation !== voiceStartGeneration.current || voiceStopRequested.current) {
+                session.abort();
+                return;
+              }
+              audioStreamOwnerRef.current = generation;
+              await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
+                shouldPlayInBackground: false,
+                interruptionMode: 'doNotMix',
+              });
+              if (generation !== voiceStartGeneration.current || voiceStopRequested.current) {
+                stopCloudAudio(generation);
+                session.abort();
+                return;
+              }
+              await audioStream.start();
+              if (generation !== voiceStartGeneration.current || voiceStopRequested.current) {
+                stopCloudAudio(generation);
+                session.abort();
+                return;
+              }
+              if (audioStream.sampleRate !== 16_000 || audioStream.channels !== 1) {
+                throw new Error(`当前麦克风输出为 ${audioStream.sampleRate} Hz / ${audioStream.channels} 声道，无法按 16 kHz 单声道识别。`);
+              }
+              voiceStarting.current = false;
+              setVoiceListening(true);
+              setVoiceStopping(false);
+            } catch (cause) {
+              if (generation === voiceStartGeneration.current) failCloudVoice(cause);
+              else {
+                stopCloudAudio(generation);
+                session.abort();
+              }
+            }
+          })();
+        },
+        onText: (text) => {
+          if (generation !== voiceStartGeneration.current) return;
+          voiceTextRef.current = text;
+          setVoiceTranscript(text);
+        },
+        onComplete: (text) => {
+          if (generation === voiceStartGeneration.current) finishCloudVoice(text);
+        },
+        onError: (cause) => {
+          if (generation === voiceStartGeneration.current) failCloudVoice(cause);
+        },
+      },
+    );
+    cloudSessionRef.current = session;
+  };
+
   const startVoice = async () => {
-    if (!voiceSettings.enabled || voiceListening) return;
+    if (!voiceHydrated || !voiceSettings.enabled || voiceListening || voiceStarting.current) return;
+    const generation = ++voiceStartGeneration.current;
+    voiceStarting.current = true;
     voiceTextRef.current = '';
+    pendingPcmRef.current = null;
     voiceStopRequested.current = false;
+    clearVoiceFinishTimer();
     setVoiceTranscript('');
+    setVoiceStopping(false);
     setVoiceMode(true);
     try {
-      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
-        setVoiceMode(false);
-        setVoiceStopping(false);
-        Alert.alert('语音识别不可用', '请启用系统语音识别服务后重试。');
+      if (voiceSettings.asrProvider === 'volcengine') {
+        await startCloudVoice(generation);
         return;
+      }
+      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+        throw new Error('请启用系统语音识别服务后重试。');
       }
       const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!permission.granted) {
-        setVoiceMode(false);
-        setVoiceStopping(false);
-        Alert.alert('需要语音权限', '请允许麦克风和系统语音识别权限后重试。');
-        return;
-      }
-      if (voiceStopRequested.current) {
-        ExpoSpeechRecognitionModule.stop();
-        return;
-      }
+      if (!permission.granted) throw new Error('请允许麦克风和系统语音识别权限后重试。');
+      if (generation !== voiceStartGeneration.current || voiceStopRequested.current) return;
       ExpoSpeechRecognitionModule.start({ lang: voiceSettings.language, interimResults: true, continuous: false, maxAlternatives: 1 });
     } catch (cause) {
-      setVoiceMode(false);
-      setVoiceStopping(false);
-      Alert.alert('无法启动语音识别', cause instanceof Error ? cause.message : '请稍后重试。');
+      if (generation !== voiceStartGeneration.current) return;
+      if (voiceSettings.asrProvider === 'volcengine') failCloudVoice(cause);
+      else {
+        resetVoice();
+        Alert.alert('无法启动语音识别', cause instanceof Error ? cause.message : '请稍后重试。');
+      }
     }
   };
   const stopVoice = () => {
     voiceStopRequested.current = true;
+    if (voiceStarting.current) {
+      voiceStartGeneration.current += 1;
+      cloudSessionRef.current?.abort();
+      cloudSessionRef.current = null;
+      ExpoSpeechRecognitionModule.abort();
+      stopCloudAudio();
+      resetVoice();
+      return;
+    }
     setVoiceStopping(true);
+    if (voiceSettings.asrProvider === 'volcengine') {
+      const session = cloudSessionRef.current;
+      if (!session) {
+        resetVoice();
+        return;
+      }
+      stopCloudAudio();
+      try {
+        session.finish(pendingPcmRef.current ?? undefined);
+        pendingPcmRef.current = null;
+        clearVoiceFinishTimer();
+        voiceFinishTimerRef.current = setTimeout(() => {
+          failCloudVoice(new Error('火山 ASR 等待最终结果超时，请重试。'));
+        }, 30_000);
+      } catch (cause) {
+        failCloudVoice(cause);
+      }
+      return;
+    }
     ExpoSpeechRecognitionModule.stop();
   };
   const openDrawerSession = (next: MobileSession) => {
@@ -754,7 +934,7 @@ export function ChatScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={voiceMode ? '切换为键盘输入' : '切换为语音输入'}
-                disabled={!voiceSettings.enabled || voiceListening}
+                disabled={!voiceHydrated || !voiceSettings.enabled || voiceListening}
                 onPress={() => setVoiceMode((current) => !current)}
                 style={[styles.voiceSwitch, { backgroundColor: voiceMode ? theme.accentSoft : theme.surfaceMuted }]}
               >
@@ -764,7 +944,7 @@ export function ChatScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="按住说话"
-                  disabled={!voiceSettings.enabled || voiceStopping}
+                  disabled={!voiceHydrated || !voiceSettings.enabled || voiceStopping}
                   onPressIn={() => void startVoice()}
                   onPressOut={stopVoice}
                   style={({ pressed }) => [styles.holdTalk, { backgroundColor: voiceListening || pressed ? theme.accent : theme.accentSoft }]}
@@ -841,7 +1021,7 @@ function MessageRow({
   streaming?: boolean;
 }) {
   const theme = useAppTheme();
-  const { speak } = useVoice();
+  const { hydrated: voiceHydrated, speak } = useVoice();
   const user = message.role === 'user';
   const [expanded, setExpanded] = useState(false);
   const collapsible = !streaming && message.text.length > 700;
@@ -902,7 +1082,17 @@ function MessageRow({
           {streaming ? '流式接收中' : formatTime(message.occurredAt)}
         </Text>
         {!user ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="朗读回复" onPress={() => speak(markdownToPlainText(message.text))} style={styles.messageTts}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="朗读回复"
+            disabled={!voiceHydrated}
+            onPress={() => {
+              void speak(markdownToPlainText(message.text)).catch((cause: unknown) => {
+                Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
+              });
+            }}
+            style={styles.messageTts}
+          >
             <Text style={[styles.messageTtsText, { color: theme.accent }]}>▷ 朗读</Text>
           </Pressable>
         ) : null}

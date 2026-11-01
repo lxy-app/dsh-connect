@@ -87,7 +87,7 @@ npm --prefix connector/dsh-plugin run debug -- list --device dev_xxx
 make test          # Go Server + Connector 单元/集成测试
 make test-e2e      # 真实 Go Server + Connector 协议 + 可控 Host 仿真
 make test-admin    # 管理后台类型检查
-make test-mobile   # 移动端 ESLint + TypeScript
+make test-mobile   # 移动端 ESLint + TypeScript + ASR/TTS 协议测试
 make check         # go vet、全部测试、跨语言 E2E 与前端/移动端静态检查
 ```
 

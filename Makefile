@@ -66,6 +66,7 @@ test-admin:
 
 test-mobile:
 	npm --prefix apps/mobile run check
+	npm --prefix apps/mobile test
 
 vet:
 	go -C server vet ./...

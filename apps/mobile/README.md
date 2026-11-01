@@ -15,11 +15,11 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 - “工作区”已迁入会话左侧抽屉，按桌面分组；每个工作区默认展开 5 条会话，支持查看更多与收起。“会话”入口恢复最近选中的聊天，聊天页保留底部导航。
 - 会话详情从 `/v1/mobile/sessions/{id}/messages` 读取稳定 transcript，空闲时每 3 秒轮询、等待响应时每 1.8 秒轮询；界面只展示对话内容，工具调用/输出和注入的 runtime/time/skill context 不展示，超长消息默认折叠为 14 行并可展开；会话运行期间通过 `/v1/mobile/events/ws` 接收 assistant 文本增量并实时追加，WSS 断开时自动回退到轮询，支持加载更早消息、手动刷新、发送/排队/执行等待状态和慢响应提示。
 - assistant 回复按 Markdown 渲染：标题、列表、粗体/斜体/删除线、行内代码、代码块、引用、表格、任务列表和链接；流式增量也按 Markdown 实时呈现，链接只允许 http(s)/mailto 并由系统浏览器打开。长消息折叠时显示纯文本摘要，展开后恢复完整排版。
-- 在 `prompt` 授权下发送排队提示词，在 `cancel` 授权下停止当前 Turn；支持系统语音按住说话、转写回填、回复朗读与自动播报。云厂商 TTS 配置仅通过 Keychain / Keystore 加密保存，不把格式检查伪装成云端连接成功。
+- 在 `prompt` 授权下发送排队提示词，在 `cancel` 授权下停止当前 Turn；按住说话支持火山 Agent Plan Seed ASR 2.0 双向/单向 WebSocket 转写与系统 ASR，回复朗读和自动播报支持 Agent Plan Seed TTS 2.0 与系统 TTS。Agent Plan 密钥只通过 Keychain / Keystore 加密保存，云端错误会明确提示，不用格式检查或系统语音冒充云端调用成功。
 - 在 `approve` 授权下接收桌面转发的一次性审批与提问：首页横幅与“待处理”页展示，会话内也会固定显示待答卡片；审批只能 `allow-once` 或 `reject`，提问支持选项与自定义文本。
 - 支持撤销本机授权、断开本机并尽力吊销 Server 端手机凭据。
 
-尚未实现：离线草稿、附件、推送（APNs/FCM）、生物识别和云厂商 TTS 实际合成适配。待处理列表由 2 秒轮询维持，App 回到前台会立即刷新，进入后台后停止轮询。
+尚未实现：离线草稿、附件、推送（APNs/FCM）、生物识别和 Web 端火山 ASR 中继。待处理列表由 2 秒轮询维持，App 回到前台会立即刷新，进入后台后停止轮询。
 
 App 在前台轮询待处理项时，桌面会优先把审批交给手机（默认 6 秒窗口）；窗口内未作答则撤回手机卡片并改由桌面原生审批，因此两端不会同时出现两张卡。
 
@@ -33,6 +33,8 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - `expo-secure-store`：保存手机 Access/Refresh Token，使用 Keychain / Keystore。
 - `expo-local-authentication`：后续用于应用解锁和敏感操作确认。
 - `expo-camera`：扫描配对二维码，不启用 Android 录音权限。
+- `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。
+- `expo-file-system`：在缓存目录写入 TTS MP3；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
 - `expo-sqlite`：后续保存草稿、游标和可重建缓存。
 - `expo-notifications`：后续接入原生 APNs/FCM token 与通知深链。
 - 聊天 Markdown 由 `src/lib/markdown.ts` 本地解析、`src/components/markdown.tsx` 按主题渲染，不引入第三方 Markdown 运行时依赖。
@@ -124,6 +126,18 @@ npm install --registry=https://registry.npmjs.org
 - 本机清除凭据不会删除桌面 DSH 会话。
 - iOS Keychain 在卸载重装后可能仍保留旧条目；遇到异常态可重新配对，管理员也可吊销旧手机。
 
+## 语音与火山 Agent Plan
+
+接入契约以[火山 Agent Plan 语音模型文档](https://ark.volcengine.com/region:cn-beijing/docs/agent-plan-personal-voice-model)为准。
+
+“我的 → 语音与模型服务”可分别选择 ASR / TTS 的服务提供方。默认优先使用火山 Agent Plan，也可独立切回系统语音；旧版单一 `provider` 设置会在读取时迁移到两个独立选项。
+
+- ASR Resource-Id：`volc.seedasr.sauc.duration`。双向流式使用 `wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async`，完成后返回使用 `bigmodel_nostream`。麦克风音频按 16 kHz、单声道、Int16 PCM、gzip 二进制帧发送，松开时以负序号标记最后一包，收到服务器最终包后才回填文本。
+- TTS Resource-Id：`seed-tts-2.0`。使用 `POST https://openspeech.bytedance.com/api/v3/plan/tts/unidirectional`，默认音色 `zh_female_gaolengyujie_uranus_bigtts`，合并分块 MP3 数据并确认终端码 `20000000` 后播放。
+- 必须配置 Agent Plan 个人版专属 Key 或企业版席位 Key，不能使用按量平台普通 Key 代替。密钥只写入 SecureStore，不进入日志、SQLite、导航参数或 `EXPO_PUBLIC_*`。
+- 浏览器 WebSocket 不能设置 ASR 握手鉴权头，因此 Web 端应选择系统 ASR；火山 ASR 的 Web 中继尚未实现。iOS / Android Development Build 可直接连接 Agent Plan。
+- 云端合成或识别失败会显示真实错误。缺少最终包、只有部分音频或采样率不符合要求都不会被包装成成功。
+
 ## 本地 Development Build
 
 首次构建并安装：
@@ -136,7 +150,7 @@ npm run android
 
 这两个命令分别执行 `expo run:ios` / `expo run:android`，会生成原生目录、编译并安装应用，然后启动 Metro。
 
-之后只修改 TypeScript/JavaScript 时，无需重新编译原生应用。此次新增 `expo-speech` 与 `expo-speech-recognition` 原生模块后，必须先重新执行一次 `npm run ios` 或 `npm run android`，再使用 Metro 进行日常开发。
+之后只修改 TypeScript/JavaScript 时，无需重新编译原生应用。新增 `expo-speech`、`expo-speech-recognition`、`expo-audio`、`expo-file-system` 原生模块或修改麦克风/语音识别权限配置后，必须先重新执行一次 `npm run ios` 或 `npm run android`，再使用 Metro 进行日常开发。
 
 ```sh
 npm start
@@ -160,6 +174,7 @@ EAS 构建需要登录、初始化远程项目并配置相应签名/推送凭据
 ```sh
 npm run lint          # ESLint
 npm run typecheck     # TypeScript strict
+npm test              # ASR/TTS 协议单元测试
 npm run check         # lint + typecheck
 npx expo-doctor       # SDK 依赖与配置诊断
 npm run build:bundles # 生成 iOS / Android 生产 JS bundle
