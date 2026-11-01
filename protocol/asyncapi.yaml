@@ -1,0 +1,141 @@
+asyncapi: 2.6.0
+info:
+  title: DSH Connect WebSocket Protocol
+  version: 0.1.0
+  description: |
+    Version 1 JSON envelopes. Connector makes one persistent outbound WSS
+    connection. Pairing requires pair.start followed by explicit
+    pair.authorize before any command/event. Reconnects use a device bearer
+    token. Event recovery is delegated to Connector via
+    session.follow(cursor,followId). Successful App follows are cleaned up with
+    session.unfollow(sessionId,followId). Authenticated Connectors may also send
+    desktop-scoped `request` envelopes (mobile.access.list / mobile.access.decide /
+    pair.updateGrants / interaction.audience);
+    Server answers with `result` or `error` using the same requestId. Server never
+    reads DSH session files.
+defaultContentType: application/json
+servers:
+  local:
+    url: 127.0.0.1:8787
+    protocol: ws
+    description: Loopback P0; terminate TLS and use wss in deployed environments.
+channels:
+  connector:
+    description: Connector endpoint GET /v1/connector/ws.
+    bindings:
+      ws:
+        bindingVersion: 0.1.0
+        query:
+          type: object
+          additionalProperties: false
+    publish:
+      description: |
+        Frames produced by Server and sent to Connector, including follow/unfollow
+        commands carrying a followId and one-shot `interaction.respond` decisions.
+      message:
+        oneOf:
+          - $ref: schemas/v1/pairing.schema.json#/$defs/PairChallenge
+          - $ref: schemas/v1/pairing.schema.json#/$defs/PairComplete
+          - $ref: schemas/v1/commands.schema.json#/$defs/Command
+          - $ref: schemas/v1/commands.schema.json#/$defs/Error
+    subscribe:
+      description: |
+        Frames consumed by Server from Connector. Besides session events, the
+        Connector publishes `interaction.request` / `interaction.resolved` events
+        for DSH approvals and user questions; the Server stores the pending prompt
+        in memory (never in DSH files) and drops it when the Connector disconnects.
+      message:
+        oneOf:
+          - $ref: schemas/v1/pairing.schema.json#/$defs/PairStart
+          - $ref: schemas/v1/pairing.schema.json#/$defs/PairAuthorize
+          - $ref: schemas/v1/commands.schema.json#/$defs/Result
+          - $ref: schemas/v1/commands.schema.json#/$defs/Error
+          - $ref: schemas/v1/commands.schema.json#/$defs/ConnectorRequest
+          - $ref: schemas/v1/events.schema.json#/$defs/Event
+  mobileEvents:
+    description: |
+      Mobile endpoint GET /v1/mobile/events/ws?deviceId={deviceId}&workspaceId={workspaceId}&sessionId={sessionId}&cursor={cursor}.
+      Requires a paired phone access token (Authorization header; browser clients may
+      use the short-lived `accessToken` query parameter) and an active read grant for
+      the workspace. The Server starts a compact session.follow and relays only
+      display-safe frames: `assistant.stream` deltas, compact `session.snapshot`,
+      user/assistant/turn events and connector errors. Raw tool payloads are filtered
+      at the Server. Native clients use the transcript HTTP endpoint as fallback.
+    parameters:
+      deviceId:
+        schema: {type: string}
+      workspaceId:
+        schema: {type: string}
+      sessionId:
+        schema: {type: string}
+      cursor:
+        schema: {type: string}
+    publish:
+      description: Frames produced by Server for the granted mobile WebSocket client.
+      message:
+        oneOf:
+          - $ref: schemas/v1/events.schema.json#/$defs/FollowResult
+          - $ref: schemas/v1/events.schema.json#/$defs/Event
+          - $ref: schemas/v1/events.schema.json#/$defs/EventError
+  appEvents:
+    description: |
+      App/debug endpoint GET /v1/events/ws?deviceId={deviceId}&sessionId={sessionId}&cursor={cursor}.
+      One active follow is allowed per device+session. A new stream supersedes
+      the old stream with follow_superseded; each successful follow has a unique
+      followId and is unfollowed with that same ID when its WebSocket exits.
+    parameters:
+      deviceId:
+        schema: {type: string}
+      sessionId:
+        schema: {type: string}
+      cursor:
+        schema: {type: string}
+    publish:
+      description: Frames produced by Server for the authenticated bootstrap-bearer WebSocket client.
+      message:
+        oneOf:
+          - $ref: schemas/v1/events.schema.json#/$defs/FollowResult
+          - $ref: schemas/v1/events.schema.json#/$defs/Event
+          - $ref: schemas/v1/events.schema.json#/$defs/EventError
+components:
+  messages:
+    PairStart:
+      name: pair.start
+      payload:
+        $ref: schemas/v1/pairing.schema.json#/$defs/PairStart
+    PairAuthorize:
+      name: pair.authorize
+      payload:
+        $ref: schemas/v1/pairing.schema.json#/$defs/PairAuthorize
+    PairChallenge:
+      name: pair.challenge
+      payload:
+        $ref: schemas/v1/pairing.schema.json#/$defs/PairChallenge
+    PairComplete:
+      name: pair.complete
+      payload:
+        $ref: schemas/v1/pairing.schema.json#/$defs/PairComplete
+    Command:
+      name: command
+      payload:
+        $ref: schemas/v1/commands.schema.json#/$defs/Command
+    Result:
+      name: result
+      payload:
+        $ref: schemas/v1/commands.schema.json#/$defs/Result
+    Error:
+      name: error
+      payload:
+        $ref: schemas/v1/commands.schema.json#/$defs/Error
+    ConnectorRequest:
+      name: request
+      payload:
+        $ref: schemas/v1/commands.schema.json#/$defs/ConnectorRequest
+    Event:
+      name: event
+      payload:
+        $ref: schemas/v1/events.schema.json#/$defs/Event
+    FollowResult:
+      name: follow.result
+      payload:
+        $ref: schemas/v1/events.schema.json#/$defs/FollowResult

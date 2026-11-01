@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/commands.schema.json",
+  "title": "DSH Connect command envelopes v1",
+  "$defs": {
+    "Command": {
+      "type": "object",
+      "required": [
+        "v",
+        "type",
+        "requestId",
+        "method",
+        "params",
+        "timeoutMs"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "command"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "session.list",
+            "session.create",
+            "session.page",
+            "session.transcript",
+            "session.prompt",
+            "session.follow",
+            "session.unfollow",
+            "session.cancel",
+            "interaction.respond"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "Result": {
+      "type": "object",
+      "required": [
+        "v",
+        "type",
+        "requestId",
+        "result"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "result"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "result": {
+          "description": "Method-specific result DTO; opaque to the relay."
+        }
+      },
+      "additionalProperties": false
+    },
+    "Error": {
+      "type": "object",
+      "required": [
+        "v",
+        "type",
+        "requestId",
+        "error"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "error"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "error": {
+          "$ref": "common.schema.json#/$defs/Error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionListParams": {
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionCreateParams": {
+      "type": "object",
+      "required": [
+        "workspaceId"
+      ],
+      "properties": {
+        "workspaceId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionPageParams": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "limit"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionPromptParams": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "mode",
+        "content"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "queue",
+            "steer"
+          ]
+        },
+        "content": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "common.schema.json#/$defs/ContentPart"
+          }
+        },
+        "clientTimeZone": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionFollowParams": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "followId",
+        "stream"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "followId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "stream": {
+          "type": "boolean"
+        },
+        "compact": {
+          "type": "boolean",
+          "description": "Omit bulky opening snapshot records and projections for mobile live streaming."
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionUnfollowParams": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "followId"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "followId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionCancelParams": {
+      "type": "object",
+      "required": [
+        "sessionId"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionTranscriptParams": {
+      "type": "object",
+      "required": [
+        "sessionId"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "additionalProperties": false
+    },
+    "ConnectorRequest": {
+      "type": "object",
+      "required": [
+        "v",
+        "type",
+        "requestId",
+        "method"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "request"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "mobile.access.list",
+            "mobile.access.decide"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

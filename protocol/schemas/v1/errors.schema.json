@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/errors.schema.json",
+  "title": "DSH Connect P0 error codes v1",
+  "type": "string",
+  "enum": [
+    "unauthorized",
+    "forbidden",
+    "invalid_request",
+    "not_found",
+    "payload_too_large",
+    "pairing_code_invalid",
+    "pairing_code_used",
+    "pairing_code_expired",
+    "pairing_challenge_invalid",
+    "pairing_challenge_expired",
+    "pairing_already_completed",
+    "device_offline",
+    "command_timeout",
+    "command_failed",
+    "request_in_flight",
+    "idempotency_conflict",
+    "method_not_supported",
+    "slow_consumer",
+    "follow_superseded",
+    "internal_error"
+  ],
+  "description": "Connector-specific extension error codes are allowed and are relayed unchanged. retryable tells clients whether a new requestId may be retried; prompt retries must retain the original requestId."
+}

@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/interaction.schema.json",
+  "title": "DSH Connect remote interaction v1",
+  "description": "Connector-originated approvals and user questions, their one-shot decisions, and the phone-facing projection.",
+  "$defs": {
+    "InteractionQuestionOption": {
+      "type": "object",
+      "required": ["label"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 512},
+        "description": {"type": "string", "maxLength": 4096}
+      },
+      "additionalProperties": false
+    },
+    "InteractionQuestion": {
+      "type": "object",
+      "required": ["id", "question"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "question": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "detail": {"type": "string", "maxLength": 4096},
+        "header": {"type": "string", "maxLength": 512},
+        "options": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/InteractionQuestionOption"}},
+        "multiSelect": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "InteractionRequestData": {
+      "type": "object",
+      "description": "Payload of a Connector `interaction.request` event.",
+      "required": ["interactionId", "kind", "sessionId", "workspaceId", "title", "createdAt", "expiresAt"],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"type": "string", "enum": ["approval", "question"]},
+        "sessionId": {"type": "string", "minLength": 1},
+        "workspaceId": {"type": "string", "minLength": 1},
+        "workspaceName": {"type": "string", "maxLength": 512},
+        "title": {"type": "string", "minLength": 1, "maxLength": 512},
+        "toolName": {"type": "string", "maxLength": 512},
+        "reason": {"type": "string", "maxLength": 4096},
+        "callId": {"type": "string", "maxLength": 256},
+        "questions": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/InteractionQuestion"}},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "InteractionResolvedData": {
+      "type": "object",
+      "description": "Payload of a Connector `interaction.resolved` event.",
+      "required": ["interactionId", "resolution"],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "resolution": {"type": "string", "enum": ["remote", "desktop", "timeout", "cancelled"]}
+      },
+      "additionalProperties": false
+    },
+    "InteractionAnswer": {
+      "type": "object",
+      "description": "One answered question. `custom` overrides a single-select choice and supplements multi-select choices.",
+      "required": ["id", "selected"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "selected": {"type": "array", "maxItems": 16, "items": {"type": "string"}},
+        "custom": {"type": "string", "maxLength": 4096}
+      },
+      "additionalProperties": false
+    },
+    "InteractionRespondParams": {
+      "type": "object",
+      "description": "Server-to-Connector command payload for one decision. The Connector answers `result` with `{accepted: true, interactionId}` or a fail-closed error.",
+      "required": ["interactionId", "kind"],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "enum": ["approval", "question"]},
+        "workspaceId": {"type": "string"},
+        "decision": {"type": "string", "enum": ["allow-once", "reject"]},
+        "answers": {"type": "array", "items": {"$ref": "#/$defs/InteractionAnswer"}}
+      },
+      "additionalProperties": false
+    },
+    "MobileInteraction": {
+      "type": "object",
+      "required": ["interactionId", "kind", "deviceId", "deviceName", "workspaceId", "workspaceName", "sessionId", "title", "createdAt", "expiresAt"],
+      "properties": {
+        "interactionId": {"type": "string"},
+        "kind": {"type": "string", "enum": ["approval", "question"]},
+        "deviceId": {"type": "string"},
+        "deviceName": {"type": "string"},
+        "workspaceId": {"type": "string"},
+        "workspaceName": {"type": "string"},
+        "sessionId": {"type": "string"},
+        "title": {"type": "string"},
+        "toolName": {"type": "string"},
+        "reason": {"type": "string"},
+        "callId": {"type": "string"},
+        "questions": {"type": "array", "items": {"$ref": "#/$defs/InteractionQuestion"}},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "MobileInteractionListResponse": {
+      "type": "object",
+      "required": ["interactions"],
+      "properties": {
+        "interactions": {"type": "array", "items": {"$ref": "#/$defs/MobileInteraction"}}
+      },
+      "additionalProperties": false
+    },
+    "MobileInteractionDecisionRequest": {
+      "type": "object",
+      "required": ["requestId"],
+      "properties": {
+        "requestId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "decision": {"type": "string", "enum": ["allow-once", "reject"]},
+        "answers": {"type": "array", "items": {"$ref": "#/$defs/InteractionAnswer"}},
+        "timeoutMs": {"type": "integer", "minimum": 1, "maximum": 120000}
+      },
+      "additionalProperties": false
+    }
+  }
+}

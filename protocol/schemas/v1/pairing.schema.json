@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/pairing.schema.json",
+  "title": "DSH Connect pairing envelopes v1",
+  "$defs": {
+    "PairStart": {
+      "type": "object",
+      "required": ["v", "type", "requestId", "pairingCode", "deviceName", "connectorVersion"],
+      "properties": {
+        "v": {"const": 1},
+        "type": {"const": "pair.start"},
+        "requestId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "pairingCode": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "connectorVersion": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "PairChallenge": {
+      "type": "object",
+      "required": ["v", "type", "requestId", "deviceId", "fingerprint", "pairingToken", "expiresAt"],
+      "properties": {
+        "v": {"const": 1},
+        "type": {"const": "pair.challenge"},
+        "requestId": {"type": "string"},
+        "deviceId": {"type": "string"},
+        "fingerprint": {"type": "string"},
+        "pairingToken": {"type": "string", "description": "Returned once; only its SHA-256 hash is persisted."},
+        "expiresAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "PairAuthorize": {
+      "type": "object",
+      "required": ["v", "type", "requestId", "pairingToken", "workspaces", "scopes"],
+      "properties": {
+        "v": {"const": 1},
+        "type": {"const": "pair.authorize"},
+        "requestId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "pairingToken": {"type": "string", "minLength": 1},
+        "workspaces": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/Workspace"}},
+        "scopes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/Scope"}}
+      },
+      "additionalProperties": false
+    },
+    "PairComplete": {
+      "type": "object",
+      "required": ["v", "type", "requestId", "deviceId", "deviceToken", "fingerprint"],
+      "properties": {
+        "v": {"const": 1},
+        "type": {"const": "pair.complete"},
+        "requestId": {"type": "string"},
+        "deviceId": {"type": "string"},
+        "deviceToken": {"type": "string", "description": "Returned once; only its SHA-256 hash is persisted."},
+        "fingerprint": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

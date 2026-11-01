@@ -1,0 +1,35 @@
+# Local development infrastructure for DSH Connect.
+#
+#   docker compose up -d
+#
+# PostgreSQL 18 is the only supported server version: the schema relies on
+# features (generated identity, `WITH (FORCE)` drops in tests) that are not
+# available on older majors.
+
+services:
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:18
+    container_name: dsh-connect-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dsh
+      POSTGRES_PASSWORD: dsh
+      POSTGRES_DB: dsh_connect
+      # Deterministic collation keeps ORDER BY stable across machines.
+      LANG: C.UTF-8
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # PostgreSQL 18+ expects a single mount at /var/lib/postgresql and puts the
+      # cluster in a major-version subdirectory (PGDATA=/var/lib/postgresql/18/docker).
+      # Mounting /var/lib/postgresql/data directly makes the image refuse to start.
+      - dsh-connect-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dsh -d dsh_connect"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  dsh-connect-pgdata:

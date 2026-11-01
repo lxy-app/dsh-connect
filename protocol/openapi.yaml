@@ -1,0 +1,711 @@
+openapi: 3.1.0
+info:
+  title: DSH Connect Server Debug/Admin API
+  version: 0.1.0
+  description: |
+    Version 1 DTOs for the single-instance P0 relay. Debug/admin endpoints
+    default to `Authorization: Bearer $DSH_CONNECT_BOOTSTRAP_TOKEN`; Web Admin
+    login sessions are also accepted by `/v1/admin` handlers. Mobile pairing and
+    refresh use their own credential flow, and `/v1/mobile/*` access tokens are
+    never bootstrap or Web Admin tokens. Mobile session access requires an active
+    grant that the desktop Connector approved for this phone, workspace and
+    action; pairing alone grants nothing. JSON request bodies reject unknown
+    fields. The Connector pairing/device channel is defined
+    in asyncapi.yaml. Session facts are returned by Connector; Server never reads
+    DSH files.
+servers:
+  - url: http://127.0.0.1:8787
+    description: Loopback development default; use HTTPS/WSS outside loopback.
+security:
+  - bootstrapBearer: []
+tags:
+  - name: pairing
+    description: One-time desktop pairing codes.
+  - name: devices
+    description: Paired desktop projections and presence.
+  - name: sessions
+    description: Session commands relayed through an authorized Connector.
+  - name: events
+    description: Persistent and ephemeral session event delivery.
+  - name: mobile
+    description: Mobile pairing, identity, token rotation and administrative revocation.
+  - name: mobileAccess
+    description: Desktop-approved phone access to workspaces, sessions and prompts.
+paths:
+  /v1/pairing/desktop-codes:
+    post:
+      tags: [pairing]
+      operationId: createDesktopPairingCode
+      summary: Create a one-time, ten-minute desktop pairing code
+      description: No request body is required; any supplied JSON body is ignored.
+      responses:
+        "201":
+          description: Pairing code created. The plaintext code is only returned here.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/rest.schema.json#/$defs/DesktopCodeResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/devices:
+    get:
+      tags: [devices]
+      operationId: listDevices
+      summary: List paired desktops
+      responses:
+        "200":
+          description: Public device DTOs. Token hashes and pairing hashes are never exposed.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/rest.schema.json#/$defs/DeviceListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/sessions:
+    get:
+      tags: [sessions]
+      operationId: listSessions
+      summary: List sessions through the desktop Connector
+      parameters:
+        - {$ref: "#/components/parameters/DeviceId"}
+        - name: workspaceId
+          in: query
+          required: false
+          schema: {type: string}
+        - name: timeoutMs
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 120000}
+      responses:
+        "200":
+          description: Opaque Connector `session.list` result.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/SessionListResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+    post:
+      tags: [sessions]
+      operationId: createSession
+      summary: Create a session in an authorized workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/rest.schema.json#/$defs/SessionCreateRequest}
+      responses:
+        "200":
+          description: Opaque Connector `session.create` result.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/SessionCreateResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+  /v1/sessions/{sessionId}/page:
+    get:
+      tags: [sessions]
+      operationId: pageSession
+      summary: Page session history backwards from an exclusive cursor
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+        - {$ref: "#/components/parameters/DeviceId"}
+        - name: cursor
+          in: query
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: timeoutMs
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 120000}
+      responses:
+        "200":
+          description: Opaque Connector `session.page` result.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/SessionPageResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+  /v1/sessions/{sessionId}/prompt:
+    post:
+      tags: [sessions]
+      operationId: promptSession
+      summary: Send a durable, idempotent prompt to a session
+      description: |
+        Sends `session.prompt`. `requestId` is a durable idempotency key. An
+        identical concurrent or completed retry receives the first result and
+        is not forwarded twice. Reusing the key with different input fails
+        with `idempotency_conflict`. A pre-submission `device_offline` error
+        has `details.submitted=false`, is not persisted, and may be retried with
+        the same requestId after reconnect. Timeout or disconnection after a
+        write is an uncertain outcome and remains persisted to prevent repeats.
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/rest.schema.json#/$defs/SessionPromptRequest}
+      responses:
+        "200":
+          description: Accepted prompt, or the persisted first outcome for a retry.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/SessionPromptResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The requestId was already used with different method/device/params.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+  /v1/sessions/{sessionId}/cancel:
+    post:
+      tags: [sessions]
+      operationId: cancelSession
+      summary: Cancel the current turn in a session
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/rest.schema.json#/$defs/SessionCancelRequest}
+      responses:
+        "200":
+          description: Opaque Connector `session.cancel` result.
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+  /v1/events/ws:
+    get:
+      tags: [events]
+      operationId: followEvents
+      summary: Follow a session's snapshot and live events over WebSocket
+      description: |
+        WebSocket Upgrade endpoint. Authentication uses the same Authorization
+        header, never a query token. On connection Server subscribes the client,
+        sends `session.follow` with the supplied cursor and a generated followId,
+        emits `follow.result`, then relays matching Connector events. Only one
+        App follow is active per device+session: a replacement closes the old
+        stream with `follow_superseded`. After a successful follow, stream exit
+        triggers `session.unfollow` with the same sessionId and followId using an
+        independent background timeout, so stale cleanup cannot remove a newer
+        follow when Connector compares followId. Full client buffers are closed
+        rather than allowed to grow without bound. See asyncapi.yaml for frames.
+      parameters:
+        - {$ref: "#/components/parameters/DeviceId"}
+        - {$ref: "#/components/parameters/SessionIdQuery"}
+        - name: cursor
+          in: query
+          schema: {type: string}
+        - name: timeoutMs
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 120000}
+      responses:
+        "101":
+          description: Switching Protocols to WebSocket (WSS in production).
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/admin/mobile/pairing-codes:
+    post:
+      tags: [mobile]
+      operationId: createMobilePairingCode
+      summary: Create a one-time mobile pairing code and QR deep link
+      description: |
+        Bootstrap callers must provide `userId`. Web Admin login sessions may
+        omit it to pair their own phone; issuing for another user requires the
+        owner or admin role. The plaintext code and pairing URL are returned
+        exactly once and are never recoverable from storage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobilePairingCodeRequest}
+      responses:
+        "201":
+          description: Mobile pairing code created.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobilePairingCodeResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/mobile-devices:
+    get:
+      tags: [mobile]
+      operationId: listMobileDevices
+      summary: List paired phones without credential material
+      responses:
+        "200":
+          description: Newest mobile devices first.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileDeviceListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /v1/admin/mobile-devices/{mobileDeviceId}/revoke:
+    post:
+      tags: [mobile]
+      operationId: revokeMobileDevice
+      summary: Revoke a paired phone and all of its mobile credentials
+      parameters:
+        - {$ref: "#/components/parameters/MobileDeviceId"}
+      responses:
+        "200":
+          description: Mobile device is revoked. The row is retained for audit.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {const: revoked}
+                additionalProperties: false
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /v1/mobile/pair:
+    post:
+      tags: [mobile]
+      operationId: pairMobileDevice
+      summary: Redeem a one-time mobile pairing code
+      description: |
+        Unauthenticated by design: possession of the one-time, short-lived code
+        is the pairing credential. The target user is taken from the stored code,
+        never from request fields. On success this creates an independent mobile
+        device identity and returns a short-lived access token plus a rotating
+        refresh token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobilePairRequest}
+      responses:
+        "200":
+          description: Mobile device paired. Plaintext tokens are returned once.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileSessionResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: Pairing code was already used or has expired.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/auth/refresh:
+    post:
+      tags: [mobile]
+      operationId: refreshMobileSession
+      summary: Rotate a mobile refresh token and access token
+      description: |
+        The previous refresh token is invalidated in the same transaction. The
+        previous access token is also replaced. Reusing an old refresh token
+        returns 401.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileRefreshRequest}
+      responses:
+        "200":
+          description: Rotated mobile session credentials.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileSessionResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/auth/logout:
+    post:
+      tags: [mobile]
+      operationId: logoutMobileSession
+      summary: Revoke the current mobile device credentials
+      security:
+        - mobileBearer: []
+      responses:
+        "204":
+          description: Mobile device revoked.
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/me:
+    get:
+      tags: [mobile]
+      operationId: getMobileIdentity
+      summary: Read the paired mobile device and owning user
+      security:
+        - mobileBearer: []
+      responses:
+        "200":
+          description: Current mobile identity.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileMeResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/mobile/access:
+    get:
+      tags: [mobileAccess]
+      operationId: getMobileAccessOverview
+      summary: List desktops and this phone's access grant state
+      description: |
+        Returns every available desktop with the workspaces and scopes its
+        Connector authorized, plus this phone's pending/active/denied grant.
+        Desktop filesystem paths are never included.
+      security:
+        - mobileBearer: []
+      responses:
+        "200":
+          description: Desktop access overview.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileAccessOverviewResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/access/requests:
+    post:
+      tags: [mobileAccess]
+      operationId: requestMobileAccess
+      summary: Ask the desktop user to approve a workspace/action subset
+      description: |
+        The requested workspaces and scopes must be a subset of the desktop's own
+        Connector authorization. The grant is created as `pending`; only the
+        desktop Connector can activate or deny it.
+      security:
+        - mobileBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileAccessRequest}
+      responses:
+        "201":
+          description: Access request stored. `status` is usually `pending`; an already active grant is never downgraded.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileAccessGrant}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/access/{grantId}:
+    delete:
+      tags: [mobileAccess]
+      operationId: revokeMobileAccess
+      summary: Withdraw this phone's own pending request or active grant
+      security:
+        - mobileBearer: []
+      parameters:
+        - {$ref: "#/components/parameters/GrantId"}
+      responses:
+        "204":
+          description: Grant revoked.
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/workspaces:
+    get:
+      tags: [mobileAccess]
+      operationId: listMobileWorkspaces
+      summary: List workspaces from this phone's active grants
+      security:
+        - mobileBearer: []
+      responses:
+        "200":
+          description: Flattened workspace directory with scopes and online state.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileWorkspaceListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/sessions:
+    get:
+      tags: [mobileAccess]
+      operationId: listMobileSessions
+      summary: List sessions in the phone's granted workspaces
+      description: |
+        Session metadata is aggregated per desktop with an active `read` grant and
+        filtered to the phone's granted workspace ids. Offline desktops are
+        reported in `warnings` instead of failing the whole request.
+      security:
+        - mobileBearer: []
+      parameters:
+        - name: deviceId
+          in: query
+          required: false
+          schema: {type: string}
+        - name: workspaceId
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: Filtered session metadata and per-device warnings.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileSessionListResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/sessions/{sessionId}/messages:
+    get:
+      tags: [mobileAccess]
+      operationId: getMobileTranscript
+      summary: Read a normalized conversation transcript
+      description: Requires an active `read` grant for the device and workspace. The Connector maps DSH events into stable role/text/tool messages.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+        - {$ref: "#/components/parameters/DeviceIdQuery"}
+        - {$ref: "#/components/parameters/WorkspaceIdQuery"}
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string, maxLength: 4096}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 100, default: 30}
+      responses:
+        "200":
+          description: Transcript with pagination and running state.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileTranscriptResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/sessions/{sessionId}/prompt:
+    post:
+      tags: [mobileAccess]
+      operationId: promptMobileSession
+      summary: Send a queued prompt from the phone
+      description: Requires an active `prompt` grant. Server keeps prompt idempotency by requestId.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobilePromptRequest}
+      responses:
+        "200":
+          description: Connector accepted the prompt with status accepted; completion comes from the transcript.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/SessionPromptResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: requestId was reused with different content.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/sessions/{sessionId}/cancel:
+    post:
+      tags: [mobileAccess]
+      operationId: cancelMobileSession
+      summary: Cancel the current turn from the phone
+      description: Requires an active `cancel` grant.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileCancelRequest}
+      responses:
+        "200":
+          description: Connector accepted the cancellation.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/SessionCancelResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/interactions:
+    get:
+      tags: [mobileAccess]
+      operationId: listMobileInteractions
+      summary: List pending approvals and questions
+      description: |
+        Returns the one-shot approvals and user questions a granted desktop is
+        currently waiting on. Requires an active `approve` grant for the desktop
+        and workspace. Expired and already-decided requests are never returned;
+        settled requests simply disappear from the next poll.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {name: deviceId, in: query, required: false, schema: {type: string, minLength: 1}}
+        - {name: sessionId, in: query, required: false, schema: {type: string, minLength: 1}}
+      responses:
+        "200":
+          description: Currently pending interactions this phone may answer.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/interaction.schema.json#/$defs/MobileInteractionListResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/mobile/interactions/{interactionId}/decision:
+    post:
+      tags: [mobileAccess]
+      operationId: decideMobileInteraction
+      summary: Answer one approval or question
+      description: |
+        One-shot: the first accepted decision consumes the request. The Server
+        forwards it to the desktop Connector, which resolves the matching DSH
+        approval or user-questions waterfall. Failed delivery releases the claim
+        so another phone or the desktop can still answer.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {name: interactionId, in: path, required: true, schema: {type: string, minLength: 1}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/interaction.schema.json#/$defs/MobileInteractionDecisionRequest}
+      responses:
+        "200":
+          description: The Connector accepted the decision.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted: {type: boolean}
+                  interactionId: {type: string}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The interaction was already decided, expired, or is being decided.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+        "500": {$ref: "#/components/responses/InternalError"}
+components:
+  securitySchemes:
+    bootstrapBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Exact value of DSH_CONNECT_BOOTSTRAP_TOKEN; there is no unauthenticated default.
+    mobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Short-lived mobile access token returned by /v1/mobile/pair or refresh.
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: query
+      required: true
+      schema: {type: string, minLength: 1}
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    SessionIdQuery:
+      name: sessionId
+      in: query
+      required: true
+      schema: {type: string, minLength: 1}
+    MobileDeviceId:
+      name: mobileDeviceId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    GrantId:
+      name: grantId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    DeviceIdQuery:
+      name: deviceId
+      in: query
+      required: true
+      schema: {type: string, minLength: 1}
+    WorkspaceIdQuery:
+      name: workspaceId
+      in: query
+      required: true
+      schema: {type: string, minLength: 1}
+  responses:
+    Unauthorized:
+      description: Missing, invalid, expired, revoked, or reused credentials.
+      content:
+        application/json:
+          schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+    Forbidden:
+      description: Credential is valid but the role, scope, user, or device is not permitted.
+      content:
+        application/json:
+          schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+    InvalidRequest:
+      description: Malformed, missing, or unsupported input.
+      content:
+        application/json:
+          schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+    NotFound:
+      description: The referenced user or mobile device does not exist.
+      content:
+        application/json:
+          schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+    DeviceOffline:
+      description: No authorized Connector is online; commands are never queued.
+      content:
+        application/json:
+          schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+    CommandTimeout:
+      description: Connector did not answer before timeoutMs.
+      content:
+        application/json:
+          schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+    InternalError:
+      description: Persistence or another internal failure.
+      content:
+        application/json:
+          schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}

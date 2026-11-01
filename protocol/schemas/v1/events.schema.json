@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/events.schema.json",
+  "title": "DSH Connect event envelopes v1",
+  "$defs": {
+    "Event": {
+      "type": "object",
+      "required": ["v", "type", "eventId", "deviceId", "sessionId", "kind", "occurredAt", "data"],
+      "properties": {
+        "v": {"const": 1},
+        "type": {"const": "event"},
+        "eventId": {"type": "string", "minLength": 1},
+        "deviceId": {"type": "string", "minLength": 1},
+        "sessionId": {"type": "string", "minLength": 1},
+        "seq": {"type": "integer", "minimum": 0, "description": "Durable per-session sequence; omitted for ephemeral assistant streams."},
+        "kind": {"type": "string", "minLength": 1},
+        "occurredAt": {"type": "string", "format": "date-time"},
+        "data": {"description": "Versioned Connector event payload; never read from DSH files by Server."}
+      },
+      "additionalProperties": false
+    },
+    "FollowResult": {
+      "type": "object",
+      "required": ["v", "type", "requestId", "result"],
+      "properties": {
+        "v": {"const": 1},
+        "type": {"const": "follow.result"},
+        "requestId": {"type": "string"},
+        "result": {"description": "Connector follow snapshot/recovery result."}
+      },
+      "additionalProperties": false
+    },
+    "EventError": {"$ref": "commands.schema.json#/$defs/Error"}
+  }
+}

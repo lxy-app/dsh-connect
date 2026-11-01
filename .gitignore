@@ -1,0 +1,27 @@
+# Local secrets
+.env
+.env.local
+!.env.example
+
+# Local runtime state
+server/data/
+connector/dsh-plugin/data/
+*.log
+
+# Build outputs
+bin/
+dist/
+.test-build/
+coverage/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary inspection files
+.tmp/

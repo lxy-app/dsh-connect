@@ -1,0 +1,809 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/mobile.schema.json",
+  "title": "DSH Connect mobile pairing DTOs v1",
+  "$defs": {
+    "MobileUser": {
+      "type": "object",
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "role"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "admin",
+            "member",
+            "auditor"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileDevice": {
+      "type": "object",
+      "required": [
+        "mobileDeviceId",
+        "userId",
+        "deviceName",
+        "platform",
+        "appVersion",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "mobileDeviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "ios",
+            "android"
+          ]
+        },
+        "appVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "revoked"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastSeenAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revokedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobilePairingCodeRequest": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Target user. Required for bootstrap-token callers; other callers default to themselves."
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobilePairingCodeResponse": {
+      "type": "object",
+      "required": [
+        "code",
+        "expiresAt",
+        "serverUrl",
+        "pairingUrl",
+        "userId"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Returned once; only its SHA-256 hash is persisted."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "serverUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "pairingUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^dshconnect://pair\\?",
+          "description": "Deep link encoded as a QR code for the DSH Connect app."
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobilePairRequest": {
+      "type": "object",
+      "required": [
+        "code",
+        "deviceName",
+        "platform",
+        "appVersion"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "ios",
+            "android"
+          ]
+        },
+        "appVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileSessionResponse": {
+      "type": "object",
+      "required": [
+        "mobileDeviceId",
+        "user",
+        "accessToken",
+        "accessTokenExpiresAt",
+        "refreshToken",
+        "refreshTokenExpiresAt"
+      ],
+      "properties": {
+        "mobileDeviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user": {
+          "$ref": "#/$defs/MobileUser"
+        },
+        "accessToken": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Returned once; only its SHA-256 hash is persisted."
+        },
+        "accessTokenExpiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "refreshToken": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Returned once; rotating refresh token, only its SHA-256 hash is persisted."
+        },
+        "refreshTokenExpiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileRefreshRequest": {
+      "type": "object",
+      "required": [
+        "refreshToken"
+      ],
+      "properties": {
+        "refreshToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileMeResponse": {
+      "type": "object",
+      "required": [
+        "mobileDevice",
+        "user"
+      ],
+      "properties": {
+        "mobileDevice": {
+          "$ref": "#/$defs/MobileDevice"
+        },
+        "user": {
+          "$ref": "#/$defs/MobileUser"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileDeviceListResponse": {
+      "type": "object",
+      "required": [
+        "devices"
+      ],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileDevice"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileWorkspaceSummary": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileAccessGrant": {
+      "type": "object",
+      "required": [
+        "grantId",
+        "deviceId",
+        "workspaces",
+        "scopes",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "grantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mobileDeviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mobileDeviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mobileUserName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mobilePlatform": {
+          "type": "string",
+          "enum": [
+            "ios",
+            "android"
+          ]
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileWorkspaceSummary"
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "read",
+              "prompt",
+              "cancel"
+            ]
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "active",
+            "denied",
+            "revoked"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decidedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileDesktopAccess": {
+      "type": "object",
+      "required": [
+        "deviceId",
+        "deviceName",
+        "connectorVersion",
+        "online",
+        "availableWorkspaces",
+        "availableScopes"
+      ],
+      "properties": {
+        "deviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connectorVersion": {
+          "type": "string"
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "availableWorkspaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileWorkspaceSummary"
+          }
+        },
+        "availableScopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "read",
+              "prompt",
+              "cancel"
+            ]
+          }
+        },
+        "grant": {
+          "$ref": "#/$defs/MobileAccessGrant"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileAccessOverviewResponse": {
+      "type": "object",
+      "required": [
+        "desktops"
+      ],
+      "properties": {
+        "desktops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileDesktopAccess"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileAccessRequest": {
+      "type": "object",
+      "required": [
+        "deviceId",
+        "workspaces",
+        "scopes"
+      ],
+      "properties": {
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "workspaces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "read",
+              "prompt",
+              "cancel"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileWorkspaceView": {
+      "type": "object",
+      "required": [
+        "grantId",
+        "deviceId",
+        "deviceName",
+        "workspace",
+        "scopes",
+        "online"
+      ],
+      "properties": {
+        "grantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspace": {
+          "$ref": "#/$defs/MobileWorkspaceSummary"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "read",
+              "prompt",
+              "cancel"
+            ]
+          }
+        },
+        "online": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileWorkspaceListResponse": {
+      "type": "object",
+      "required": [
+        "workspaces"
+      ],
+      "properties": {
+        "workspaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileWorkspaceView"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileAccessWarning": {
+      "type": "object",
+      "required": [
+        "deviceId",
+        "deviceName",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "deviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileSessionView": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "title",
+        "workspaceId",
+        "workspaceName",
+        "deviceId",
+        "deviceName",
+        "status",
+        "scopes",
+        "updatedAt"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "idle"
+          ]
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "read",
+              "prompt",
+              "cancel"
+            ]
+          }
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileSessionListResponse": {
+      "type": "object",
+      "required": [
+        "sessions",
+        "warnings"
+      ],
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileSessionView"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileAccessWarning"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileMessage": {
+      "type": "object",
+      "required": [
+        "id",
+        "seq",
+        "role",
+        "text",
+        "occurredAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "tool"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "toolName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolCallId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "isError": {
+          "type": "boolean"
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileTranscriptResponse": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "deviceId",
+        "workspaceId",
+        "messages",
+        "hasMore",
+        "active"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileMessage"
+          }
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobilePromptRequest": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "deviceId",
+        "workspaceId",
+        "mode",
+        "text"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "queue",
+            "steer"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120000
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileCancelRequest": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "deviceId",
+        "workspaceId"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120000
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
