@@ -48,8 +48,9 @@ make run-admin        # http://127.0.0.1:5173
 `Dockerfile` 将 Go Server 与 Web Admin 构建到同一个镜像，Go Server 同源托管 Admin 静态文件、`/v1` API 和 WebSocket。镜像不包含 PostgreSQL，需连接外部 PostgreSQL 18。
 
 ```sh
-# 服务器常用的 x86_64 架构；在 ARM 机器上构建也使用该参数。
-docker build --platform linux/amd64 -t lxyapp/dsh-connect:latest .
+# 推荐使用 Buildx：x86_64 与 ARM 构建主机均可，ARM 主机会交叉编译。
+docker buildx build --platform linux/amd64 \
+  -t lxyapp/dsh-connect:latest --load .
 
 docker run -d --name dsh-connect --restart unless-stopped \
   -p 8787:8787 \
@@ -62,6 +63,12 @@ docker run -d --name dsh-connect --restart unless-stopped \
 ```
 
 容器默认监听 `0.0.0.0:8787`，Admin 与 API 均通过该端口访问。使用 `--env-file .env` 时，若文件内仍是开发默认的 `DSH_CONNECT_LISTEN_ADDR=127.0.0.1:8787`，必须改为 `0.0.0.0:8787`。生产环境应在容器前配置 HTTPS 反向代理，并把 `DSH_CONNECT_SERVER_URL` 设置为手机可访问的公网地址。
+
+也可以用 `docker-compose.server.yml` 部署：它直接读取 `.env`，把监听地址固定覆盖为 `0.0.0.0:8787`，并通过 `host.docker.internal` 支持连接宿主机上的 PostgreSQL 18。宿主端口默认 8787，可用 `DSH_CONNECT_HTTP_PORT` 覆盖。
+
+```sh
+docker compose -f docker-compose.server.yml up -d
+```
 
 ### 调试示例
 
