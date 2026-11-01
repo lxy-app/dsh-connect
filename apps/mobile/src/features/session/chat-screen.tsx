@@ -858,6 +858,7 @@ function MessageRow({
       <View
         style={[
           styles.bubble,
+          !user && styles.bubbleAssistant,
           user
             ? { backgroundColor: theme.accent, borderBottomRightRadius: 6 }
             : { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1, borderBottomLeftRadius: 6 },
@@ -1071,6 +1072,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 10,
     gap: 5,
+  },
+  bubbleAssistant: {
+    width: '84%',
   },
   bubbleText: {
     fontSize: 14,
