@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError, getMobileAccessOverview, getMobileSessions } from '@/lib/mobile-api';
@@ -28,6 +29,7 @@ export function SessionDrawer({
   onOpenSession: (session: MobileSession) => void;
 }) {
   const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
   const { authorized } = useMobileSession();
   const [desktops, setDesktops] = useState<MobileDesktopAccess[]>([]);
   const [sessions, setSessions] = useState<MobileSession[]>([]);
@@ -95,7 +97,18 @@ export function SessionDrawer({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.layer}>
         <Pressable accessibilityLabel="关闭会话侧边栏" onPress={onClose} style={[styles.backdrop, { backgroundColor: '#00000066' }]} />
-        <Animated.View style={[styles.drawer, { backgroundColor: theme.surface, borderColor: theme.border, transform: [{ translateX }] }]}>
+        <Animated.View
+          style={[
+            styles.drawer,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              paddingTop: insets.top,
+              paddingBottom: insets.bottom,
+              transform: [{ translateX }],
+            },
+          ]}
+        >
           <View style={styles.deviceWrap}>
             <Pressable
               accessibilityRole="button"
