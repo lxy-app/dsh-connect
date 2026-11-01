@@ -1,14 +1,27 @@
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
+import { File, Paths } from 'expo-file-system';
 import * as Speech from 'expo-speech';
 import * as SecureStore from 'expo-secure-store';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
-export type CloudTtsProvider = 'system' | 'volcengine' | 'aliyun' | 'tencent';
+import type { VolcAsrProtocol } from '@/lib/volc-asr';
+import {
+  synthesizeVolcTts,
+  VOLC_TTS_DEFAULT_ENDPOINT,
+  VOLC_TTS_DEFAULT_VOICE,
+  VOLC_TTS_RESOURCE_ID,
+} from '@/lib/volc-tts';
+
+export type VoiceServiceProvider = 'system' | 'volcengine';
 export type VoiceSettings = {
   enabled: boolean;
   language: 'zh-CN' | 'en-US';
-  provider: CloudTtsProvider;
+  asrProvider: VoiceServiceProvider;
+  asrProtocol: VolcAsrProtocol;
+  ttsProvider: VoiceServiceProvider;
   endpoint: string;
   apiKey: string;
+  asrModel: string;
   model: string;
   voice: string;
   rate: number;
@@ -19,59 +32,150 @@ const STORAGE_KEY = 'dsh-connect.voice-settings.v1';
 const DEFAULT_SETTINGS: VoiceSettings = {
   enabled: true,
   language: 'zh-CN',
-  provider: 'system',
-  endpoint: '',
+  asrProvider: 'volcengine',
+  asrProtocol: 'ws-bidirectional',
+  ttsProvider: 'volcengine',
+  endpoint: VOLC_TTS_DEFAULT_ENDPOINT,
   apiKey: '',
-  model: '',
-  voice: 'system',
+  asrModel: 'volc.seedasr.sauc.duration',
+  model: VOLC_TTS_RESOURCE_ID,
+  voice: VOLC_TTS_DEFAULT_VOICE,
   rate: 1,
   autoPlay: false,
 };
 
 type VoiceContextValue = {
   settings: VoiceSettings;
+  hydrated: boolean;
   updateSettings: (patch: Partial<VoiceSettings>) => Promise<void>;
-  speak: (text: string) => void;
+  speak: (text: string, overrides?: VoiceSettings) => Promise<void>;
   stopSpeaking: () => Promise<void>;
 };
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
 
+function provider(value: unknown, fallback: VoiceServiceProvider): VoiceServiceProvider {
+  return value === 'system' || value === 'volcengine' ? value : fallback;
+}
+
+function restoreSettings(stored: string): VoiceSettings {
+  try {
+    const parsed = JSON.parse(stored) as Partial<VoiceSettings> & { provider?: string };
+    const legacyProvider = provider(parsed.provider, 'system');
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      language: parsed.language === 'en-US' ? 'en-US' : 'zh-CN',
+      asrProvider: provider(parsed.asrProvider, legacyProvider),
+      asrProtocol: parsed.asrProtocol === 'ws-unidirectional' ? 'ws-unidirectional' : 'ws-bidirectional',
+      ttsProvider: provider(parsed.ttsProvider, legacyProvider),
+      endpoint: typeof parsed.endpoint === 'string' && parsed.endpoint.trim()
+        ? parsed.endpoint
+        : DEFAULT_SETTINGS.endpoint,
+      asrModel: DEFAULT_SETTINGS.asrModel,
+      model: DEFAULT_SETTINGS.model,
+      voice: typeof parsed.voice === 'string' && parsed.voice.trim() && parsed.voice !== 'system'
+        ? parsed.voice
+        : DEFAULT_SETTINGS.voice,
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [hydrated, setHydrated] = useState(false);
+  const playerRef = useRef<AudioPlayer | null>(null);
+  const audioFileRef = useRef<File | null>(null);
+  const playbackGeneration = useRef(0);
+
+  const releasePlayback = useCallback(() => {
+    void Speech.stop();
+    playerRef.current?.remove();
+    playerRef.current = null;
+    if (audioFileRef.current?.exists) audioFileRef.current.delete();
+    audioFileRef.current = null;
+  }, []);
 
   useEffect(() => {
     let active = true;
     void SecureStore.getItemAsync(STORAGE_KEY).then((stored) => {
-      if (!stored || !active) return;
-      try {
-        const parsed = JSON.parse(stored) as Partial<VoiceSettings>;
-        setSettings((current) => ({ ...current, ...parsed }));
-      } catch {
-        // Invalid local settings are ignored; safe defaults remain active.
-      }
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, []);
+      if (!active) return;
+      if (stored) setSettings(restoreSettings(stored));
+      setHydrated(true);
+    }).catch(() => {
+      if (active) setHydrated(true);
+    });
+    return () => {
+      active = false;
+      playbackGeneration.current += 1;
+      releasePlayback();
+    };
+  }, [releasePlayback]);
 
   const updateSettings = useCallback(async (patch: Partial<VoiceSettings>) => {
     const next = { ...settings, ...patch };
     setSettings(next);
-    // The API key is kept only in Keychain / Keystore, never in logs or route params.
+    // API keys stay in Keychain / Keystore and are never added to logs or route params.
     await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(next));
   }, [settings]);
 
-  const speak = useCallback((text: string) => {
+  const stopSpeaking = useCallback(async () => {
+    playbackGeneration.current += 1;
+    releasePlayback();
+    await Speech.stop();
+  }, [releasePlayback]);
+
+  const speak = useCallback(async (text: string, overrides?: VoiceSettings) => {
+    const config = overrides ?? settings;
     const content = text.trim();
     if (!content) return;
-    Speech.stop();
-    // Cloud configuration is not represented as a successful connection. Until
-    // a provider adapter is available, playback always uses the system engine.
-    Speech.speak(content, { language: settings.language, rate: settings.rate });
-  }, [settings.language, settings.rate]);
+    const generation = ++playbackGeneration.current;
+    releasePlayback();
 
-  const stopSpeaking = useCallback(async () => { await Speech.stop(); }, []);
-  return <VoiceContext.Provider value={{ settings, updateSettings, speak, stopSpeaking }}>{children}</VoiceContext.Provider>;
+    if (config.ttsProvider === 'system') {
+      Speech.speak(content, { language: config.language, rate: config.rate });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const audio = await synthesizeVolcTts({
+        apiKey: config.apiKey,
+        text: content,
+        speaker: config.voice,
+        endpoint: config.endpoint,
+        signal: controller.signal,
+      });
+      if (generation !== playbackGeneration.current) return;
+
+      const file = new File(Paths.cache, `dsh-voice-${Date.now()}-${generation}.mp3`);
+      await file.write(audio);
+      if (generation !== playbackGeneration.current) {
+        if (file.exists) file.delete();
+        return;
+      }
+
+      const player = createAudioPlayer(file.uri);
+      playerRef.current = player;
+      audioFileRef.current = file;
+      player.setPlaybackRate(config.rate);
+      player.addListener('playbackStatusUpdate', (status) => {
+        if (!status.didJustFinish || playerRef.current !== player) return;
+        player.remove();
+        playerRef.current = null;
+        if (file.exists) file.delete();
+        if (audioFileRef.current === file) audioFileRef.current = null;
+      });
+      player.play();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }, [releasePlayback, settings]);
+
+  return <VoiceContext.Provider value={{ settings, hydrated, updateSettings, speak, stopSpeaking }}>{children}</VoiceContext.Provider>;
 }
 
 export function useVoice(): VoiceContextValue {
