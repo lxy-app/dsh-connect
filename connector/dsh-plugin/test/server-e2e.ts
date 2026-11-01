@@ -68,7 +68,6 @@ async function main(): Promise<void> {
         DSH_CONNECT_BOOTSTRAP_TOKEN: token,
         DSH_CONNECT_LISTEN_ADDR: `127.0.0.1:${port}`,
         DSH_CONNECT_SERVER_URL: serverUrl,
-        DSH_CONNECT_STORE_PATH: join(temp, 'server-state.json'),
       },
     });
     server.stdout?.on('data', (data: Buffer) => serverLog.push(data.toString()));

@@ -1,5 +1,9 @@
+# Build stages run natively. On ARM hosts pass
+# --build-arg BUILDPLATFORM=linux/arm64 together with --platform linux/amd64.
+ARG BUILDPLATFORM=linux/amd64
+
 # Build the React admin without carrying Node.js into the runtime image.
-FROM docker.m.daocloud.io/library/node:24-alpine AS admin-build
+FROM --platform=${BUILDPLATFORM} docker.m.daocloud.io/library/node:24-alpine AS admin-build
 WORKDIR /src/admin
 COPY apps/admin/package.json apps/admin/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -7,13 +11,14 @@ COPY apps/admin/ ./
 RUN npm run build
 
 # Build a static Go binary so the final image needs no Go toolchain.
-FROM docker.m.daocloud.io/library/golang:1.26-alpine AS server-build
+FROM --platform=${BUILDPLATFORM} docker.m.daocloud.io/library/golang:1.26-alpine AS server-build
 ENV GOPROXY=https://goproxy.cn,direct
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
     -o /out/dsh-connect-server ./cmd/server
 
 FROM docker.m.daocloud.io/library/alpine:3.22
