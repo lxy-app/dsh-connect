@@ -157,11 +157,39 @@ export interface HostWebServer {
   match?(path: string): unknown;
 }
 
+/**
+ * The DSH workspace-files service (Cordis name `workspaceFiles`). Byte reads go
+ * through it so the Host's sandbox policy applies; the Connector never falls
+ * back to raw `fs` when it refuses.
+ */
+export interface WorkspaceFileScope {
+  readonly sessionId: string;
+  readonly workspaceRoot: string;
+}
+
+export interface WorkspaceFileBytes {
+  readonly data: Uint8Array;
+  readonly offset: number;
+  readonly eof: boolean;
+  readonly bytes: number;
+}
+
+export interface WorkspaceFilesService {
+  readBytes(
+    scope: WorkspaceFileScope,
+    path: string,
+    options: { readonly range?: { readonly offset?: number; readonly length?: number } },
+    signal: AbortSignal,
+  ): Promise<WorkspaceFileBytes>;
+  stat(scope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<{ readonly path: string; readonly bytes: number }>;
+}
+
 export interface HostContext {
   readonly sessionController: SessionController;
   readonly workspaceRegistry: WorkspaceRegistry;
   readonly connection: HostConnection;
   readonly webServer: HostWebServer;
+  readonly workspaceFiles?: WorkspaceFilesService;
   readonly logger?: Logger;
   provide(name: string, service: unknown): void;
   effect(register: () => void | (() => void), description?: string): void;
@@ -173,7 +201,7 @@ export interface HostContext {
   on?(name: string, listener: (...args: never[]) => unknown, options?: { readonly prepend?: boolean }): () => void;
 }
 
-export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'workspaceRegistry' | 'on'>;
+export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'workspaceRegistry' | 'on' | 'workspaceFiles'>;
 
 /** Minimal agent identity carried by DSH interaction requests. */
 export interface InteractionAgent {

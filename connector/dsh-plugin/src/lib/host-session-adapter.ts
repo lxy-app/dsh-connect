@@ -10,6 +10,12 @@ import type {
 } from '../host-api.js';
 import type { ConnectorScope, Logger, TransportEnvelope, UnknownRecord } from '../types.js';
 import { errorCode, errorMessage, isRecord } from '../types.js';
+import { AttachmentIndex } from './attachment-index.js';
+import { extractAttachmentCandidates } from './attachment-extract.js';
+import type { AttachmentCandidate } from './attachment-extract.js';
+import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
+import type { AttachmentByteReader, AttachmentUploader } from './attachment-fetch.js';
+import { evaluateAttachmentPath, ATTACHMENT_ERROR_DENIED, ATTACHMENT_ERROR_TOO_LARGE } from './attachment-policy.js';
 import { CursorJournal } from './cursor-journal.js';
 import { pageInput, promptInput, sessionAddress } from './input-validation.js';
 import type { PageInputParams, PromptInputParams } from './input-validation.js';
@@ -45,7 +51,22 @@ export interface TranscriptMessage {
   readonly toolName?: string;
   readonly toolCallId?: string;
   readonly isError?: boolean;
+  readonly attachments?: readonly TranscriptAttachment[];
+  readonly delivery?: boolean;
   readonly occurredAt: string;
+}
+
+/** Display-safe projection; the desktop path never appears here. */
+export interface TranscriptAttachment {
+  readonly attachmentId: string;
+  readonly kind: 'image' | 'file';
+  readonly name: string;
+  readonly mime: string;
+  readonly bytes: number;
+  readonly source: 'deliverable' | 'tool';
+  readonly description?: string;
+  readonly state: 'known' | 'failed' | 'unavailable';
+  readonly errorCode?: string;
 }
 
 export interface TranscriptResult {
@@ -59,6 +80,12 @@ export interface TranscriptResult {
 
 export interface SessionPromptParams extends PromptInputParams {
   readonly workspaceId?: string;
+}
+
+export interface SessionAttachmentFetchParams {
+  readonly sessionId: unknown;
+  readonly workspaceId?: string;
+  readonly attachmentId: unknown;
 }
 
 export interface SessionCancelParams {
@@ -102,6 +129,17 @@ export interface HostSessionAdapterOptions {
   readonly emit: (event: TransportEnvelope) => void;
   readonly journal?: CursorJournal;
   readonly logger?: Logger;
+  readonly attachments?: AttachmentWiring;
+}
+
+/** Byte plumbing the Connector runtime supplies; the adapter owns the policy. */
+export interface AttachmentWiring {
+  readonly index?: AttachmentIndex;
+  readonly readBytes: AttachmentByteReader;
+  readonly upload: AttachmentUploader;
+  readonly maxBytes?: number;
+  readonly allowOutsideWorkspace?: boolean;
+  readonly toolAllowlist?: readonly string[];
 }
 
 interface FollowSubscription {
@@ -126,6 +164,9 @@ export class HostSessionAdapter {
   readonly #emit: (event: TransportEnvelope) => void;
   readonly #logger: Logger;
   readonly #journal: CursorJournal;
+  readonly #attachments: AttachmentWiring | undefined;
+  readonly #attachmentIndex: AttachmentIndex | undefined;
+  readonly #attachmentFetcher: AttachmentFetcher | undefined;
   #sessions = new Map<string, string>();
   readonly #watermarks = new Map<string, number>();
   readonly #follows = new Map<string, FollowSubscription>();
@@ -138,6 +179,7 @@ export class HostSessionAdapter {
     emit,
     journal = new CursorJournal(),
     logger = console,
+    attachments,
   }: HostSessionAdapterOptions) {
     this.#controller = controller;
     this.#workspaceRegistry = workspaceRegistry;
@@ -146,6 +188,17 @@ export class HostSessionAdapter {
     this.#emit = emit;
     this.#journal = journal;
     this.#logger = logger;
+    this.#attachments = attachments;
+    if (attachments) {
+      this.#attachmentIndex = attachments.index ?? new AttachmentIndex();
+      this.#attachmentFetcher = new AttachmentFetcher({
+        index: this.#attachmentIndex,
+        readBytes: attachments.readBytes,
+        upload: attachments.upload,
+        maxBytes: attachments.maxBytes ?? DEFAULT_MAX_ATTACHMENT_BYTES,
+        resolveWorkspaceRoot: (_sessionId, workspaceId) => this.#workspaceRoot(workspaceId),
+      });
+    }
   }
 
   async list(params: SessionListParams, { signal }: { readonly signal: AbortSignal }): Promise<{ readonly sessions: SessionSummaryView[] }> {
@@ -205,7 +258,7 @@ export class HostSessionAdapter {
     { signal }: { readonly signal: AbortSignal },
   ): Promise<TranscriptResult> {
     const sessionId = sessionAddress(params.sessionId).sessionId;
-    await this.#authorizeSession(sessionId, 'read', params.workspaceId);
+    const workspaceId = await this.#authorizeSession(sessionId, 'read', params.workspaceId);
     const context = await this.#latestPageContext(sessionId, signal);
     const result = await this.#controller.page({
       ...pageInput(params),
@@ -269,6 +322,9 @@ export class HostSessionAdapter {
         text: truncate(only.text, MAX_TRANSCRIPT_CHARS),
       }];
       truncated = true;
+    }
+    if (this.#attachments) {
+      await this.#attachDeclarations(sessionId, workspaceId, result.records, visible, signal);
     }
     const droppedOlder = firstVisible > 0;
     const firstRecordSeq = result.records[0]?.event.seq;
@@ -551,6 +607,134 @@ export class HostSessionAdapter {
     };
   }
 
+  /** Serves `session.attachment.fetch`; the index decides what may be read. */
+  async attachmentFetch(
+    params: SessionAttachmentFetchParams,
+    { signal }: { readonly signal: AbortSignal },
+  ): Promise<TransportEnvelope> {
+    const sessionId = sessionAddress(params.sessionId).sessionId;
+    await this.#authorizeSession(sessionId, 'read', params.workspaceId);
+    if (!this.#attachmentFetcher) {
+      throw protocolError('method_not_found', 'Attachments are disabled on this Connector');
+    }
+    const attachmentId = typeof params.attachmentId === 'string' ? params.attachmentId : '';
+    if (!/^att_[A-Za-z0-9_-]{8,64}$/.test(attachmentId)) {
+      throw protocolError('invalid_request', 'attachmentId is required');
+    }
+    const result = await this.#attachmentFetcher.fetch({ sessionId, attachmentId }, { signal });
+    const envelope: TransportEnvelope = {
+      status: result.status,
+      bytes: result.bytes,
+      sha256: result.sha256,
+      mime: result.mime,
+    };
+    return envelope;
+  }
+
+  /**
+   * Resolves declared paths into display-safe attachments.
+   *
+   * Paths are evaluated once per transcript: a rejection still produces a
+   * declaration, so the phone can explain why a file is unavailable instead of
+   * showing an empty message.
+   */
+  async #attachDeclarations(
+    sessionId: string,
+    workspaceId: string,
+    records: readonly { readonly event: { readonly type: string; readonly seq: unknown; readonly time: unknown; readonly data: unknown } }[],
+    messages: TranscriptMessage[],
+    signal: AbortSignal,
+  ): Promise<void> {
+    const wiring = this.#attachments;
+    const index = this.#attachmentIndex;
+    if (!wiring || !index) return;
+    const allowOutside = wiring.allowOutsideWorkspace === true;
+    const workspaceRoot = this.#workspaceRoot(workspaceId);
+    const candidates = extractAttachmentCandidates(records, {
+      sessionId,
+      ...(wiring.toolAllowlist ? { toolAllowlist: wiring.toolAllowlist } : {}),
+    });
+    const seen = new Set<string>();
+    for (const candidate of candidates.slice(0, MAX_ATTACHMENTS_PER_TRANSCRIPT)) {
+      if (seen.has(candidate.attachmentId)) continue;
+      seen.add(candidate.attachmentId);
+      signal.throwIfAborted();
+      const verdict = await evaluateAttachmentPath(candidate.path, {
+        workspaceRoot,
+        allowOutsideWorkspace: allowOutside,
+        maxBytes: wiring.maxBytes ?? DEFAULT_MAX_ATTACHMENT_BYTES,
+      });
+      const mime = guessMime(candidate.name);
+      const attachment: TranscriptAttachment = verdict.ok
+        ? {
+            attachmentId: candidate.attachmentId,
+            kind: guessKind(mime),
+            name: candidate.name,
+            mime,
+            bytes: verdict.bytes,
+            source: candidate.source,
+            ...(candidate.description ? { description: candidate.description } : {}),
+            state: 'known',
+          }
+        : {
+            attachmentId: candidate.attachmentId,
+            kind: guessKind(mime),
+            name: candidate.name,
+            mime,
+            bytes: 0,
+            source: candidate.source,
+            ...(candidate.description ? { description: candidate.description } : {}),
+            state: verdict.errorCode === ATTACHMENT_ERROR_TOO_LARGE ? 'failed' : 'unavailable',
+            errorCode: verdict.errorCode === ATTACHMENT_ERROR_TOO_LARGE ? ATTACHMENT_ERROR_TOO_LARGE : ATTACHMENT_ERROR_DENIED,
+          };
+      if (verdict.ok) {
+        index.remember({
+          attachmentId: candidate.attachmentId,
+          sessionId,
+          workspaceId,
+          source: candidate.source,
+          seq: candidate.seq,
+          path: verdict.path,
+          name: candidate.name,
+          ...(candidate.description ? { description: candidate.description } : {}),
+          kind: guessKind(mime),
+          mime,
+          bytes: verdict.bytes,
+          baseline: verdict.baseline,
+        });
+      }
+      this.#mountAttachment(messages, candidate, attachment);
+    }
+  }
+
+  /** Mounts one attachment on the turn's last assistant message, or synthesizes one. */
+  #mountAttachment(messages: TranscriptMessage[], candidate: AttachmentCandidate, attachment: TranscriptAttachment): void {
+    let target: TranscriptMessage | undefined;
+    for (const message of messages) {
+      if (message.seq > candidate.seq) break;
+      if (message.role === 'assistant') target = message;
+    }
+    if (target) {
+      const merged = [...(target.attachments ?? []), attachment];
+      Object.assign(target, { attachments: merged });
+      return;
+    }
+    messages.push({
+      id: `delivery-${candidate.seq}-${candidate.index}`,
+      seq: candidate.seq,
+      role: 'assistant',
+      text: '',
+      delivery: true,
+      attachments: [attachment],
+      occurredAt: candidate.occurredAt,
+    });
+  }
+
+  #workspaceRoot(workspaceId: string): string {
+    const workspace = this.#workspaceRegistry.list().find((entry) => entry.id === workspaceId);
+    return workspace?.path ?? '';
+  }
+
   #refreshWorkspaces(): void {
     const current = new Map<string, string>();
     for (const workspace of this.#workspaceRegistry.list()) {
@@ -603,6 +787,8 @@ export class HostSessionAdapter {
 
 // Mobile transcript payloads must stay well under the 64 KiB transport limit.
 const MAX_TRANSCRIPT_CHARS = 45_000;
+const MAX_ATTACHMENTS_PER_TRANSCRIPT = 12;
+const DEFAULT_MAX_ATTACHMENT_BYTES = 20 << 20;
 const MAX_MESSAGE_CHARS = 4_000;
 
 function truncate(value: string, limit = MAX_MESSAGE_CHARS): string {
