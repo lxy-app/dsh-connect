@@ -119,6 +119,10 @@ func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 	if len(emptySessions.Sessions) != 0 {
 		t.Fatalf("sessions before grant=%+v", emptySessions.Sessions)
 	}
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions", phone.AccessToken, map[string]any{
+		"requestId": "mobile-create-denied", "deviceId": connector.deviceID, "workspaceId": "ws-1",
+	})
+	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
 
 	// Only workspaces the desktop itself authorized can be requested.
 	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
@@ -172,9 +176,35 @@ func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 		t.Fatalf("unexpected workspaces: %+v", workspaceList)
 	}
 
+	commandErr := make(chan error, 1)
+	createBody := map[string]any{
+		"requestId": "mobile-create-1", "deviceId": connector.deviceID, "workspaceId": "ws-1",
+	}
+	go func() {
+		commandErr <- answerCommand(connector.connection, protocol.MethodSessionCreate, map[string]any{
+			"sessionId": "sess-created", "workspaceId": "ws-1", "agentPreset": "default",
+		})
+	}()
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions", phone.AccessToken, createBody)
+	if err := <-commandErr; err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", status, body)
+	}
+	var created protocol.SessionCreateResult
+	decodeTestJSON(t, body, &created)
+	if created.SessionID != "sess-created" || created.WorkspaceID != "ws-1" || created.AgentPreset != "default" {
+		t.Fatalf("unexpected created session: %+v", created)
+	}
+	// A replay returns the durable result without creating a second DSH session.
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions", phone.AccessToken, createBody)
+	if status != http.StatusCreated {
+		t.Fatalf("create replay status=%d body=%s", status, body)
+	}
+
 	// The Connector independently enforces actual workspace ownership; the
 	// Server filters the returned list to the phone's grant.
-	commandErr := make(chan error, 1)
 	go func() {
 		commandErr <- answerCommand(connector.connection, protocol.MethodSessionList, map[string]any{
 			"sessions": []map[string]any{
@@ -205,8 +235,9 @@ func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 			"messages": []map[string]any{
 				{"id": "msg-1", "seq": 1, "role": "user", "text": "hello", "occurredAt": "2026-10-31T12:00:01Z"},
 			},
-			"hasMore": false,
-			"active":  true,
+			"hasMore":    false,
+			"active":     true,
+			"turnEndSeq": 1,
 		})
 	}()
 	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/sessions/sess-1/messages?deviceId="+connector.deviceID+"&workspaceId=ws-1", phone.AccessToken, nil)
@@ -218,7 +249,7 @@ func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 	}
 	var transcript protocol.MobileTranscriptResponse
 	decodeTestJSON(t, body, &transcript)
-	if len(transcript.Messages) != 1 || !transcript.Active || transcript.SessionID != "sess-1" {
+	if len(transcript.Messages) != 1 || !transcript.Active || transcript.SessionID != "sess-1" || transcript.TurnEndSeq != 1 {
 		t.Fatalf("unexpected transcript: %+v", transcript)
 	}
 
@@ -268,6 +299,10 @@ func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 	if len(overview.Desktops) != 1 || overview.Desktops[0].Grant == nil || overview.Desktops[0].Grant.Status != "revoked" {
 		t.Fatalf("unexpected access after revoke: %+v", overview)
 	}
+	// Revocation is checked before the idempotency cache, so an old create
+	// requestId cannot bypass the phone's narrowed permissions.
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions", phone.AccessToken, createBody)
+	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
 
 	// Audit contains both the phone request and the desktop decision.
 	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/audit?action=mobile.access.allow&result=success", ownerToken, nil)
@@ -278,6 +313,14 @@ func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 	decodeTestJSON(t, body, &audit)
 	if audit.Total != 1 || audit.Entries[0].DeviceID != connector.deviceID {
 		t.Fatalf("unexpected access audit: %+v", audit.Entries)
+	}
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/audit?action=mobile.session.create&result=success", ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("create audit status=%d body=%s", status, body)
+	}
+	decodeTestJSON(t, body, &audit)
+	if audit.Total != 2 || audit.Entries[0].SessionID != "sess-created" || audit.Entries[1].SessionID != "sess-created" {
+		t.Fatalf("unexpected create audit: %+v", audit.Entries)
 	}
 
 	// Another phone cannot revoke a grant it does not own.

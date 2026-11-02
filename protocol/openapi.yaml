@@ -88,6 +88,10 @@ paths:
       tags: [sessions]
       operationId: createSession
       summary: Create a session in an authorized workspace
+      description: |
+        `requestId` is a durable idempotency key. An identical retry receives
+        the first result and is not forwarded twice; different input with the
+        same key fails with `idempotency_conflict`.
       requestBody:
         required: true
         content:
@@ -102,6 +106,11 @@ paths:
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The requestId was already used with different method/device/params.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
         "503": {$ref: "#/components/responses/DeviceOffline"}
         "504": {$ref: "#/components/responses/CommandTimeout"}
   /v1/sessions/{sessionId}/page:
@@ -469,6 +478,38 @@ paths:
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    post:
+      tags: [mobileAccess]
+      operationId: createMobileSession
+      summary: Create a session from the phone
+      description: |
+        Requires an active `prompt` grant for the desktop and workspace. The
+        create requestId is durable and idempotent; send the first prompt with
+        a separate requestId through the existing prompt endpoint.
+      security:
+        - mobileBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileSessionCreateRequest}
+      responses:
+        "201":
+          description: Created session identity, or the persisted first result for a retry.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/SessionCreateResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: requestId was reused with different create input.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
         "500": {$ref: "#/components/responses/InternalError"}
   /v1/mobile/sessions/{sessionId}/messages:
     get:

@@ -25,5 +25,5 @@
     "follow_superseded",
     "internal_error"
   ],
-  "description": "Connector-specific extension error codes are allowed and are relayed unchanged. retryable tells clients whether a new requestId may be retried; prompt retries must retain the original requestId."
+  "description": "Connector-specific extension error codes are allowed and are relayed unchanged. retryable indicates a transient failure; create and prompt retries must retain the original requestId and identical input."
 }

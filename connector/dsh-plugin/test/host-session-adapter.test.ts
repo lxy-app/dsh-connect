@@ -278,6 +278,7 @@ test('transcript keeps conversation text and omits reasoning, tool calls and res
   assert.equal(result.messages[1]?.text, 'hi there');
   assert.equal(result.messages.some((message) => message.role === 'tool'), false);
   assert.equal(result.active, false);
+  assert.equal(result.turnEndSeq, 6);
   assert.equal(result.hasMore, true);
   assert.equal(result.nextCursor, '1');
 });

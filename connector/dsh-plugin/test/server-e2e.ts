@@ -32,7 +32,9 @@ const port = await availablePort();
 const serverUrl = `http://127.0.0.1:${port}`;
 const token = 'e2e-bootstrap-token-that-is-not-for-production';
 const promptRequestId = `prompt-e2e-${Date.now()}-${process.pid}`;
+const createRequestId = `create-e2e-${Date.now()}-${process.pid}`;
 const mobilePromptRequestId = `mobile-prompt-e2e-${Date.now()}-${process.pid}`;
+const mobileCreateRequestId = `mobile-create-e2e-${Date.now()}-${process.pid}`;
 const binary = join(temp, process.platform === 'win32' ? 'server.exe' : 'server');
 let server: ChildProcess | null = null;
 let runtime: ConnectorRuntime | null = null;
@@ -117,12 +119,17 @@ async function main(): Promise<void> {
     assert.equal(listed.sessions[0]?.sessionId, 'existing-session');
     const devices = await request<DevicesResponse>('/v1/devices');
     assert.equal(devices.devices.find((device) => device.deviceId === deviceId)?.status, 'online');
+    const createBody = { requestId: createRequestId, deviceId, workspaceId: 'ws-1' };
     const created = await request<{ readonly sessionId: string }>('/v1/sessions', {
-      method: 'POST',
-      body: { requestId: 'create-1', deviceId, workspaceId: 'ws-1' },
+      method: 'POST', body: createBody,
     });
     const sessionId = created.sessionId;
     assert.equal(sessionId, 'created-session');
+    const createReplay = await request<{ readonly sessionId: string }>('/v1/sessions', {
+      method: 'POST', body: createBody,
+    });
+    assert.deepEqual(createReplay, created);
+    assert.equal(host.createCalls, 1, 'duplicate create requestId must not reach Host twice');
 
     const events = new EventClient(`${serverUrl.replace('http:', 'ws:')}/v1/events/ws?deviceId=${deviceId}&sessionId=${sessionId}&cursor=0`, token);
     await events.open();
@@ -192,6 +199,17 @@ async function main(): Promise<void> {
       scopes: ['read', 'prompt'],
     }) as { readonly status: string };
     assert.equal(decision.status, 'active');
+    const mobileCreateBody = { requestId: mobileCreateRequestId, deviceId, workspaceId: 'ws-1' };
+    const mobileCreated = await mobileRequest<{ readonly sessionId: string; readonly workspaceId: string }>(
+      '/v1/mobile/sessions', phone.accessToken, { method: 'POST', body: mobileCreateBody },
+    );
+    assert.equal(mobileCreated.sessionId, 'mobile-created-session-1');
+    assert.equal(mobileCreated.workspaceId, 'ws-1');
+    const mobileCreateReplay = await mobileRequest<{ readonly sessionId: string; readonly workspaceId: string }>(
+      '/v1/mobile/sessions', phone.accessToken, { method: 'POST', body: mobileCreateBody },
+    );
+    assert.deepEqual(mobileCreateReplay, mobileCreated);
+    assert.equal(host.createCalls, 2, 'mobile create replay must not reach Host twice');
     const mobileWorkspaces = await mobileRequest<{ readonly workspaces: readonly { readonly workspace: { readonly id: string } }[] }>(
       '/v1/mobile/workspaces', phone.accessToken,
     );
@@ -199,13 +217,15 @@ async function main(): Promise<void> {
     const mobileSessions = await mobileRequest<{ readonly sessions: readonly { readonly sessionId: string }[] }>(
       '/v1/mobile/sessions', phone.accessToken,
     );
-    assert.equal(mobileSessions.sessions[0]?.sessionId, 'existing-session');
-    const mobileTranscript = await mobileRequest<{ readonly messages: readonly { readonly role: string }[] }>(
+    assert.ok(mobileSessions.sessions.some((session) => session.sessionId === 'existing-session'));
+    assert.ok(mobileSessions.sessions.some((session) => session.sessionId === mobileCreated.sessionId));
+    const mobileTranscript = await mobileRequest<{ readonly messages: readonly { readonly role: string }[]; readonly turnEndSeq?: number }>(
       `/v1/mobile/sessions/existing-session/messages?deviceId=${deviceId}&workspaceId=ws-1`, phone.accessToken,
     );
     assert.deepEqual(mobileTranscript.messages.map((message) => message.role), ['user', 'assistant']);
+    assert.equal(mobileTranscript.turnEndSeq, 3);
     const mobilePrompt = await mobileRequest<{ readonly status: string }>(
-      '/v1/mobile/sessions/existing-session/prompt', phone.accessToken,
+      `/v1/mobile/sessions/${mobileCreated.sessionId}/prompt`, phone.accessToken,
       {
         method: 'POST',
         body: {
@@ -232,10 +252,10 @@ async function main(): Promise<void> {
         'immediate command after pair.complete',
         'durable events and assistant stream',
         'Host unfollow after App disconnect',
-        'prompt idempotency',
+        'create + prompt idempotency',
         'device token reconnect',
         'mobile access request + desktop approval',
-        'mobile workspaces/sessions/transcript/prompt',
+        'mobile workspaces/sessions/create/transcript/prompt',
         'offline fast failure',
       ],
       host: 'controlled Host simulation; real DSH smoke test remains separate',
@@ -319,6 +339,7 @@ async function waitForServer(): Promise<{ readonly code: string }> {
 }
 
 interface HostFixture {
+  createCalls: number;
   promptCalls: number;
   followAborted(sessionId: string): boolean;
   readonly ctx: RuntimeHostContext;
@@ -331,6 +352,7 @@ function createHost(): HostFixture {
   }];
   const follows = new Map<string, FollowQueue>();
   const host: HostFixture = {
+    createCalls: 0,
     promptCalls: 0,
     followAborted: (sessionId) => follows.get(sessionId)?.signal.aborted ?? false,
     ctx: {
@@ -346,10 +368,12 @@ function createHost(): HostFixture {
         },
         async create({ workspaceId }: SessionCreateRequest) {
           assert.equal(workspaceId, 'ws-1');
+          host.createCalls += 1;
           const workspace = workspaces[0];
           assert.ok(workspace);
-          (workspace.sessionIds as string[]).push('created-session');
-          return { sessionId: 'created-session' };
+          const sessionId = host.createCalls === 1 ? 'created-session' : `mobile-created-session-${host.createCalls - 1}`;
+          (workspace.sessionIds as string[]).push(sessionId);
+          return { sessionId };
         },
         async page(_request: SessionPageRequest) {
           return {

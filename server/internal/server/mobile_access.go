@@ -22,6 +22,7 @@ func (s *Server) mobileAccessRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/mobile/access/{grantId}", s.mobileAuth(s.handleMobileAccessRevoke))
 	mux.HandleFunc("GET /v1/mobile/workspaces", s.mobileAuth(s.handleMobileWorkspaces))
 	mux.HandleFunc("GET /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionList))
+	mux.HandleFunc("POST /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionCreate))
 	mux.HandleFunc("GET /v1/mobile/sessions/{sessionId}/messages", s.mobileAuth(s.handleMobileSessionMessages))
 	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/prompt", s.mobileAuth(s.handleMobileSessionPrompt))
 	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/cancel", s.mobileAuth(s.handleMobileSessionCancel))
@@ -365,11 +366,48 @@ func (s *Server) handleMobileSessionList(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, protocol.MobileSessionListResponse{Sessions: sessions, Warnings: warnings})
 }
 
+// handleMobileSessionCreate creates a session in a workspace explicitly granted
+// to this phone. The first prompt is sent separately with its own requestId.
+func (s *Server) handleMobileSessionCreate(w http.ResponseWriter, r *http.Request) {
+	var request protocol.MobileSessionCreateRequest
+	if commandError := decodeJSON(w, r, s.config.MaxPayloadBytes, &request); commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	if !validID(request.RequestID) || !validID(request.DeviceID) || !validID(request.WorkspaceID) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "requestId, deviceId and workspaceId are required", false))
+		return
+	}
+	actor, commandError := s.authorizeMobileSession(r, request.DeviceID, request.WorkspaceID, "", "prompt")
+	if commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	params := map[string]string{"workspaceId": request.WorkspaceID}
+	result, commandError := s.router.Execute(
+		r.Context(), protocol.MethodSessionCreate, request.DeviceID, request.RequestID, params,
+		time.Duration(request.TimeoutMS)*time.Millisecond,
+	)
+	var created protocol.SessionCreateResult
+	if commandError == nil {
+		if err := json.Unmarshal(result, &created); err != nil || !validID(created.SessionID) || created.WorkspaceID != request.WorkspaceID {
+			commandError = errorPtr(protocol.NewError(protocol.CodeInternalError, "desktop returned an invalid session creation result", false))
+		}
+	}
+	s.auditMobileSession(actor, r, "mobile.session.create", request.DeviceID, created.SessionID, commandError)
+	if commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	writeJSON(w, http.StatusCreated, created)
+}
+
 type connectorTranscript struct {
 	Messages   []protocol.MobileMessage `json:"messages"`
 	HasMore    bool                     `json:"hasMore"`
 	NextCursor string                   `json:"nextCursor,omitempty"`
 	Active     bool                     `json:"active"`
+	TurnEndSeq uint64                   `json:"turnEndSeq,omitempty"`
 	Truncated  bool                     `json:"truncated,omitempty"`
 }
 
@@ -427,6 +465,7 @@ func (s *Server) handleMobileSessionMessages(w http.ResponseWriter, r *http.Requ
 		HasMore:     transcript.HasMore,
 		NextCursor:  transcript.NextCursor,
 		Active:      transcript.Active,
+		TurnEndSeq:  transcript.TurnEndSeq,
 		Truncated:   transcript.Truncated,
 	})
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/deepseek/dsh-connect/server/ent/idempotencyrecord"
 )
 
-// Idempotency loads a durable prompt outcome by request id.
+// Idempotency loads a durable command outcome by request id.
 func (s *Store) Idempotency(ctx context.Context, requestID string) (IdempotencyRecord, bool, error) {
 	record, err := s.client.IdempotencyRecord.Query().
 		Where(idempotencyrecord.RequestID(requestID)).
@@ -25,7 +25,7 @@ func (s *Store) Idempotency(ctx context.Context, requestID string) (IdempotencyR
 	return toIdempotencyRecord(record), true, nil
 }
 
-// CompleteIdempotency persists the outcome of a prompt. A concurrent duplicate
+// CompleteIdempotency persists the outcome of a command. A concurrent duplicate
 // returns ErrIdempotencyExists so the caller keeps the first result.
 func (s *Store) CompleteIdempotency(ctx context.Context, record IdempotencyRecord) error {
 	builder := s.client.IdempotencyRecord.Create().
