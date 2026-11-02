@@ -8,7 +8,7 @@
     "scheme": "dshconnect",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.deepseek.dshconnect",
+      "bundleIdentifier": "app.lxy.dsh-connect",
       "buildNumber": "1",
       "icon": "./assets/expo.icon",
       "config": {
@@ -16,7 +16,7 @@
       }
     },
     "android": {
-      "package": "com.deepseek.dshconnect",
+      "package": "app.lxy.dsh-connect",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#5852EF",

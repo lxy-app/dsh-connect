@@ -188,7 +188,7 @@ npm run build:bundles # 生成 iOS / Android 生产 JS bundle
 
 ## 配置与安全
 
-- iOS bundle identifier / Android package：`com.deepseek.dshconnect`。
+- iOS bundle identifier / Android package：`app.lxy.dsh-connect`。
 - URL scheme：`dshconnect`。
 - `.env.example` 仅展示公开的默认 Server URL 配置。
 - 所有 `EXPO_PUBLIC_*` 值都会进入应用包，严禁放入 bootstrap token、Access Token、Refresh Token 或设备密钥。
