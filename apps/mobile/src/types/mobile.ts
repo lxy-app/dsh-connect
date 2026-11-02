@@ -124,6 +124,23 @@ export type MobileSessionCreateResult = {
   agentPreset?: string;
 };
 
+/** Display-safe projection of one file a session declared for delivery. */
+export type MobileAttachment = {
+  attachmentId: string;
+  kind: 'image' | 'file' | string;
+  name: string;
+  mime: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+  source: 'deliverable' | 'message' | 'tool' | string;
+  description?: string;
+  state: 'known' | 'fetching' | 'ready' | 'failed' | 'unavailable' | string;
+  errorCode?: string;
+  sha256?: string;
+  preview?: string;
+};
+
 export type MobileMessage = {
   id: string;
   seq: number;
@@ -132,6 +149,9 @@ export type MobileMessage = {
   toolName?: string;
   toolCallId?: string;
   isError?: boolean;
+  attachments?: MobileAttachment[];
+  /** Synthesized message that only carries a turn's delivered files. */
+  delivery?: boolean;
   occurredAt: string;
 };
 

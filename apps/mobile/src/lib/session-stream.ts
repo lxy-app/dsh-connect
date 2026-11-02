@@ -147,6 +147,11 @@ export function openSessionStream(
       handlers.onError(typeof data.message === 'string' ? data.message : '桌面 Connector 报错。');
       return;
     }
+    if (kind === 'attachment.ready') {
+      // The bytes are cached on the Server now; reload so the image resolves.
+      refreshSoon();
+      return;
+    }
     if (kind === 'session.resync_required') {
       handlers.onRefresh();
       return;
