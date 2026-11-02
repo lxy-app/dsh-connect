@@ -69,6 +69,12 @@ window.__ModuleLoader__.load({
     const { useCallback, useEffect, useRef, useState } = React;
     const NS = 'dsh-connect';
     const PANEL = 'dsh-connect';
+    // Single source for action order and labels; the pairing screen and the
+    // post-pairing grant editor must offer exactly the same vocabulary.
+    const SCOPE_OPTIONS: ReadonlyArray<readonly [ConnectorScope, string]> = [
+      ['read', 'read'], ['prompt', 'prompt'], ['approve', 'approve'], ['cancel', 'cancelRun'],
+    ];
+    const scopeLabel = (t: Translate, scope: ConnectorScope): string => t(scope === 'cancel' ? 'cancelRun' : scope);
 
     const DICTS: Record<'zh' | 'en', Record<string, string>> = {
       zh: {
@@ -92,8 +98,10 @@ window.__ModuleLoader__.load({
         mobileAccessEmpty: '没有手机请求访问此桌面。', mobileAccessOffline: '桌面离线，暂时无法同步手机访问请求。', mobileAccessUnavailable: '无法读取手机访问请求。请确认桌面 Connector 已加载最新版本并重新连接。',
         pendingAccess: '等待你的决定', activeAccess: '已授权', requestedAt: '请求时间', mobileUser: '手机用户',
         allowAccess: '允许这些范围', denyAccess: '拒绝', revokeAccess: '撤销访问', accessBusy: '正在提交…',
-        enableApprovals: '启用远程审批', enableApprovalsCopy: '远程审批允许已获授权的手机一次性批准工具调用或回答 DSH 的提问。手机在轮询时优先由手机接管（默认 6 秒），超时则交回桌面原生审批链，两端不会同时弹卡。', enableApprovalsConfirm: '为这台桌面启用“远程审批”？手机仍需单独申请该动作，并由你再次确认。', enableApprovalsAction: '启用远程审批', approvalsEnabled: '已启用远程审批；请在手机上重新申请包含“远程审批”的访问授权。',
-        approvalsMissing: '未授权远程审批，手机无法接收审批或提问',
+        grantTitle: '桌面授权范围', grantCopy: '可随时增减授权工作区与动作，保存后立即生效，无需重新配对。手机仍需单独申请下面的范围，并由你在此确认。',
+        saveGrants: '保存授权', resetGrants: '撤销更改', grantsSaved: '桌面授权已更新', grantsOffline: '桌面当前离线，无法提交授权变更；恢复连接后重试。',
+        grantWarning: '移除工作区或动作会立即收紧此桌面的远程能力：手机对这些范围的既有授权随之失效，需要重新申请并由你再次确认。不会删除 DSH 本地会话。',
+        grantDirty: '有未保存的授权变更',
         accessDenied: '已拒绝这次手机访问请求', accessAllowed: '已授权此手机访问所选工作区', accessRevoked: '已撤销此手机的访问',
         noAccessWorkspace: '请至少选择一个工作区', noAccessScope: '请至少选择一个动作',
       },
@@ -118,7 +126,10 @@ window.__ModuleLoader__.load({
         mobileAccessEmpty: 'No phone is requesting access to this desktop.', mobileAccessOffline: 'Desktop is offline; phone access requests cannot be reviewed right now.', mobileAccessUnavailable: 'Phone access requests could not be loaded. Make sure the latest Connector build is loaded and reconnected.',
         pendingAccess: 'Waiting for your decision', activeAccess: 'Authorized', requestedAt: 'Requested', mobileUser: 'Phone user',
         allowAccess: 'Allow these scopes', denyAccess: 'Deny', revokeAccess: 'Revoke access', accessBusy: 'Submitting…',
-        enableApprovals: 'Enable remote approvals', enableApprovalsCopy: 'Remote approvals let a granted phone approve a single tool call or answer a DSH question. A watching phone owns the prompt first (6s by default); otherwise the desktop prompt handles it. The two never appear at once.', enableApprovalsConfirm: 'Enable remote approvals for this desktop? The phone must still request the action and you must confirm it again.', enableApprovalsAction: 'Enable remote approvals', approvalsEnabled: 'Remote approvals enabled. Request the approve action again from the phone.', approvalsMissing: 'Remote approvals are not granted; the phone cannot receive approvals or questions',
+        grantTitle: 'Desktop grants', grantCopy: 'Add or remove granted workspaces and actions at any time. Changes apply immediately without re-pairing. Phones still request their own access, which you confirm here.',
+        saveGrants: 'Save grants', resetGrants: 'Discard changes', grantsSaved: 'Desktop grants updated', grantsOffline: 'The desktop is offline; grant changes cannot be saved until it reconnects.',
+        grantWarning: 'Removing a workspace or action immediately narrows what this desktop offers. Existing phone access for those scopes stops working and must be requested and confirmed again. DSH local sessions are not deleted.',
+        grantDirty: 'Unsaved grant changes',
         accessDenied: 'Phone access request denied', accessAllowed: 'Phone access granted for the selected workspaces', accessRevoked: 'Phone access revoked',
         noAccessWorkspace: 'Select at least one workspace', noAccessScope: 'Select at least one action',
       },
@@ -143,7 +154,7 @@ window.__ModuleLoader__.load({
       .dsc-warning{padding:12px 14px;border-radius:11px;background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 10%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:11px;margin-top:16px}
       .dsc-error{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent);color:var(--dsw-alias-state-error-primary);margin-bottom:14px;white-space:pre-wrap}
       .dsc-notice{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent);color:var(--dsw-alias-state-success-primary);margin-bottom:14px}
-      .dsc-foot{text-align:center;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:18px}.dsc-chips{display:flex;flex-wrap:wrap;gap:7px}.dsc-empty{color:var(--dsw-alias-label-secondary);padding:14px 0}
+      .dsc-foot{text-align:center;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:18px}.dsc-empty{color:var(--dsw-alias-label-secondary);padding:14px 0}
       .dsc-access{border:1px solid var(--dsw-alias-border-l1);border-radius:12px;padding:14px;margin-top:10px;background:var(--dsw-alias-bg-base)}
       .dsc-access-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.dsc-access-name{font-weight:680;font-size:13px}.dsc-access-meta{font-size:11px;color:var(--dsw-alias-label-secondary);margin-top:2px}
       .dsc-access .dsc-check{padding:5px 0;border-bottom:0}.dsc-access .dsc-scopes{grid-template-columns:repeat(3,1fr);margin-top:6px}.dsc-access-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
@@ -193,6 +204,8 @@ window.__ModuleLoader__.load({
       const [deviceName, setDeviceName] = useState('DSH Desktop');
       const [selected, setSelected] = useState<string[]>([]);
       const [scopes, setScopes] = useState<Record<ConnectorScope, boolean>>({ read: true, prompt: false, approve: false, cancel: false });
+      // null means "no pending edit": the card then mirrors the persisted grant.
+      const [grantDraft, setGrantDraft] = useState<{ workspaces: string[]; scopes: ConnectorScope[] } | null>(null);
       const [busy, setBusy] = useState('');
       const [error, setError] = useState('');
       const [notice, setNotice] = useState('');
@@ -271,18 +284,6 @@ window.__ModuleLoader__.load({
         setBusy('');
       };
 
-      const enableApprovals = (): void => {
-        if (!status || !window.confirm(t('enableApprovalsConfirm'))) return;
-        void run('approve', () => call(ctx, 'pair.updateGrants', {
-          workspaces: status.workspaces.map((workspace) => ({
-            id: workspace.id,
-            name: workspace.name ?? workspace.id,
-            path: workspace.path ?? '',
-          })),
-          scopes: [...status.scopes, 'approve'],
-        }), t('approvalsEnabled'));
-      };
-
       const confirmServerChange = (): boolean => {
         if (!status?.deviceId || !status.serverUrl) return true;
         const current = status.serverUrl.trim().replace(/\/+$/, '');
@@ -306,13 +307,58 @@ window.__ModuleLoader__.load({
       const authorize = (): void => {
         const grants: WorkspaceGrant[] = workspaces.filter((workspace) => selected.includes(workspace.id))
           .map((workspace) => ({ id: workspace.id, name: workspace.title, path: workspace.path }));
-        const actions = (['read', 'prompt', 'approve', 'cancel'] as const).filter((scope) => scopes[scope]);
+        const actions = SCOPE_OPTIONS.map(([scope]) => scope).filter((scope) => scopes[scope]);
         if (!grants.length) { setError(t('noWorkspace')); return; }
         if (!actions.length) { setError(t('noScope')); return; }
         void run('authorize', () => call(ctx, 'pair.authorize', { workspaces: grants, scopes: actions }), t('paired'));
       };
       const toggleWorkspace = (id: string): void => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
       const toggleScope = (scope: ConnectorScope): void => setScopes((current) => ({ ...current, [scope]: !current[scope] }));
+
+      // The post-pairing editor edits a draft instead of the persisted status so
+      // the 2s status poll never overwrites half-finished selections. A null
+      // draft always mirrors whatever the Server currently has.
+      const baseGrant = (): { workspaces: string[]; scopes: ConnectorScope[] } => ({
+        workspaces: status ? status.workspaces.map((workspace) => workspace.id) : [],
+        scopes: status ? [...status.scopes] : [],
+      });
+      const toggleGrantWorkspace = (id: string): void => {
+        setGrantDraft((current) => {
+          const base = current ?? baseGrant();
+          return {
+            ...base,
+            workspaces: base.workspaces.includes(id)
+              ? base.workspaces.filter((item) => item !== id)
+              : [...base.workspaces, id],
+          };
+        });
+      };
+      const toggleGrantScope = (scope: ConnectorScope): void => {
+        setGrantDraft((current) => {
+          const base = current ?? baseGrant();
+          return {
+            ...base,
+            scopes: base.scopes.includes(scope)
+              ? base.scopes.filter((item) => item !== scope)
+              : [...base.scopes, scope],
+          };
+        });
+      };
+      const saveGrants = (): void => {
+        if (!status) return;
+        const chosen = grantDraft ?? baseGrant();
+        // The Server refuses an empty grant, so fail here with a precise reason.
+        const grants: WorkspaceGrant[] = workspaces
+          .filter((workspace) => chosen.workspaces.includes(workspace.id))
+          .map((workspace) => ({ id: workspace.id, name: workspace.title, path: workspace.path }));
+        if (!grants.length) { setError(t('noWorkspace')); return; }
+        const actions = SCOPE_OPTIONS.map(([scope]) => scope).filter((scope) => chosen.scopes.includes(scope));
+        if (!actions.length) { setError(t('noScope')); return; }
+        void run('grants', async () => {
+          await call(ctx, 'pair.updateGrants', { workspaces: grants, scopes: actions });
+          setGrantDraft(null);
+        }, t('grantsSaved'));
+      };
 
       const toggleAccessWorkspace = (grant: ConnectorMobileAccessGrant, workspaceId: string): void => {
         setAccessSelection((current) => {
@@ -360,6 +406,10 @@ window.__ModuleLoader__.load({
         void run(`access-${grant.grantId}-${action}`, () => call(ctx, 'mobile.access.decide', input), message);
       };
       const accessGrants = mobileAccess?.grants ?? [];
+      const currentGrant = grantDraft ?? baseGrant();
+      const grantDirty = Boolean(status && grantDraft
+        && (!sameSet(grantDraft.workspaces, status.workspaces.map((workspace) => workspace.id))
+          || !sameSet(grantDraft.scopes, status.scopes)));
       const accessSection = h('section', { className: 'dsc-card' },
         h('h2', { className: 'dsc-heading' }, t('mobileAccess')),
         h('p', { className: 'dsc-copy' }, t('mobileAccessCopy')),
@@ -388,8 +438,8 @@ window.__ModuleLoader__.load({
                   ? h('div', { className: 'dsc-scopes' }, grant.scopes.map((scope) =>
                     h('label', { className: 'dsc-check', key: scope },
                       h('input', { type: 'checkbox', checked: selection.scopes.includes(scope), onChange: () => toggleAccessScope(grant, scope) }),
-                      h('span', { className: 'dsc-check-title' }, t(scope === 'cancel' ? 'cancelRun' : scope)))))
-                  : h('div', { className: 'dsc-access-scopes' }, grant.scopes.map((scope) => h('span', { className: 'dsc-badge', key: scope }, t(scope === 'cancel' ? 'cancelRun' : scope)))),
+                      h('span', { className: 'dsc-check-title' }, scopeLabel(t, scope)))))
+                  : h('div', { className: 'dsc-access-scopes' }, grant.scopes.map((scope) => h('span', { className: 'dsc-badge', key: scope }, scopeLabel(t, scope)))),
                 h('div', { className: 'dsc-access-actions' },
                   pending
                     ? h(React.Fragment, null,
@@ -432,16 +482,40 @@ window.__ModuleLoader__.load({
                 : h(Button, { primary: true, disabled: Boolean(busy), onClick: () => void run('connect', () => call(ctx, 'connection.connect')) }, t('retry')))),
           settingsCard,
           h('section', { className: 'dsc-card' },
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
+              h('h2', { className: 'dsc-heading', style: { margin: 0 } }, t('grantTitle')),
+              grantDirty && h('span', { className: 'dsc-badge dsc-offline' }, t('grantDirty'))),
+            h('p', { className: 'dsc-copy' }, t('grantCopy')),
             h('div', { className: 'dsc-section', style: { marginTop: 0 } }, t('grantedWorkspaces')),
-            status.workspaces.length
-              ? status.workspaces.map((workspace) => h('div', { className: 'dsc-check', key: workspace.id }, h('div', null, h('div', { className: 'dsc-check-title' }, workspace.name), h('div', { className: 'dsc-check-copy' }, workspace.path))))
+            workspaces.length
+              ? workspaces.map((workspace) => h('label', { className: 'dsc-check', key: workspace.id },
+                h('input', {
+                  type: 'checkbox',
+                  checked: currentGrant.workspaces.includes(workspace.id),
+                  disabled: Boolean(busy),
+                  onChange: () => toggleGrantWorkspace(workspace.id),
+                }),
+                h('div', null, h('div', { className: 'dsc-check-title' }, workspace.title), h('div', { className: 'dsc-check-copy' }, workspace.path))))
               : h('div', { className: 'dsc-empty' }, '—'),
             h('div', { className: 'dsc-section' }, t('grantedScopes')),
-            h('div', { className: 'dsc-chips' }, status.scopes.map((scope) => h('span', { className: 'dsc-badge', key: scope }, t(scope === 'cancel' ? 'cancelRun' : scope))))),
-          !status.scopes.includes('approve') && h('section', { className: 'dsc-card' },
-            h('h2', { className: 'dsc-heading' }, t('enableApprovals')),
-            h('p', { className: 'dsc-copy' }, t('enableApprovalsCopy')),
-            h('div', { className: 'dsc-actions' }, h(Button, { primary: true, disabled: Boolean(busy), onClick: enableApprovals }, busy === 'approve' ? t('saving') : t('enableApprovalsAction')))),
+            h('div', { className: 'dsc-scopes' }, SCOPE_OPTIONS.map(([scope]) =>
+              h('label', { className: 'dsc-check', key: scope },
+                h('input', {
+                  type: 'checkbox',
+                  checked: currentGrant.scopes.includes(scope),
+                  disabled: Boolean(busy),
+                  onChange: () => toggleGrantScope(scope),
+                }),
+                h('span', { className: 'dsc-check-title' }, scopeLabel(t, scope))))),
+            !status.connected && h('div', { className: 'dsc-empty' }, t('grantsOffline')),
+            h('div', { className: 'dsc-warning' }, t('grantWarning')),
+            h('div', { className: 'dsc-actions' },
+              grantDirty && h(Button, { disabled: Boolean(busy), onClick: () => setGrantDraft(null) }, t('resetGrants')),
+              h(Button, {
+                primary: true,
+                disabled: Boolean(busy) || !status.connected || !grantDirty,
+                onClick: saveGrants,
+              }, busy === 'grants' ? t('saving') : t('saveGrants')))),
           accessSection);
       } else if (status.challenge) {
         const challenge: PublicChallenge = status.challenge;
@@ -457,8 +531,8 @@ window.__ModuleLoader__.load({
               h('div', null, h('div', { className: 'dsc-check-title' }, workspace.title), h('div', { className: 'dsc-check-copy' }, workspace.path))))
             : h('div', { className: 'dsc-empty' }, '—'),
           h('div', { className: 'dsc-section' }, t('scopes')),
-          h('div', { className: 'dsc-scopes' }, ([['read', t('read')], ['prompt', t('prompt')], ['approve', t('approve')], ['cancel', t('cancelRun')]] as const).map(([scope, label]) =>
-            h('label', { className: 'dsc-check', key: scope }, h('input', { type: 'checkbox', checked: scopes[scope], onChange: () => toggleScope(scope) }), h('span', { className: 'dsc-check-title' }, label)))),
+          h('div', { className: 'dsc-scopes' }, SCOPE_OPTIONS.map(([scope]) =>
+            h('label', { className: 'dsc-check', key: scope }, h('input', { type: 'checkbox', checked: scopes[scope], onChange: () => toggleScope(scope) }), h('span', { className: 'dsc-check-title' }, scopeLabel(t, scope))))),
           h('div', { className: 'dsc-warning' }, t('warning')),
           h('div', { className: 'dsc-actions' },
             h(Button, { disabled: Boolean(busy), onClick: () => void run('cancel', () => call(ctx, 'pair.cancel'), t('cancelled')) }, t('cancel')),
@@ -509,6 +583,11 @@ window.__ModuleLoader__.load({
     };
   },
 });
+
+/** Order-insensitive comparison so reordered grants are not "dirty". */
+function sameSet(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value) => right.includes(value));
+}
 
 function describeError(reason: unknown): string {
   if (typeof reason === 'object' && reason !== null) {
