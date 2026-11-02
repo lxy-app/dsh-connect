@@ -37,6 +37,28 @@ var (
 			},
 		},
 	}
+	// AttachmentBlobsColumns holds the columns for the "attachment_blobs" table.
+	AttachmentBlobsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true},
+		{Name: "mime", Type: field.TypeString},
+		{Name: "bytes", Type: field.TypeInt64},
+		{Name: "storage_path", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "last_used_at", Type: field.TypeTime},
+	}
+	// AttachmentBlobsTable holds the schema information for the "attachment_blobs" table.
+	AttachmentBlobsTable = &schema.Table{
+		Name:       "attachment_blobs",
+		Columns:    AttachmentBlobsColumns,
+		PrimaryKey: []*schema.Column{AttachmentBlobsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "attachmentblob_last_used_at",
+				Unique:  false,
+				Columns: []*schema.Column{AttachmentBlobsColumns[5]},
+			},
+		},
+	}
 	// AuditEntriesColumns holds the columns for the "audit_entries" table.
 	AuditEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -266,6 +288,50 @@ var (
 			},
 		},
 	}
+	// SessionAttachmentsColumns holds the columns for the "session_attachments" table.
+	SessionAttachmentsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true},
+		{Name: "device_id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"deliverable", "message", "tool"}},
+		{Name: "source_seq", Type: field.TypeInt64},
+		{Name: "source_index", Type: field.TypeInt},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"image", "file"}, Default: "file"},
+		{Name: "display_name", Type: field.TypeString},
+		{Name: "mime", Type: field.TypeString},
+		{Name: "bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "sha256", Type: field.TypeString, Nullable: true},
+		{Name: "description", Type: field.TypeString, Nullable: true},
+		{Name: "state", Type: field.TypeEnum, Enums: []string{"known", "fetching", "ready", "failed", "unavailable"}, Default: "known"},
+		{Name: "error_code", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "expires_at", Type: field.TypeTime},
+	}
+	// SessionAttachmentsTable holds the schema information for the "session_attachments" table.
+	SessionAttachmentsTable = &schema.Table{
+		Name:       "session_attachments",
+		Columns:    SessionAttachmentsColumns,
+		PrimaryKey: []*schema.Column{SessionAttachmentsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sessionattachment_device_id_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[2]},
+			},
+			{
+				Name:    "sessionattachment_state",
+				Unique:  false,
+				Columns: []*schema.Column{SessionAttachmentsColumns[13]},
+			},
+			{
+				Name:    "sessionattachment_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionAttachmentsColumns[17]},
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true},
@@ -299,6 +365,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		AdminSessionsTable,
+		AttachmentBlobsTable,
 		AuditEntriesTable,
 		DevicesTable,
 		IdempotencyRecordsTable,
@@ -306,6 +373,7 @@ var (
 		MobileDevicesTable,
 		MobilePairingCodesTable,
 		PairingCodesTable,
+		SessionAttachmentsTable,
 		UsersTable,
 	}
 )

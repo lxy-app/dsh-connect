@@ -207,7 +207,7 @@ func (_u *MobileAccessGrantUpdate) sqlSave(ctx context.Context) (_node int, err 
 		return _node, err
 	}
 	_spec := sqlgraph.NewUpdateSpec(mobileaccessgrant.Table, mobileaccessgrant.Columns, sqlgraph.NewFieldSpec(mobileaccessgrant.FieldID, field.TypeString))
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
@@ -478,7 +478,7 @@ func (_u *MobileAccessGrantUpdateOne) sqlSave(ctx context.Context) (_node *Mobil
 			}
 		}
 	}
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)

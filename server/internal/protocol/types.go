@@ -34,7 +34,44 @@ const (
 	MethodSessionFollow     = "session.follow"
 	MethodSessionUnfollow   = "session.unfollow"
 	MethodSessionCancel     = "session.cancel"
+	// MethodSessionAttachmentFetch asks the Connector to re-read one declared
+	// file and upload its bytes to the Server attachment store. Bytes never
+	// travel back through this command.
+	MethodSessionAttachmentFetch = "session.attachment.fetch"
 )
+
+// Attachment states are shared by the Connector, the Server store and the
+// mobile wire contract. Only the Server advances a row past "known".
+const (
+	AttachmentStateKnown       = "known"
+	AttachmentStateFetching    = "fetching"
+	AttachmentStateReady       = "ready"
+	AttachmentStateFailed      = "failed"
+	AttachmentStateUnavailable = "unavailable"
+)
+
+// Attachment sources identify which DSH session fact declared the file.
+const (
+	AttachmentSourceDeliverable = "deliverable"
+	AttachmentSourceMessage     = "message"
+	AttachmentSourceTool        = "tool"
+)
+
+// Attachment error codes stay stable across the Connector and the App.
+const (
+	AttachmentErrorUnknown     = "attachment_unknown"
+	AttachmentErrorUnavailable = "attachment_unavailable"
+	AttachmentErrorChanged     = "attachment_changed"
+	AttachmentErrorTooLarge    = "attachment_too_large"
+	AttachmentErrorDenied      = "attachment_denied"
+	AttachmentErrorFailed      = "attachment_failed"
+	AttachmentErrorNotReady    = "attachment_not_ready"
+	AttachmentErrorExpired     = "attachment_expired"
+)
+
+// AttachmentSealedSource is the event kind broadcast to a phone once bytes are
+// cached on the Server.
+const EventKindAttachmentReady = "attachment.ready"
 
 const (
 	ConnectorMethodMobileAccessList    = "mobile.access.list"
@@ -385,14 +422,38 @@ type MobileSessionListResponse struct {
 	Warnings []MobileAccessWarning `json:"warnings"`
 }
 
+// MobileAttachment is the display-safe projection of one file a Session
+// declared for delivery. It never carries a filesystem path: the phone only
+// ever sees the opaque attachmentId, and bytes are fetched over HTTPS.
+type MobileAttachment struct {
+	AttachmentID string `json:"attachmentId"`
+	Kind         string `json:"kind"` // image | file
+	Name         string `json:"name"`
+	Mime         string `json:"mime"`
+	Bytes        int64  `json:"bytes"`
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	Source       string `json:"source"` // deliverable | message | tool
+	Description  string `json:"description,omitempty"`
+	State        string `json:"state"`
+	ErrorCode    string `json:"errorCode,omitempty"`
+	// Preview is optional inline text for small text files. The Server passes
+	// it through and never persists it.
+	Preview string `json:"preview,omitempty"`
+}
+
 type MobileMessage struct {
-	ID         string    `json:"id"`
-	Seq        uint64    `json:"seq"`
-	Role       string    `json:"role"`
-	Text       string    `json:"text"`
-	ToolName   string    `json:"toolName,omitempty"`
-	ToolCallID string    `json:"toolCallId,omitempty"`
-	IsError    bool      `json:"isError,omitempty"`
+	ID          string             `json:"id"`
+	Seq         uint64             `json:"seq"`
+	Role        string             `json:"role"`
+	Text        string             `json:"text"`
+	ToolName    string             `json:"toolName,omitempty"`
+	ToolCallID  string             `json:"toolCallId,omitempty"`
+	IsError     bool               `json:"isError,omitempty"`
+	Attachments []MobileAttachment `json:"attachments,omitempty"`
+	// Delivery marks a synthesized message that only carries a turn's
+	// delivered files, so the App can render it as a delivery card.
+	Delivery   bool      `json:"delivery,omitempty"`
 	OccurredAt time.Time `json:"occurredAt"`
 }
 

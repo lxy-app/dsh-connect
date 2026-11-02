@@ -218,7 +218,7 @@ func (_u *AuditEntryUpdate) ExecX(ctx context.Context) {
 
 func (_u *AuditEntryUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(auditentry.Table, auditentry.Columns, sqlgraph.NewFieldSpec(auditentry.FieldID, field.TypeInt))
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
@@ -507,7 +507,7 @@ func (_u *AuditEntryUpdateOne) sqlSave(ctx context.Context) (_node *AuditEntry, 
 			}
 		}
 	}
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)

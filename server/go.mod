@@ -3,7 +3,7 @@ module github.com/deepseek/dsh-connect/server
 go 1.26.0
 
 require (
-	entgo.io/ent v0.14.6
+	entgo.io/ent v0.14.7-0.20261014065818-8037bc89bcab
 	github.com/coder/websocket v1.8.14
 	github.com/jackc/pgx/v5 v5.11.0
 	golang.org/x/crypto v0.58.0
@@ -16,7 +16,7 @@ require (
 	github.com/bmatcuk/doublestar v1.3.4 // indirect
 	github.com/go-openapi/inflect v0.19.0 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
-	github.com/google/uuid v1.3.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.18.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

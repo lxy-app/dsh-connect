@@ -9,6 +9,9 @@ import (
 // AdminSession is the predicate function for adminsession builders.
 type AdminSession func(*sql.Selector)
 
+// AttachmentBlob is the predicate function for attachmentblob builders.
+type AttachmentBlob func(*sql.Selector)
+
 // AuditEntry is the predicate function for auditentry builders.
 type AuditEntry func(*sql.Selector)
 
@@ -29,6 +32,9 @@ type MobilePairingCode func(*sql.Selector)
 
 // PairingCode is the predicate function for pairingcode builders.
 type PairingCode func(*sql.Selector)
+
+// SessionAttachment is the predicate function for sessionattachment builders.
+type SessionAttachment func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)

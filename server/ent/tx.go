@@ -16,6 +16,8 @@ type Tx struct {
 	config
 	// AdminSession is the client for interacting with the AdminSession builders.
 	AdminSession *AdminSessionClient
+	// AttachmentBlob is the client for interacting with the AttachmentBlob builders.
+	AttachmentBlob *AttachmentBlobClient
 	// AuditEntry is the client for interacting with the AuditEntry builders.
 	AuditEntry *AuditEntryClient
 	// Device is the client for interacting with the Device builders.
@@ -30,6 +32,8 @@ type Tx struct {
 	MobilePairingCode *MobilePairingCodeClient
 	// PairingCode is the client for interacting with the PairingCode builders.
 	PairingCode *PairingCodeClient
+	// SessionAttachment is the client for interacting with the SessionAttachment builders.
+	SessionAttachment *SessionAttachmentClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 
@@ -164,6 +168,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.AdminSession = NewAdminSessionClient(tx.config)
+	tx.AttachmentBlob = NewAttachmentBlobClient(tx.config)
 	tx.AuditEntry = NewAuditEntryClient(tx.config)
 	tx.Device = NewDeviceClient(tx.config)
 	tx.IdempotencyRecord = NewIdempotencyRecordClient(tx.config)
@@ -171,6 +176,7 @@ func (tx *Tx) init() {
 	tx.MobileDevice = NewMobileDeviceClient(tx.config)
 	tx.MobilePairingCode = NewMobilePairingCodeClient(tx.config)
 	tx.PairingCode = NewPairingCodeClient(tx.config)
+	tx.SessionAttachment = NewSessionAttachmentClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }
 

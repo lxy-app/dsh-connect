@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
+	"github.com/deepseek/dsh-connect/server/ent/attachmentblob"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/device"
 	"github.com/deepseek/dsh-connect/server/ent/idempotencyrecord"
@@ -20,6 +21,7 @@ import (
 	"github.com/deepseek/dsh-connect/server/ent/mobiledevice"
 	"github.com/deepseek/dsh-connect/server/ent/mobilepairingcode"
 	"github.com/deepseek/dsh-connect/server/ent/pairingcode"
+	"github.com/deepseek/dsh-connect/server/ent/sessionattachment"
 	"github.com/deepseek/dsh-connect/server/ent/user"
 )
 
@@ -82,6 +84,7 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			adminsession.Table:      adminsession.ValidColumn,
+			attachmentblob.Table:    attachmentblob.ValidColumn,
 			auditentry.Table:        auditentry.ValidColumn,
 			device.Table:            device.ValidColumn,
 			idempotencyrecord.Table: idempotencyrecord.ValidColumn,
@@ -89,6 +92,7 @@ func checkColumn(t, c string) error {
 			mobiledevice.Table:      mobiledevice.ValidColumn,
 			mobilepairingcode.Table: mobilepairingcode.ValidColumn,
 			pairingcode.Table:       pairingcode.ValidColumn,
+			sessionattachment.Table: sessionattachment.ValidColumn,
 			user.Table:              user.ValidColumn,
 		})
 	})

@@ -182,7 +182,7 @@ func (_u *AdminSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 		return _node, err
 	}
 	_spec := sqlgraph.NewUpdateSpec(adminsession.Table, adminsession.Columns, sqlgraph.NewFieldSpec(adminsession.FieldID, field.TypeString))
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
@@ -420,7 +420,7 @@ func (_u *AdminSessionUpdateOne) sqlSave(ctx context.Context) (_node *AdminSessi
 			}
 		}
 	}
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)

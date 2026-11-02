@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
+	"github.com/deepseek/dsh-connect/server/ent/attachmentblob"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/device"
 	"github.com/deepseek/dsh-connect/server/ent/idempotencyrecord"
@@ -14,6 +15,7 @@ import (
 	"github.com/deepseek/dsh-connect/server/ent/mobilepairingcode"
 	"github.com/deepseek/dsh-connect/server/ent/pairingcode"
 	"github.com/deepseek/dsh-connect/server/ent/schema"
+	"github.com/deepseek/dsh-connect/server/ent/sessionattachment"
 	"github.com/deepseek/dsh-connect/server/ent/user"
 )
 
@@ -39,6 +41,28 @@ func init() {
 	adminsessionDescID := adminsessionFields[0].Descriptor()
 	// adminsession.IDValidator is a validator for the "id" field. It is called by the builders before save.
 	adminsession.IDValidator = adminsessionDescID.Validators[0].(func(string) error)
+	attachmentblobFields := schema.AttachmentBlob{}.Fields()
+	_ = attachmentblobFields
+	// attachmentblobDescMime is the schema descriptor for mime field.
+	attachmentblobDescMime := attachmentblobFields[1].Descriptor()
+	// attachmentblob.MimeValidator is a validator for the "mime" field. It is called by the builders before save.
+	attachmentblob.MimeValidator = attachmentblobDescMime.Validators[0].(func(string) error)
+	// attachmentblobDescStoragePath is the schema descriptor for storage_path field.
+	attachmentblobDescStoragePath := attachmentblobFields[3].Descriptor()
+	// attachmentblob.StoragePathValidator is a validator for the "storage_path" field. It is called by the builders before save.
+	attachmentblob.StoragePathValidator = attachmentblobDescStoragePath.Validators[0].(func(string) error)
+	// attachmentblobDescCreatedAt is the schema descriptor for created_at field.
+	attachmentblobDescCreatedAt := attachmentblobFields[4].Descriptor()
+	// attachmentblob.DefaultCreatedAt holds the default value on creation for the created_at field.
+	attachmentblob.DefaultCreatedAt = attachmentblobDescCreatedAt.Default.(func() time.Time)
+	// attachmentblobDescLastUsedAt is the schema descriptor for last_used_at field.
+	attachmentblobDescLastUsedAt := attachmentblobFields[5].Descriptor()
+	// attachmentblob.DefaultLastUsedAt holds the default value on creation for the last_used_at field.
+	attachmentblob.DefaultLastUsedAt = attachmentblobDescLastUsedAt.Default.(func() time.Time)
+	// attachmentblobDescID is the schema descriptor for id field.
+	attachmentblobDescID := attachmentblobFields[0].Descriptor()
+	// attachmentblob.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	attachmentblob.IDValidator = attachmentblobDescID.Validators[0].(func(string) error)
 	auditentryFields := schema.AuditEntry{}.Fields()
 	_ = auditentryFields
 	// auditentryDescOccurredAt is the schema descriptor for occurred_at field.
@@ -151,6 +175,46 @@ func init() {
 	pairingcodeDescCreatedAt := pairingcodeFields[1].Descriptor()
 	// pairingcode.DefaultCreatedAt holds the default value on creation for the created_at field.
 	pairingcode.DefaultCreatedAt = pairingcodeDescCreatedAt.Default.(func() time.Time)
+	sessionattachmentFields := schema.SessionAttachment{}.Fields()
+	_ = sessionattachmentFields
+	// sessionattachmentDescDeviceID is the schema descriptor for device_id field.
+	sessionattachmentDescDeviceID := sessionattachmentFields[1].Descriptor()
+	// sessionattachment.DeviceIDValidator is a validator for the "device_id" field. It is called by the builders before save.
+	sessionattachment.DeviceIDValidator = sessionattachmentDescDeviceID.Validators[0].(func(string) error)
+	// sessionattachmentDescSessionID is the schema descriptor for session_id field.
+	sessionattachmentDescSessionID := sessionattachmentFields[2].Descriptor()
+	// sessionattachment.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	sessionattachment.SessionIDValidator = sessionattachmentDescSessionID.Validators[0].(func(string) error)
+	// sessionattachmentDescWorkspaceID is the schema descriptor for workspace_id field.
+	sessionattachmentDescWorkspaceID := sessionattachmentFields[3].Descriptor()
+	// sessionattachment.WorkspaceIDValidator is a validator for the "workspace_id" field. It is called by the builders before save.
+	sessionattachment.WorkspaceIDValidator = sessionattachmentDescWorkspaceID.Validators[0].(func(string) error)
+	// sessionattachmentDescDisplayName is the schema descriptor for display_name field.
+	sessionattachmentDescDisplayName := sessionattachmentFields[8].Descriptor()
+	// sessionattachment.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
+	sessionattachment.DisplayNameValidator = sessionattachmentDescDisplayName.Validators[0].(func(string) error)
+	// sessionattachmentDescMime is the schema descriptor for mime field.
+	sessionattachmentDescMime := sessionattachmentFields[9].Descriptor()
+	// sessionattachment.MimeValidator is a validator for the "mime" field. It is called by the builders before save.
+	sessionattachment.MimeValidator = sessionattachmentDescMime.Validators[0].(func(string) error)
+	// sessionattachmentDescBytes is the schema descriptor for bytes field.
+	sessionattachmentDescBytes := sessionattachmentFields[10].Descriptor()
+	// sessionattachment.DefaultBytes holds the default value on creation for the bytes field.
+	sessionattachment.DefaultBytes = sessionattachmentDescBytes.Default.(int64)
+	// sessionattachmentDescCreatedAt is the schema descriptor for created_at field.
+	sessionattachmentDescCreatedAt := sessionattachmentFields[15].Descriptor()
+	// sessionattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
+	sessionattachment.DefaultCreatedAt = sessionattachmentDescCreatedAt.Default.(func() time.Time)
+	// sessionattachmentDescUpdatedAt is the schema descriptor for updated_at field.
+	sessionattachmentDescUpdatedAt := sessionattachmentFields[16].Descriptor()
+	// sessionattachment.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	sessionattachment.DefaultUpdatedAt = sessionattachmentDescUpdatedAt.Default.(func() time.Time)
+	// sessionattachment.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	sessionattachment.UpdateDefaultUpdatedAt = sessionattachmentDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// sessionattachmentDescID is the schema descriptor for id field.
+	sessionattachmentDescID := sessionattachmentFields[0].Descriptor()
+	// sessionattachment.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	sessionattachment.IDValidator = sessionattachmentDescID.Validators[0].(func(string) error)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescEmail is the schema descriptor for email field.
