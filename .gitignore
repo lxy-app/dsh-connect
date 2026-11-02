@@ -15,6 +15,10 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# Package artifacts (npm pack / publish)
+*.tgz
+*.tar.gz
+
 # Dependencies
 node_modules/
 
