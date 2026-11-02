@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import type { MobileInteraction, MobileInteractionAnswer } from '@/types/mobile';
 
@@ -175,21 +176,23 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '700',
   },
   meta: {
     flex: 1,
-    fontSize: 11,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   title: {
-    fontSize: 15,
+    fontSize: Typography.reading,
     fontWeight: '700',
-    lineHeight: 21,
+    lineHeight: 22,
   },
   reason: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   actions: {
     flexDirection: 'row',
@@ -203,17 +206,18 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   questionHeader: {
-    fontSize: 11,
+    fontSize: Typography.secondary,
+    lineHeight: 19,
     fontWeight: '700',
   },
   questionText: {
-    fontSize: 14,
+    fontSize: Typography.control,
     fontWeight: '600',
-    lineHeight: 20,
+    lineHeight: 21,
   },
   questionDetail: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   options: {
     gap: 8,
@@ -226,19 +230,21 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   optionText: {
-    fontSize: 13,
+    fontSize: Typography.control,
+    lineHeight: 21,
     fontWeight: '600',
   },
   optionHelp: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   input: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    fontSize: 13,
+    fontSize: Typography.reading,
+    lineHeight: 24,
     minHeight: 42,
     textAlignVertical: 'top',
   },

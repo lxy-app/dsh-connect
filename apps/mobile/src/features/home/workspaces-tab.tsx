@@ -9,6 +9,7 @@ import {
 
 import { EmptyState } from '@/components/empty-state';
 import { StatusBadge } from '@/components/status-badge';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { formatScopes } from '@/lib/format';
 import type { MobileWorkspaceSummary } from '@/types/mobile';
@@ -160,8 +161,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   subtitle: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   group: {
     gap: 8,
@@ -176,13 +177,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   groupTitle: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   groupMeta: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   card: {
     borderWidth: 1,
@@ -202,7 +203,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   markText: {
-    fontSize: 11,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '800',
   },
   cardText: {
@@ -210,13 +212,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   cardTitle: {
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   cardCopy: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   chevron: {
     fontSize: 22,
@@ -229,13 +231,13 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   noteTitle: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
   },
   noteCopy: {
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   pressed: {
     opacity: 0.7,

@@ -118,6 +118,12 @@ export type MobileSessionList = {
   warnings: MobileAccessWarning[];
 };
 
+export type MobileSessionCreateResult = {
+  sessionId: string;
+  workspaceId: string;
+  agentPreset?: string;
+};
+
 export type MobileMessage = {
   id: string;
   seq: number;
@@ -137,6 +143,7 @@ export type MobileTranscript = {
   hasMore: boolean;
   nextCursor?: string;
   active: boolean;
+  turnEndSeq?: number;
   truncated?: boolean;
 };
 

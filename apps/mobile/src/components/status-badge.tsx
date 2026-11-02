@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'accent';
@@ -34,8 +35,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   label: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '600',
   },
 });

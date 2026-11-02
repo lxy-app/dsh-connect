@@ -26,7 +26,10 @@ export default function RootLayout() {
               headerShown: false,
               contentStyle: { backgroundColor: theme.background },
             }}
-          />
+          >
+            <Stack.Screen name="index" options={{ animation: 'none' }} />
+            <Stack.Screen name="session/[sessionId]" options={{ animation: 'none' }} />
+          </Stack>
         </ThemeProvider>
       </InteractionsProvider>
       </VoiceProvider>

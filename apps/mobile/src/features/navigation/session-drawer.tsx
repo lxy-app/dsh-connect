@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError, getMobileAccessOverview, getMobileSessions } from '@/lib/mobile-api';
 import { formatRelative } from '@/lib/format';
@@ -21,11 +22,13 @@ export function SessionDrawer({
   visible,
   currentSessionId,
   onClose,
+  onCreateSession,
   onOpenSession,
 }: {
   visible: boolean;
   currentSessionId?: string;
   onClose: () => void;
+  onCreateSession: (deviceId: string, workspaceId: string) => void;
   onOpenSession: (session: MobileSession) => void;
 }) {
   const theme = useAppTheme();
@@ -83,6 +86,15 @@ export function SessionDrawer({
     () => sessions.filter((session) => session.deviceId === desktop?.deviceId),
     [desktop?.deviceId, sessions],
   );
+  const canCreate = Boolean(
+    desktop?.online
+    && desktop.grant?.scopes.includes('read')
+    && desktop.grant.scopes.includes('prompt'),
+  );
+  const createInWorkspace = (workspaceId: string) => {
+    if (!desktop || !canCreate) return;
+    onCreateSession(desktop.deviceId, workspaceId);
+  };
 
   const selectDevice = (next: MobileDesktopAccess) => {
     const firstWorkspace = next.grant?.workspaces[0]?.id ?? '';
@@ -145,17 +157,33 @@ export function SessionDrawer({
             ) : null}
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="同步会话"
-            disabled={loading}
-            onPress={() => void load()}
-            style={[styles.syncButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
-          >
-            {loading ? <ActivityIndicator color={theme.accent} size="small" /> : <Text style={[styles.syncIcon, { color: theme.accent }]}>↻</Text>}
-            <Text style={[styles.syncText, { color: theme.text }]}>{loading ? '正在同步…' : '同步会话'}</Text>
-            <Text style={[styles.syncWorkspace, { color: theme.textSecondary }]}>· {workspaces.find((item) => item.id === workspaceId)?.name ?? ''}</Text>
-          </Pressable>
+          <View style={styles.drawerActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="新建会话"
+              accessibilityState={{ disabled: !canCreate }}
+              disabled={!canCreate}
+              onPress={() => createInWorkspace(workspaceId)}
+              style={({ pressed }) => [
+                styles.newButton,
+                { borderColor: canCreate ? theme.accent : theme.border, backgroundColor: canCreate ? theme.accent : theme.surfaceMuted },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.newIcon, { color: canCreate ? theme.onAccent : theme.textSecondary }]}>＋</Text>
+              <Text style={[styles.newText, { color: canCreate ? theme.onAccent : theme.textSecondary }]}>新建会话</Text>
+              <Text numberOfLines={1} style={[styles.newWorkspace, { color: canCreate ? theme.onAccent : theme.textSecondary }]}>· {workspaces.find((item) => item.id === workspaceId)?.name ?? ''}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="同步会话"
+              disabled={loading}
+              onPress={() => void load()}
+              style={[styles.syncButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            >
+              {loading ? <ActivityIndicator color={theme.accent} size="small" /> : <Text style={[styles.syncIcon, { color: theme.accent }]}>↻</Text>}
+            </Pressable>
+          </View>
 
           {error ? <Pressable onPress={() => void load()} style={[styles.error, { backgroundColor: theme.warningSoft }]}><Text style={[styles.errorText, { color: theme.warning }]}>{error} · 点击重试</Text></Pressable> : null}
 
@@ -186,6 +214,16 @@ export function SessionDrawer({
                       <Text numberOfLines={1} style={[styles.workspaceName, { color: workspace.id === workspaceId ? theme.accent : theme.textSecondary }]}>{workspace.name}</Text>
                       <Text style={[styles.workspaceCount, { color: theme.textSecondary }]}>{items.length}</Text>
                       <Text style={[styles.chevron, { color: theme.textSecondary }]}>{open ? '⌄' : '›'}</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`在 ${workspace.name} 中新建会话`}
+                      accessibilityState={{ disabled: !canCreate }}
+                      disabled={!canCreate}
+                      onPress={() => createInWorkspace(workspace.id)}
+                      style={({ pressed }) => [styles.workspaceAdd, pressed && styles.pressed]}
+                    >
+                      <Text style={[styles.workspaceAddText, { color: canCreate ? theme.accent : theme.textSecondary }]}>＋</Text>
                     </Pressable>
                   </View>
                   {open ? (
@@ -243,40 +281,45 @@ const styles = StyleSheet.create({
   deviceIconText: { fontSize: 18, fontWeight: '700' },
   onlineDot: { position: 'absolute', width: 9, height: 9, borderRadius: 5, right: -1, top: -1, borderWidth: 2 },
   deviceText: { flex: 1, minWidth: 0 },
-  deviceName: { fontSize: 15, fontWeight: '700' },
-  deviceMeta: { fontSize: 10, marginTop: 3 },
+  deviceName: { fontSize: Typography.control, lineHeight: 21, fontWeight: '700' },
+  deviceMeta: { fontSize: Typography.caption, lineHeight: 18, marginTop: 3 },
   deviceMenu: { position: 'absolute', top: 67, left: 14, right: 14, borderWidth: 1, borderRadius: 12, padding: 5, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 14, elevation: 8 },
   deviceOption: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, borderRadius: 8 },
-  deviceOptionText: { flex: 1, fontSize: 12 },
+  deviceOptionText: { flex: 1, fontSize: Typography.body, lineHeight: 20 },
   smallDot: { width: 7, height: 7, borderRadius: 4 },
-  syncButton: { marginHorizontal: 14, marginBottom: 9, minHeight: 42, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
-  syncIcon: { fontSize: 17 },
-  syncText: { fontSize: 12, fontWeight: '600' },
-  syncWorkspace: { fontSize: 10 },
+  drawerActions: { marginHorizontal: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  newButton: { flex: 1, minWidth: 0, minHeight: 42, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10 },
+  newIcon: { fontSize: 16, lineHeight: 19 },
+  newText: { fontSize: Typography.body, lineHeight: 20, fontWeight: '700' },
+  newWorkspace: { flexShrink: 1, fontSize: Typography.caption, lineHeight: 18 },
+  syncButton: { width: 42, height: 42, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  syncIcon: { fontSize: 19, lineHeight: 22 },
   error: { marginHorizontal: 14, marginBottom: 8, padding: 9, borderRadius: 9 },
-  errorText: { fontSize: 10, lineHeight: 15 },
+  errorText: { fontSize: Typography.secondary, lineHeight: 20 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 10, paddingBottom: 14 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingTop: 12, paddingBottom: 7 },
-  sectionTitle: { fontSize: 11, fontWeight: '600' },
-  sectionMeta: { marginLeft: 'auto', fontSize: 9 },
+  sectionTitle: { fontSize: Typography.secondary, lineHeight: 19, fontWeight: '600' },
+  sectionMeta: { marginLeft: 'auto', fontSize: Typography.caption, lineHeight: 18 },
   workspaceGroup: { marginBottom: 3 },
   workspaceRow: { flexDirection: 'row', alignItems: 'center' },
   workspaceButton: { flex: 1, minHeight: 39, flexDirection: 'row', alignItems: 'center', gap: 9, padding: 9, borderRadius: 10 },
+  workspaceAdd: { width: 32, height: 36, marginRight: 3, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
+  workspaceAddText: { fontSize: 17, lineHeight: 20 },
   workspaceIcon: { fontSize: 17 },
-  workspaceName: { flex: 1, fontSize: 12 },
-  workspaceCount: { fontSize: 10 },
+  workspaceName: { flex: 1, fontSize: Typography.body, lineHeight: 20 },
+  workspaceCount: { fontSize: Typography.caption, lineHeight: 18 },
   chevron: { fontSize: 14, lineHeight: 17 },
   sessionGroup: { paddingLeft: 19, paddingVertical: 3 },
   sessionButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, paddingVertical: 9, borderRadius: 10 },
   sessionDot: { width: 6, height: 6, borderRadius: 3 },
   sessionText: { flex: 1, minWidth: 0 },
-  sessionTitle: { fontSize: 11, fontWeight: '600' },
-  sessionMeta: { fontSize: 9, marginTop: 3 },
+  sessionTitle: { fontSize: Typography.body, lineHeight: 20, fontWeight: '600' },
+  sessionMeta: { fontSize: Typography.caption, lineHeight: 18, marginTop: 3 },
   moreButton: { marginLeft: 28, paddingHorizontal: 9, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  moreText: { fontSize: 10 },
-  empty: { padding: 16, fontSize: 10, textAlign: 'center' },
+  moreText: { fontSize: Typography.secondary, lineHeight: 20 },
+  empty: { padding: 16, fontSize: Typography.secondary, lineHeight: 20, textAlign: 'center' },
   footer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 17, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  footerText: { flex: 1, fontSize: 9 },
+  footerText: { flex: 1, fontSize: Typography.caption, lineHeight: 18 },
   pressed: { opacity: 0.65 },
 });

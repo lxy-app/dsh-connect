@@ -11,6 +11,7 @@ import {
 
 import { EmptyState } from '@/components/empty-state';
 import { StatusBadge } from '@/components/status-badge';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { formatRelative } from '@/lib/format';
 import type { MobileAccessWarning, MobileSession } from '@/types/mobile';
@@ -269,8 +270,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   subtitle: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   refresh: {
     borderWidth: 1,
@@ -280,7 +281,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   refreshText: {
-    fontSize: 12,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '600',
   },
   search: {
@@ -298,7 +300,8 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: Typography.reading,
+    lineHeight: 24,
     paddingVertical: 10,
   },
   chips: {
@@ -313,8 +316,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   chipText: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '600',
   },
   warning: {
@@ -324,16 +327,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   warningTitle: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
   },
   warningText: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   loading: {
-    fontSize: 13,
+    fontSize: Typography.body,
+    lineHeight: 20,
     textAlign: 'center',
     paddingVertical: 24,
   },
@@ -345,12 +349,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   emptyCopy: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 21,
     textAlign: 'center',
   },
   list: {
@@ -369,8 +374,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   cardMeta: {
@@ -379,19 +384,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardWorkspace: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '600',
     maxWidth: '35%',
   },
   cardDevice: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   cardTime: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   pressed: {
     opacity: 0.7,

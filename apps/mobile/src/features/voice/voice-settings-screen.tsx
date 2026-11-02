@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Te
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActionButton } from '@/components/action-button';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { VOLC_ASR_RESOURCE_ID } from '@/lib/volc-asr';
 import { VOLC_TTS_RESOURCE_ID } from '@/lib/volc-tts';
@@ -192,11 +193,11 @@ function Field({ label, value, onChange, placeholder, theme, secure = false, aut
 const styles = StyleSheet.create({
   page: { flex: 1 }, content: { paddingHorizontal: 20, gap: 16 },
   loading: { alignItems: 'center', justifyContent: 'center', gap: 12 },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 12 }, back: { width: 36, height: 36, borderWidth: 1, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, backText: { fontSize: 26, lineHeight: 28, marginTop: -2 }, title: { fontSize: 20, fontWeight: '700' }, subtitle: { fontSize: 10, marginTop: 3 },
-  hero: { borderWidth: 1, borderRadius: 16, padding: 15, gap: 6 }, heroTitle: { fontSize: 15, fontWeight: '700' }, heroCopy: { fontSize: 11, lineHeight: 17 },
-  section: { gap: 7 }, sectionTitle: { fontSize: 11, fontWeight: '700', paddingHorizontal: 4 }, group: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 13 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 }, rowText: { flex: 1 }, rowLabel: { fontSize: 13, fontWeight: '600' }, rowSub: { fontSize: 10, lineHeight: 15, marginTop: 3 },
-  field: { gap: 6 }, fieldLabel: { fontSize: 11, fontWeight: '600' }, input: { borderWidth: 1, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 10, fontSize: 12 },
-  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, choice: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 }, choiceText: { fontSize: 11, fontWeight: '600' },
-  note: { fontSize: 10, lineHeight: 16 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 12 }, back: { width: 36, height: 36, borderWidth: 1, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, backText: { fontSize: 26, lineHeight: 28, marginTop: -2 }, title: { fontSize: 20, lineHeight: 26, fontWeight: '700' }, subtitle: { fontSize: Typography.caption, lineHeight: 18, marginTop: 3 },
+  hero: { borderWidth: 1, borderRadius: 16, padding: 15, gap: 6 }, heroTitle: { fontSize: Typography.reading, lineHeight: 22, fontWeight: '700' }, heroCopy: { fontSize: Typography.body, lineHeight: 21 },
+  section: { gap: 7 }, sectionTitle: { fontSize: Typography.secondary, lineHeight: 19, fontWeight: '700', paddingHorizontal: 4 }, group: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 13 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 }, rowText: { flex: 1 }, rowLabel: { fontSize: Typography.control, lineHeight: 21, fontWeight: '600' }, rowSub: { fontSize: Typography.secondary, lineHeight: 20, marginTop: 3 },
+  field: { gap: 6 }, fieldLabel: { fontSize: Typography.body, lineHeight: 20, fontWeight: '600' }, input: { borderWidth: 1, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 10, fontSize: Typography.reading, lineHeight: 24 },
+  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, choice: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 }, choiceText: { fontSize: Typography.body, lineHeight: 20, fontWeight: '600' },
+  note: { fontSize: Typography.secondary, lineHeight: 20 },
 });

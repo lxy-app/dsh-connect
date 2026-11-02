@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import type { StoredMobileSession } from '@/types/mobile';
 
@@ -182,8 +183,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   subtitle: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   identity: {
     borderWidth: 1,
@@ -209,13 +210,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   name: {
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   email: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   role: {
     borderRadius: 999,
@@ -223,16 +224,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   roleText: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '700',
   },
   section: {
     gap: 7,
   },
   sectionTitle: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.secondary,
+    lineHeight: 19,
     fontWeight: '700',
     letterSpacing: 0.4,
     paddingHorizontal: 4,
@@ -251,23 +252,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   rowLabel: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 20,
   },
   rowValue: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '500',
     textAlign: 'right',
   },
   mono: {
     fontFamily: 'Menlo',
-    fontSize: 10,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   help: {
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
     paddingBottom: 10,
   },
   actions: {

@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/empty-state';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError } from '@/lib/mobile-api';
 import { useInteractions, type InteractionDecision } from '@/providers/interactions-provider';
@@ -149,7 +150,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   body: {
     paddingBottom: 32,
@@ -164,7 +166,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   linkText: {
-    fontSize: 12,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '600',
   },
   pressed: {
