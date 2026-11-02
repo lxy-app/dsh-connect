@@ -47,7 +47,7 @@ func (r *Router) Execute(ctx context.Context, method, deviceID, requestID string
 		return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "timeoutMs must be between 1 and 120000", false))
 	}
 	requestHash := hashRequest(method, deviceID, raw)
-	if method != protocol.MethodSessionPrompt {
+	if method != protocol.MethodSessionCreate && method != protocol.MethodSessionPrompt {
 		return r.executeDirect(ctx, method, deviceID, requestID, raw, timeout)
 	}
 
@@ -55,19 +55,19 @@ func (r *Router) Execute(ctx context.Context, method, deviceID, requestID string
 	record, found, lookupError := r.server.store.Idempotency(ctx, requestID)
 	if lookupError != nil {
 		r.mu.Unlock()
-		return nil, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not read prompt idempotency state", true))
+		return nil, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not read command idempotency state", true))
 	}
 	if found {
 		r.mu.Unlock()
 		if record.Method != method || record.DeviceID != deviceID || record.RequestHash != requestHash {
-			return nil, errorPtr(protocol.NewError(protocol.CodeIdempotencyConflict, "requestId was already used with different prompt input", false))
+			return nil, errorPtr(protocol.NewError(protocol.CodeIdempotencyConflict, "requestId was already used with different command input", false))
 		}
 		return record.Result, record.Error
 	}
 	if existing, ok := r.flights[requestID]; ok {
 		r.mu.Unlock()
 		if existing.method != method || existing.deviceID != deviceID || existing.requestHash != requestHash {
-			return nil, errorPtr(protocol.NewError(protocol.CodeIdempotencyConflict, "requestId is in flight with different prompt input", false))
+			return nil, errorPtr(protocol.NewError(protocol.CodeIdempotencyConflict, "requestId is in flight with different command input", false))
 		}
 		return waitForFlight(ctx, existing)
 	}
@@ -75,7 +75,7 @@ func (r *Router) Execute(ctx context.Context, method, deviceID, requestID string
 	r.flights[requestID] = current
 	r.mu.Unlock()
 
-	go r.runPrompt(current, method, deviceID, requestID, raw, requestHash, timeout)
+	go r.runIdempotent(current, method, deviceID, requestID, raw, requestHash, timeout)
 	return waitForFlight(ctx, current)
 }
 
@@ -84,11 +84,11 @@ func waitForFlight(ctx context.Context, current *flight) (json.RawMessage, *prot
 	case <-current.done:
 		return current.result, current.err
 	case <-ctx.Done():
-		return nil, errorPtr(protocol.NewError(protocol.CodeCommandTimeout, "request context ended while waiting for the shared prompt result", true))
+		return nil, errorPtr(protocol.NewError(protocol.CodeCommandTimeout, "request context ended while waiting for the shared command result", true))
 	}
 }
 
-func (r *Router) runPrompt(current *flight, method, deviceID, requestID string, raw json.RawMessage, requestHash string, timeout time.Duration) {
+func (r *Router) runIdempotent(current *flight, method, deviceID, requestID string, raw json.RawMessage, requestHash string, timeout time.Duration) {
 	result, commandError := r.executeDirect(context.Background(), method, deviceID, requestID, raw, timeout)
 	now := nowUTC()
 	record := store.IdempotencyRecord{
@@ -107,7 +107,7 @@ func (r *Router) runPrompt(current *flight, method, deviceID, requestID string, 
 	if !isUnsubmittedDeviceOffline(commandError) {
 		if err := r.server.store.CompleteIdempotency(context.Background(), record); err != nil {
 			result = nil
-			commandError = errorPtr(protocol.NewError(protocol.CodeInternalError, "could not persist prompt idempotency outcome", true))
+			commandError = errorPtr(protocol.NewError(protocol.CodeInternalError, "could not persist command idempotency outcome", true))
 		}
 	}
 	current.result = result

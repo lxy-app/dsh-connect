@@ -9,6 +9,7 @@ import type {
   MobileMessage,
   MobilePlatform,
   MobileSession,
+  MobileSessionCreateResult,
   MobileSessionList,
   MobileSessionResponse,
   MobileTranscript,
@@ -101,11 +102,13 @@ export function describeMobileApiError(error: unknown): string {
     case 'not_found':
       return 'Server 上找不到该用户、设备或访问授权。';
     case 'device_offline':
-      return '桌面离线，暂时无法读取会话。请确认 DSH 和 Connector 在线。';
+      return '桌面离线，暂时无法执行此操作。请确认 DSH 和 Connector 在线。';
     case 'command_timeout':
       return '桌面响应超时，请稍后重试。';
     case 'conflict':
       return '状态已变化，请刷新后重试。';
+    case 'idempotency_conflict':
+      return '相同请求标识已用于其他内容，请返回后重新进入本页。';
     case 'method_not_found':
     case 'method_not_supported':
     case 'unsupported_method':
@@ -116,7 +119,7 @@ export function describeMobileApiError(error: unknown): string {
     case 'permission_denied':
       return '桌面 Connector 没有授予这项动作。请让桌面补充授权后重试。';
     case 'invalid_request':
-      return '配对信息不完整或格式不正确。';
+      return '请求信息不完整或格式不正确。';
     case 'invalid_response':
       return 'Server 返回了无法识别的响应。';
     case 'payload_too_large':
@@ -262,6 +265,19 @@ export async function getMobileSessions(
     accessToken,
   });
   return parseSessionList(payload);
+}
+
+export async function createMobileSession(
+  serverUrl: string,
+  accessToken: string,
+  input: { requestId: string; deviceId: string; workspaceId: string },
+): Promise<MobileSessionCreateResult> {
+  const payload = await requestJSON(serverUrl, '/v1/mobile/sessions', {
+    method: 'POST',
+    accessToken,
+    body: input,
+  });
+  return parseSessionCreate(payload);
 }
 
 export async function getMobileTranscript(
@@ -590,6 +606,15 @@ function parseSession(value: unknown): MobileSession {
   };
 }
 
+function parseSessionCreate(value: unknown): MobileSessionCreateResult {
+  if (!isRecord(value)) throw invalidResponse();
+  return {
+    sessionId: requiredString(value.sessionId),
+    workspaceId: requiredString(value.workspaceId),
+    ...(typeof value.agentPreset === 'string' && value.agentPreset ? { agentPreset: value.agentPreset } : {}),
+  };
+}
+
 function parseWarning(value: unknown) {
   if (!isRecord(value)) throw invalidResponse();
   return {
@@ -610,6 +635,7 @@ function parseTranscript(value: unknown): MobileTranscript {
     hasMore: value.hasMore === true,
     ...(typeof value.nextCursor === 'string' ? { nextCursor: value.nextCursor } : {}),
     active: value.active === true,
+    ...(typeof value.turnEndSeq === 'number' && Number.isSafeInteger(value.turnEndSeq) && value.turnEndSeq > 0 ? { turnEndSeq: value.turnEndSeq } : {}),
     ...(value.truncated === true ? { truncated: true } : {}),
   };
 }

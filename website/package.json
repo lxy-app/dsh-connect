@@ -1,0 +1,34 @@
+{
+  "name": "@dsh-connect/website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH Connect product website, statically exported with Next.js",
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 5174",
+    "build": "next build && node scripts/verify-static.mjs",
+    "preview": "node scripts/preview.mjs",
+    "verify:static": "node scripts/verify-static.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "^26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "jsdom": "30.1.3",
+    "typescript": "^5.9.3",
+    "vitest": "5.0.5"
+  }
+}

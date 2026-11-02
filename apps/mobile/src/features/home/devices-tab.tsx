@@ -9,6 +9,7 @@ import {
 import { ActionButton } from '@/components/action-button';
 import { EmptyState } from '@/components/empty-state';
 import { StatusBadge, type BadgeTone } from '@/components/status-badge';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { formatScopes } from '@/lib/format';
 import type { MobileDesktopAccess } from '@/types/mobile';
@@ -228,8 +229,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   subtitle: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   explain: {
     borderWidth: 1,
@@ -238,14 +239,14 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   explainTitle: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
     marginBottom: 2,
   },
   explainStep: {
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   card: {
     borderWidth: 1,
@@ -266,7 +267,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   deviceIconText: {
-    fontSize: 11,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '800',
   },
   cardTitleWrap: {
@@ -274,13 +276,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   cardTitle: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   cardMeta: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   divider: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -292,8 +294,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   rowLabel: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: Typography.body,
+    lineHeight: 20,
   },
   granted: {
     flexDirection: 'row',
@@ -307,17 +309,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   workspaceChipText: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '600',
   },
   scopeText: {
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   pendingHint: {
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   actions: {
     flexDirection: 'row',

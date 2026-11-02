@@ -57,7 +57,7 @@ type DeviceRecord struct {
 	PairingExpiresAt *time.Time      `json:"pairingExpiresAt,omitempty"`
 }
 
-// IdempotencyRecord stores the durable outcome of a session.prompt request.
+// IdempotencyRecord stores the durable outcome of a session.create or session.prompt request.
 type IdempotencyRecord struct {
 	RequestID   string          `json:"requestId"`
 	Method      string          `json:"method"`

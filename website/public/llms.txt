@@ -1,0 +1,35 @@
+# DSH Connect
+
+> DSH Connect 将桌面 DeepSeek Harness（DSH）会话安全延伸到手机，面向个人开发者与小团队。它不是远程桌面工具，而是聚焦会话查看、任务推进和一次性审批。
+
+Canonical: https://lxy.app/dsh-connect/
+Source: https://github.com/lxy-app/dsh-connect
+License: Apache License 2.0
+
+## Core capabilities
+
+- 查看桌面 DSH 会话历史、工具执行摘要和 Assistant 实时流式回复。
+- 在授权会话中发送提示词、创建任务或取消当前 Turn。
+- 远程处理一次性工具审批和用户提问；超时、离线或协议异常失败关闭。
+- 手机配对与桌面授权分离；按桌面、工作区和 read/prompt/cancel/approve 动作授权，默认拒绝。
+- Connector 通过 Host API 访问 DSH，并主动建立出站 WSS；桌面不需要公网入站端口。
+- DSH Session Log 是会话事实源；Server 不直接读取 DSH 内部文件。
+- 提示词全链路使用稳定 requestId 幂等，恢复时按照会话快照与持久事件游标对齐。
+- Web Admin 提供用户、设备、工作区权限和敏感操作审计。
+- 支持私有部署；Go Server 与 Web Admin 可通过 Docker 部署。
+
+## Boundaries
+
+- 不提供远程整块屏幕控制。
+- 不开放任意 Shell、任意文件路径或远程关闭 DSH 审批。
+- 手机配对本身不会授予桌面访问权限。
+- “DSH 已接受”不等于“执行完成”。
+- 网站中的设备、会话、审批与后台指标是明确标注的交互演示数据，不是真实运行指标。
+
+## Documentation
+
+- 项目与快速启动: https://github.com/lxy-app/dsh-connect#readme
+- 系统架构: https://github.com/lxy-app/dsh-connect/blob/main/docs/01-system-architecture.md
+- 产品设计: https://github.com/lxy-app/dsh-connect/blob/main/docs/02-product-design.md
+- 协议说明: https://github.com/lxy-app/dsh-connect/blob/main/protocol/README.md
+- Server 部署: https://github.com/lxy-app/dsh-connect/blob/main/server/README.md

@@ -2,7 +2,7 @@
 
 单实例 Go 中继 Server。它只通过 Connector 调用 `session.*` 方法并中继事件，**不读取 DSH 文件、不直接调用 DSH Service，也不保存会话正文**。
 
-持久层为 **PostgreSQL 18 + ent ORM**：配对码、设备凭据 hash、prompt 幂等结果、审计、管理账号与浏览器会话、手机设备与移动令牌、手机访问授权。所有密钥只以 SHA-256 存储。
+持久层为 **PostgreSQL 18 + ent ORM**：配对码、设备凭据 hash、create/prompt 幂等结果、审计、管理账号与浏览器会话、手机设备与移动令牌、手机访问授权。所有密钥只以 SHA-256 存储。
 
 ## 运行
 
@@ -93,7 +93,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | GET WS | `/v1/events/ws` | follow 并中继事件 |
 | GET WS | `/v1/connector/ws` | Connector 配对、认证、命令/事件单连接（唯一免管理鉴权通道） |
 
-`session.prompt` 的 `requestId` 是持久幂等键，现由 PostgreSQL 唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同输入复用同一 key 返回 `idempotency_conflict`。
+`session.create` 与 `session.prompt` 的 `requestId` 都是持久幂等键，由 PostgreSQL 唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。两类命令必须使用不同 requestId。
 
 ## 手机配对 API
 
@@ -111,6 +111,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | DELETE | `/v1/mobile/access/{grantId}` | 手机撤销自己的申请或授权 |
 | GET | `/v1/mobile/workspaces` | 仅 active grant 中的工作区 |
 | GET | `/v1/mobile/sessions` | 聚合授权桌面会话；离线桌面返回 warning |
+| POST | `/v1/mobile/sessions` | 创建会话，需 `prompt`，沿用独立 requestId 幂等 |
 | GET | `/v1/mobile/sessions/{id}/messages` | 稳定 transcript，需 `read`；WSS 断开时的兜底 |
 | GET | `/v1/mobile/events/ws` | 需 `read` grant；compact follow 并只推送 assistant 增量/对话事件 |
 | POST | `/v1/mobile/sessions/{id}/prompt` | 发送提示词，需 `prompt`，沿用 requestId 幂等 |
@@ -128,7 +129,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 - 手机配对不代表获得桌面权限。`GET /v1/mobile/access` 先展示桌面已开放范围；手机只能申请其子集，grant 默认 `pending`。
 - 只有桌面 Connector 通过已认证 WSS 的 `mobile.access.list` / `mobile.access.decide` 才能批准、拒绝或撤销 grant。Server 不代替桌面做授权决定。
 - `pair.updateGrants` 允许桌面 Connector 在面板显式确认后更新自己的 workspace/scope（例如追加 `approve`），无需重新配对；Server 校验动作词汇并写审计 `pair.grants.update`，手机 grant 仍需单独申请和桌面确认。
-- 会话列表、transcript、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验会话真实所属工作区/审批答案，形成双重 fail-closed。
+- 会话列表、create、transcript、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验工作区授权、会话真实归属或审批答案，形成双重 fail-closed。
 - 待处理审批只存在内存中，Server 重启或 Connector 断连即清空；同一 interaction 在 Server 内用 CAS 预留，避免两台手机重复消费。
 - 手机 logout、管理员吊销手机、桌面吊销都会撤销相关 grant。
 - **移动 Access Token 不能访问 `/v1/devices`、`/v1/sessions` 或 `/v1/events/ws` 等调试接口。** 移动端仅使用受 grant 约束的 `/v1/mobile/*` API；`/v1/mobile/events/ws` 先校验 grant，再以 compact follow 推送 assistant 增量，原始工具 payload 由 Server 过滤。
@@ -139,7 +140,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 |---|---|
 | `pairing_codes` | 一次性配对码 hash 与消费状态 |
 | `devices` | 设备身份、授权工作区/scope、令牌 hash、在线状态 |
-| `idempotency_records` | `session.prompt` 持久幂等结果 |
+| `idempotency_records` | `session.create` / `session.prompt` 持久幂等结果 |
 | `audit_entries` | 只追加审计，按 `occurred_at`/`device_id`/`action` 建索引 |
 | `users` | 管理账号（owner/admin/member/auditor） |
 | `admin_sessions` | 浏览器登录会话 token hash |
@@ -165,7 +166,7 @@ go test ./...        # 或用 make test-server
 - 复用已有实例：设置 `DSH_CONNECT_TEST_DATABASE_URL`。
 - CI 中要求必须跑数据库测试：设置 `DSH_CONNECT_REQUIRE_PG=1`，缺少 Docker 时失败而非跳过。
 
-集成测试覆盖：配对码一次性消费与过期、显式桌面授权、设备令牌重连、工作区越权拒绝、七类会话命令、prompt 并发/持久幂等、持久事件与临时流、慢消费者、离线快速失败、数据库重开后的持久性、**明文令牌不落库**，以及管理 API 的登录、角色隔离、最后 Owner 保护、设备吊销断连与审计记录。手机链路额外覆盖配对码单次消费与过期、令牌轮换、手机登出、管理员吊销、用户删除清理、移动角色隔离，以及访问申请、桌面批准/拒绝/撤销、工作区过滤、transcript、移动 prompt 幂等和跨手机越权撤销。
+集成测试覆盖：配对码一次性消费与过期、显式桌面授权、设备令牌重连、工作区越权拒绝、七类会话命令、create/prompt 并发与持久幂等、持久事件与临时流、慢消费者、离线快速失败、数据库重开后的持久性、**明文令牌不落库**，以及管理 API 的登录、角色隔离、最后 Owner 保护、设备吊销断连与审计记录。手机链路额外覆盖配对码单次消费与过期、令牌轮换、手机登出、管理员吊销、用户删除清理、移动角色隔离，以及访问申请、桌面批准/拒绝/撤销、工作区过滤、移动创建与 prompt 幂等、transcript 和跨手机越权撤销。
 
 ## 退出
 

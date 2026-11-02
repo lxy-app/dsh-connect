@@ -13,11 +13,13 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 - 启动时校验 `/v1/mobile/me`，Access Token 即将过期时自动轮换；API 调用遇到 401 时自动刷新一次并重试。
 - 在“设备”页查看桌面与已开放工作区，提交访问申请；在桌面 DSH Connector 面板中由用户本人批准。
 - “工作区”已迁入会话左侧抽屉，按桌面分组；每个工作区默认展开 5 条会话，支持查看更多与收起。“会话”入口恢复最近选中的聊天，聊天页保留底部导航。
+- 聊天页右上角、抽屉“新建会话”和工作区旁 `+` 均可创建真实会话。新建页默认沿用当前设备/工作区，要求在线桌面及 `read + prompt` 授权；`POST /v1/mobile/sessions` 与首条 prompt 使用两个稳定 requestId，失败重试不会重复创建或发送，成功后进入聊天并立即接续等待状态与流式响应。
 - 会话详情从 `/v1/mobile/sessions/{id}/messages` 读取稳定 transcript，空闲时每 3 秒轮询、等待响应时每 1.8 秒轮询；界面只展示对话内容，工具调用/输出和注入的 runtime/time/skill context 不展示，超长消息默认折叠为 14 行并可展开；会话运行期间通过 `/v1/mobile/events/ws` 接收 assistant 文本增量并实时追加，WSS 断开时自动回退到轮询，支持加载更早消息、手动刷新、发送/排队/执行等待状态和慢响应提示。
 - assistant 回复按 Markdown 渲染：标题、列表、粗体/斜体/删除线、行内代码、代码块、引用、表格、任务列表和链接；流式增量也按 Markdown 实时呈现，链接只允许 http(s)/mailto 并由系统浏览器打开。长消息折叠时显示纯文本摘要，展开后恢复完整排版。
 - 在 `prompt` 授权下发送排队提示词，在 `cancel` 授权下停止当前 Turn；按住说话支持火山 Agent Plan Seed ASR 2.0 双向/单向 WebSocket 转写与系统 ASR，回复朗读和自动播报支持 Agent Plan Seed TTS 2.0 与系统 TTS。Agent Plan 密钥只通过 Keychain / Keystore 加密保存，云端错误会明确提示，不用格式检查或系统语音冒充云端调用成功。
 - 在 `approve` 授权下接收桌面转发的一次性审批与提问：首页横幅与“待处理”页展示，会话内也会固定显示待答卡片；审批只能 `allow-once` 或 `reject`，提问支持选项与自定义文本。
 - 支持撤销本机授权、断开本机并尽力吊销 Server 端手机凭据。
+- “我的 → 外观”支持跟随系统、浅色和深色三种模式，选择会持久保存；页面、Markdown、底部导航、状态栏与原生弹窗同步切换，深色启动页使用独立背景色。
 
 尚未实现：离线草稿、附件、推送（APNs/FCM）、生物识别和 Web 端火山 ASR 中继。待处理列表由 2 秒轮询维持，App 回到前台会立即刷新，进入后台后停止轮询。
 
@@ -30,7 +32,8 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - Expo Router 文件路由与 typed routes。
 - Continuous Native Generation（CNG），原生目录由 `app.json` 和配置插件生成。
 - `expo-dev-client`：使用自己的 Development Build，不以 Expo Go 作为目标运行环境。
-- `expo-secure-store`：保存手机 Access/Refresh Token，使用 Keychain / Keystore。
+- `expo-secure-store`：保存手机 Access/Refresh Token，以及语音和外观偏好，使用 Keychain / Keystore。
+- `expo-system-ui`：支持 Android 明暗外观，并在主题切换时同步原生根视图背景色。
 - `expo-local-authentication`：后续用于应用解锁和敏感操作确认。
 - `expo-camera`：扫描配对二维码，不启用 Android 录音权限。
 - `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。
@@ -38,6 +41,7 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - `expo-sqlite`：后续保存草稿、游标和可重建缓存。
 - `expo-notifications`：后续接入原生 APNs/FCM token 与通知深链。
 - 聊天 Markdown 由 `src/lib/markdown.ts` 本地解析、`src/components/markdown.tsx` 按主题渲染，不引入第三方 Markdown 运行时依赖。
+- 主要页面使用 `src/constants/theme.ts` 中的统一 Typography 层级：聊天与输入为 16px，普通说明为 13–14px，功能性辅助信息不低于 12px，并保留系统字体缩放。
 
 相机权限只在打开扫码界面时请求；SecureStore 不需要额外权限，也不会在启动时注册推送。
 
@@ -184,7 +188,7 @@ npm run build:bundles # 生成 iOS / Android 生产 JS bundle
 
 ## 配置与安全
 
-- iOS bundle identifier / Android package：`com.deepseek.dshconnect`。
+- iOS bundle identifier / Android package：`app.lxy.dsh-connect`。
 - URL scheme：`dshconnect`。
 - `.env.example` 仅展示公开的默认 Server URL 配置。
 - 所有 `EXPO_PUBLIC_*` 值都会进入应用包，严禁放入 bootstrap token、Access Token、Refresh Token 或设备密钥。

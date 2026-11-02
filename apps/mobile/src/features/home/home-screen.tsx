@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TabBar, type HomeTab } from '@/components/tab-bar';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import {
   describeMobileApiError,
@@ -246,9 +247,7 @@ export function HomeScreen() {
           />
         )}
       </View>
-      <View style={{ paddingBottom: Math.max(insets.bottom, 6) }}>
-        <TabBar active={tab} onChange={setTab} badge={interactions.length} />
-      </View>
+      <TabBar active={tab} onChange={setTab} badge={interactions.length} />
     </View>
   );
 }
@@ -273,11 +272,12 @@ const styles = StyleSheet.create({
   },
   bannerText: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   bannerAction: {
-    fontSize: 11,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
   },
   loading: {
@@ -287,6 +287,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: Typography.body,
+    lineHeight: 20,
   },
 });

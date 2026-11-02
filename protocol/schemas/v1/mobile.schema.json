@@ -723,8 +723,44 @@
         "active": {
           "type": "boolean"
         },
+        "turnEndSeq": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Sequence of the newest turn/end in this transcript window, when present. Clients compare it with the pending user message instead of treating historical turns as completed."
+        },
         "truncated": {
           "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileSessionCreateRequest": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "deviceId",
+        "workspaceId"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120000
         }
       },
       "additionalProperties": false

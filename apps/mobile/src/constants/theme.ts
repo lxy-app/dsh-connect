@@ -35,4 +35,13 @@ export const Colors = {
   },
 } as const;
 
+export const Typography = {
+  caption: 12,
+  secondary: 13,
+  body: 14,
+  control: 15,
+  reading: 16,
+  title: 17,
+} as const;
+
 export type AppTheme = (typeof Colors)[keyof typeof Colors];

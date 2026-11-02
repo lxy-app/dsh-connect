@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export function EmptyState({
@@ -58,15 +59,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 17,
-    lineHeight: 23,
+    fontSize: Typography.title,
+    lineHeight: 24,
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 4,
   },
   description: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: Typography.body,
+    lineHeight: 21,
     textAlign: 'center',
     maxWidth: 320,
   },
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   secondary: {
-    fontSize: 12,
+    fontSize: Typography.caption,
     lineHeight: 18,
     textAlign: 'center',
   },

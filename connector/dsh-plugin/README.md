@@ -7,7 +7,7 @@
 ## 已实现
 
 - 持久化 npm bundle，Host 命名导出 `apply/inject`。
-- DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权，以及**手机访问授权**（批准/拒绝/撤销手机申请的工作区与动作）。
+- DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权；配对完成后仍可在“桌面授权范围”中随时增减工作区和动作（`pair.updateGrants`，无需重新配对），以及**手机访问授权**（批准/拒绝/撤销手机申请的工作区与动作）。
 - `/dsh-connect` 自定义 unary RPC，仅 owner peer 可调用；会话流不经过该 RPC。
 - 单条主动出站 Connector WSS，心跳、指数退避、设备令牌重连和固定背压上限。
 - `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 默认只保留 user/assistant 对话文本，工具调用/结果以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页先解析当前 Session 的 projection watermark 再传 `throughSeq`（DSH 对 `throughSeq=-1` 实际返回空页），超出体积预算时优先保留最新消息。
@@ -26,7 +26,7 @@
 - 远程审批/提问使用 `prepend` 注册 `approval/request` 与 `user-questions/request` answerer，并先向 Server 查询 `interaction.audience`：只有“有 `approve` 的手机正在轮询”时，手机才接管这次请求。
 - 手机接管时先不启动桌面审批链，手机独占一个 grace 窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 6 秒）；窗口内作答则桌面完全不会弹卡。窗口结束则**先撤回手机副本**，再调用 `next()` 交给桌面原生审批链，因此两端不会同时出现两张卡，也不会留下已失效的卡片。
 - 没有手机在轮询时直接走桌面原生链，手机不会收到无法处理的副本。
-- 升级到 `0.1.11` 后，旧的桌面设备记录仍只有 `read/prompt/cancel`：在桌面面板点击“启用远程审批”即可通过 `pair.updateGrants` 追加 `approve`（无需重新配对），随后在手机上重新申请包含“远程审批”的访问授权并由桌面确认。未启用时 Connector 不转发任何审批，桌面链保持原样。
+- 桌面授权可在面板中随时收窄或放宽：保存后 Connector 立即按新范围重建 Host 策略，后续指令（包括已授权手机发起的指令）都按新范围校验，无需重新配对，也不删除 DSH 本地会话。被收窄掉的手机权限需要重新申请并再次由桌面确认。若旧设备记录缺少 `approve`，在“桌面授权范围”中勾选“远程审批”并保存即可；随后需在手机上重新申请包含“远程审批”的访问授权并由桌面确认。未授权时 Connector 不转发任何审批，桌面链保持原样。
 - 只有同时具备 `approve` scope 且会话所属工作区已授权时才转发；Server 侧还要求手机 grant 含 `approve`，形成双重校验。撤回、离线、无答案都不会伪造批准。
 - 手机是否“在场”由 Server 的轮询时间戳判断（10 秒窗口）；App 在前台每 2 秒轮询一次并在回到前台时立即刷新。
 - Server/Connector 不直接读写 DSH Session Log 文件。
@@ -67,7 +67,7 @@ APP='/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness'
 CLI='/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'
 
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop add \
-  '/absolute/path/to/lxyapp-dsh-connect-0.1.0.tgz'
+  '/absolute/path/to/lxyapp-dsh-connect-0.1.1.tgz'
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop why \
   '@lxyapp/dsh-connect'
 ```

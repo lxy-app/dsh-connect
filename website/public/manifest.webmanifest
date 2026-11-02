@@ -1,0 +1,19 @@
+{
+  "name": "DSH Connect",
+  "short_name": "DSH Connect",
+  "description": "将桌面 DeepSeek Harness 会话安全延伸到手机。",
+  "id": "/dsh-connect/",
+  "start_url": "/dsh-connect/",
+  "scope": "/dsh-connect/",
+  "display": "standalone",
+  "background_color": "#0b0c12",
+  "theme_color": "#0b0c12",
+  "icons": [
+    {
+      "src": "/dsh-connect/images/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -27,7 +27,7 @@
           "properties": {
             "submitted": {
               "type": "boolean",
-              "description": "false only when Server proved a prompt was not submitted to Connector; absence or true does not prove submission."
+              "description": "false only when Server proved a create or prompt command was not submitted to Connector; absence or true does not prove submission."
             }
           },
           "additionalProperties": true

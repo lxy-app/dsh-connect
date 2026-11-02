@@ -23,6 +23,7 @@ import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { MarkdownText } from '@/components/markdown';
 import { SpeakerIcon } from '@/components/speaker-icon';
 import { StatusBadge } from '@/components/status-badge';
+import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import {
   cancelMobileSession,
@@ -33,6 +34,7 @@ import {
 } from '@/lib/mobile-api';
 import { formatTime } from '@/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
+import { resolvePendingReply } from '@/lib/pending-reply';
 import { openSessionStream } from '@/lib/session-stream';
 import { openVolcAsrSession, type VolcAsrSession } from '@/lib/volc-asr';
 import { useInteractions } from '@/providers/interactions-provider';
@@ -55,6 +57,7 @@ export function ChatScreen() {
     deviceName?: string;
     workspaceName?: string;
     scopes?: string;
+    awaitingReply?: string;
   }>();
 
   const sessionId = single(params.sessionId);
@@ -98,8 +101,8 @@ export function ChatScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [optimistic, setOptimistic] = useState<MobileMessage | null>(null);
   const [pendingReply, setPendingReply] = useState<
-    { since: number; afterSeq: number; text: string } | null
-  >(null);
+    { since: number; afterSeq: number; text: string; userObserved?: boolean } | null
+  >(() => single(params.awaitingReply) === '1' ? { since: Date.now(), afterSeq: 0, text: '' } : null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [streamText, setStreamText] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -237,21 +240,7 @@ export function ChatScreen() {
           );
           return matched ? null : current;
         });
-        setPendingReply((current) => {
-          if (!current) return current;
-          const sentSeq = next.messages.reduce(
-            (highest, message) =>
-              message.role === 'user' && message.text === current.text
-                ? Math.max(highest, message.seq)
-                : highest,
-            current.afterSeq,
-          );
-          const replied = next.messages.some(
-            (message) => message.role === 'assistant' && message.seq > sentSeq,
-          );
-          if (replied) return null;
-          return sentSeq > current.afterSeq ? { ...current, afterSeq: sentSeq } : current;
-        });
+        setPendingReply((current) => current ? resolvePendingReply(current, next) : current);
         latestSeqRef.current = next.messages.reduce(
           (highest, message) => Math.max(highest, message.seq),
           0,
@@ -665,6 +654,13 @@ export function ChatScreen() {
     }
     ExpoSpeechRecognitionModule.stop();
   };
+  const openNewSession = (nextDeviceId = deviceId, nextWorkspaceId = workspaceId) => {
+    setDrawerOpen(false);
+    router.push({
+      pathname: '/new-session',
+      params: { deviceId: nextDeviceId, workspaceId: nextWorkspaceId },
+    });
+  };
   const openDrawerSession = (next: MobileSession) => {
     rememberSession(next);
     setDrawerOpen(false);
@@ -720,6 +716,19 @@ export function ChatScreen() {
           ) : (
             <StatusBadge label="空闲" tone="neutral" />
           )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="新建会话"
+            hitSlop={8}
+            onPress={() => openNewSession()}
+            style={({ pressed }) => [
+              styles.iconButton,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.addIcon, { color: theme.accent }]}>＋</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="刷新对话"
@@ -854,6 +863,7 @@ export function ChatScreen() {
             <View
               style={[
                 styles.bubble,
+                styles.bubbleAssistant,
                 {
                   backgroundColor: theme.surface,
                   borderColor: theme.border,
@@ -999,13 +1009,12 @@ export function ChatScreen() {
           </Text>
         </View>
       )}
-      <View style={{ paddingBottom: Math.max(insets.bottom, 6) }}>
-        <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />
-      </View>
+      <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />
       <SessionDrawer
         visible={drawerOpen}
         currentSessionId={sessionId}
         onClose={() => setDrawerOpen(false)}
+        onCreateSession={openNewSession}
         onOpenSession={openDrawerSession}
       />
     </KeyboardAvoidingView>
@@ -1171,6 +1180,11 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     marginTop: -3,
   },
+  addIcon: {
+    fontSize: 21,
+    lineHeight: 23,
+    fontWeight: '600',
+  },
   refreshIcon: {
     fontSize: 19,
     lineHeight: 23,
@@ -1181,13 +1195,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   subtitle: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   stop: {
     borderWidth: 1,
@@ -1196,8 +1210,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   stopText: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
   },
   error: {
@@ -1212,11 +1226,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   errorAction: {
-    fontSize: 11,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
   },
   messages: {
@@ -1234,8 +1249,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   olderText: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '600',
   },
   loading: {
@@ -1244,7 +1259,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   loadingText: {
-    fontSize: 12,
+    fontSize: Typography.body,
+    lineHeight: 20,
   },
   empty: {
     paddingVertical: 40,
@@ -1252,18 +1268,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: Typography.reading,
+    lineHeight: 22,
     fontWeight: '600',
   },
   emptyCopy: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 21,
     textAlign: 'center',
     maxWidth: 300,
   },
   truncated: {
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     textAlign: 'center',
     marginTop: 6,
   },
@@ -1281,25 +1298,28 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 5,
   },
+  // Assistant replies own the whole message column so long Markdown does not
+  // leave an empty strip on the right; user bubbles stay content-sized.
   bubbleAssistant: {
-    width: '84%',
+    flex: 1,
+    maxWidth: '100%',
   },
   bubbleText: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: Typography.reading,
+    lineHeight: 24,
   },
   expandAction: {
     alignSelf: 'flex-start',
     paddingVertical: 2,
   },
   expandText: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
   },
   hiddenTools: {
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     textAlign: 'center',
     marginTop: 4,
   },
@@ -1315,8 +1335,8 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   messageState: {
-    fontSize: 9,
-    lineHeight: 13,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     alignSelf: 'flex-end',
     opacity: 0.75,
   },
@@ -1338,21 +1358,21 @@ const styles = StyleSheet.create({
   },
   waitingTitle: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: Typography.control,
+    lineHeight: 21,
     fontWeight: '600',
   },
   waitingHint: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
   },
   waitingAction: {
     alignSelf: 'flex-start',
     paddingVertical: 4,
   },
   waitingActionText: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '700',
   },
   composer: {
@@ -1366,8 +1386,8 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 40,
     maxHeight: 120,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: Typography.reading,
+    lineHeight: 24,
     paddingHorizontal: 4,
     paddingVertical: 6,
   },
@@ -1378,8 +1398,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   mode: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: Typography.caption,
+    lineHeight: 18,
   },
   send: {
     minWidth: 62,
@@ -1390,8 +1410,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   sendText: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: Typography.control,
+    lineHeight: 21,
     fontWeight: '700',
   },
   voiceComposerRow: {
@@ -1421,7 +1441,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   holdTalkText: {
-    fontSize: 13,
+    fontSize: Typography.control,
+    lineHeight: 22,
     fontWeight: '700',
   },
   voiceFeedback: {
@@ -1431,12 +1452,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   voiceFeedbackTitle: {
-    fontSize: 12,
+    fontSize: Typography.body,
+    lineHeight: 20,
     fontWeight: '600',
   },
   voiceTranscript: {
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   readOnly: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1444,8 +1466,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   readOnlyText: {
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.secondary,
+    lineHeight: 20,
     textAlign: 'center',
   },
   pressed: {

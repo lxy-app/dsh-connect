@@ -357,6 +357,48 @@ func TestCreatePageAndCancelRouteParams(t *testing.T) {
 	}
 }
 
+func TestCreateUsesDurableIdempotency(t *testing.T) {
+	environment := newTestEnvironment(t)
+	connector := pairConnector(t, environment)
+	request := protocol.SessionCreateRequest{RequestID: "create-idempotency-1", DeviceID: connector.deviceID, WorkspaceID: "ws-1"}
+	commandErr := make(chan error, 1)
+	go func() {
+		commandErr <- answerCommand(connector.connection, protocol.MethodSessionCreate, map[string]any{
+			"sessionId": "created-once", "workspaceId": "ws-1",
+		})
+	}()
+	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/sessions", testBootstrapToken, request)
+	if err := <-commandErr; err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("create status=%d body=%s", status, body)
+	}
+	firstBody := append([]byte(nil), body...)
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/sessions", testBootstrapToken, request)
+	if status != http.StatusOK || !bytes.Contains(body, []byte("created-once")) {
+		t.Fatalf("create replay status=%d body=%s", status, body)
+	}
+	changed := request
+	changed.WorkspaceID = "ws-2"
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/sessions", testBootstrapToken, changed)
+	assertErrorResponse(t, status, body, http.StatusConflict, protocol.CodeIdempotencyConflict)
+
+	environment.close()
+	_ = connector.connection.Close(websocket.StatusNormalClosure, "restart")
+	restarted, err := New(context.Background(), Config{BootstrapToken: testBootstrapToken, DatabaseURL: environment.databaseURL, ServerURL: "http://server.test"})
+	if err != nil {
+		t.Fatalf("restart New() error: %v", err)
+	}
+	defer restarted.Close()
+	restartedHTTP := httptest.NewServer(restarted.Handler())
+	defer restartedHTTP.Close()
+	status, persisted := testRequest(t, http.MethodPost, restartedHTTP.URL+"/v1/sessions", testBootstrapToken, request)
+	if status != http.StatusOK || !bytes.Equal(firstBody, persisted) {
+		t.Fatalf("persisted create retry without Connector status=%d body=%s", status, persisted)
+	}
+}
+
 func TestDeprecatedCreateTitleAndCancelReasonRejected(t *testing.T) {
 	environment := newTestEnvironment(t)
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/sessions", testBootstrapToken, map[string]any{
@@ -462,6 +504,41 @@ func TestPromptConcurrentAndPersistedIdempotency(t *testing.T) {
 	status, persisted := testRequest(t, http.MethodPost, restartedHTTP.URL+"/v1/sessions/s1/prompt", testBootstrapToken, request)
 	if status != http.StatusOK || !bytes.Equal(first.body, persisted) {
 		t.Fatalf("persisted retry without Connector status=%d body=%s", status, persisted)
+	}
+}
+
+func TestCreateOfflineBeforeSubmissionCanRetryAfterReconnect(t *testing.T) {
+	environment := newTestEnvironment(t)
+	connector := pairConnector(t, environment)
+	request := protocol.SessionCreateRequest{RequestID: "create-offline-retry", DeviceID: connector.deviceID, WorkspaceID: "ws-1"}
+	_ = connector.connection.Close(websocket.StatusNormalClosure, "offline before create")
+	deadline := time.Now().Add(time.Second)
+	for environment.server.hub.Get(connector.deviceID) != nil && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if environment.server.hub.Get(connector.deviceID) != nil {
+		t.Fatal("Connector did not leave the hub")
+	}
+	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/sessions", testBootstrapToken, request)
+	assertErrorResponse(t, status, body, http.StatusServiceUnavailable, protocol.CodeDeviceOffline)
+	if _, ok, _ := environment.server.store.Idempotency(context.Background(), request.RequestID); ok {
+		t.Fatal("create that never reached a Connector was persisted as a completed outcome")
+	}
+
+	reconnected := dialWebSocket(t, environment.http.URL, "/v1/connector/ws", connector.deviceToken)
+	defer reconnected.Close(websocket.StatusNormalClosure, "test complete")
+	commandErr := make(chan error, 1)
+	go func() {
+		commandErr <- answerCommand(reconnected, protocol.MethodSessionCreate, map[string]any{
+			"sessionId": "created-after-reconnect", "workspaceId": "ws-1",
+		})
+	}()
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/sessions", testBootstrapToken, request)
+	if err := <-commandErr; err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK || !bytes.Contains(body, []byte("created-after-reconnect")) {
+		t.Fatalf("reconnected create retry status=%d body=%s", status, body)
 	}
 }
 

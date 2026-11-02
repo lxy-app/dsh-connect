@@ -8,7 +8,7 @@
     "scheme": "dshconnect",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.deepseek.dshconnect",
+      "bundleIdentifier": "app.lxy.dsh-connect",
       "buildNumber": "1",
       "icon": "./assets/expo.icon",
       "config": {
@@ -16,10 +16,10 @@
       }
     },
     "android": {
-      "package": "com.deepseek.dshconnect",
+      "package": "app.lxy.dsh-connect",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#5852EF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -37,9 +37,14 @@
         {
           "backgroundColor": "#585CE8",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "dark": {
+            "backgroundColor": "#0F1117",
+            "image": "./assets/images/splash-icon.png"
+          }
         }
       ],
+      "expo-system-ui",
       "expo-dev-client",
       [
         "expo-secure-store",

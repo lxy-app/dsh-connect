@@ -176,6 +176,12 @@ type SessionListResult struct {
 	Sessions []json.RawMessage `json:"sessions"`
 }
 
+type SessionCreateResult struct {
+	SessionID   string `json:"sessionId"`
+	WorkspaceID string `json:"workspaceId"`
+	AgentPreset string `json:"agentPreset,omitempty"`
+}
+
 type SessionPageResult struct {
 	Items      []json.RawMessage `json:"items"`
 	NextCursor string            `json:"nextCursor,omitempty"`
@@ -398,7 +404,15 @@ type MobileTranscriptResponse struct {
 	HasMore     bool            `json:"hasMore"`
 	NextCursor  string          `json:"nextCursor,omitempty"`
 	Active      bool            `json:"active"`
+	TurnEndSeq  uint64          `json:"turnEndSeq,omitempty"`
 	Truncated   bool            `json:"truncated,omitempty"`
+}
+
+type MobileSessionCreateRequest struct {
+	RequestID   string `json:"requestId"`
+	DeviceID    string `json:"deviceId"`
+	WorkspaceID string `json:"workspaceId"`
+	TimeoutMS   int    `json:"timeoutMs,omitempty"`
 }
 
 type MobilePromptRequest struct {

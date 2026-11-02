@@ -53,6 +53,7 @@ export interface TranscriptResult {
   readonly hasMore: boolean;
   readonly nextCursor?: string;
   readonly active: boolean;
+  readonly turnEndSeq?: number;
   readonly truncated?: boolean;
 }
 
@@ -212,6 +213,7 @@ export class HostSessionAdapter {
     }, signal);
     const messages: TranscriptMessage[] = [];
     let active = false;
+    let turnEndSeq = 0;
     let truncated = false;
 
     for (const record of result.records) {
@@ -223,6 +225,7 @@ export class HostSessionAdapter {
       }
       if (event.type === 'turn/end') {
         active = false;
+        if (Number.isSafeInteger(seq) && seq > turnEndSeq) turnEndSeq = seq;
         continue;
       }
       // Mobile chat is conversation-only. Raw tool calls, tool results and
@@ -276,6 +279,7 @@ export class HostSessionAdapter {
       hasMore,
       ...(hasMore && cursorSeq !== undefined && cursorSeq > 0 ? { nextCursor: String(cursorSeq) } : {}),
       active: context.running ?? active,
+      ...(turnEndSeq > 0 ? { turnEndSeq } : {}),
       ...(truncated ? { truncated: true } : {}),
     };
   }

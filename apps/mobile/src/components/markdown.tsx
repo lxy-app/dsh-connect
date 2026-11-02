@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { Alert, Linking, Platform, StyleSheet, Text, View } from 'react-native';
 
-import type { AppTheme } from '@/constants/theme';
+import { Typography, type AppTheme } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import {
   parseInline,
@@ -20,12 +20,12 @@ type RenderContext = {
 };
 
 const HEADING_STYLES = [
-  { fontSize: 19, lineHeight: 26 },
-  { fontSize: 17, lineHeight: 24 },
-  { fontSize: 15.5, lineHeight: 22 },
-  { fontSize: 15, lineHeight: 21 },
-  { fontSize: 14.5, lineHeight: 21 },
-  { fontSize: 14, lineHeight: 21 },
+  { fontSize: 22, lineHeight: 30 },
+  { fontSize: 20, lineHeight: 28 },
+  { fontSize: 18, lineHeight: 26 },
+  { fontSize: Typography.title, lineHeight: 24 },
+  { fontSize: Typography.reading, lineHeight: 23 },
+  { fontSize: Typography.reading, lineHeight: 22 },
 ] as const;
 
 /**
@@ -329,8 +329,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   paragraph: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: Typography.reading,
+    lineHeight: 24,
   },
   heading: {
     fontWeight: '700',
@@ -343,20 +343,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   codeLanguage: {
-    fontSize: 9,
-    lineHeight: 13,
+    fontSize: Typography.caption,
+    lineHeight: 18,
     fontWeight: '600',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   codeText: {
     fontFamily: MONOSPACE_FONT,
-    fontSize: 12.5,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   inlineCode: {
     fontFamily: MONOSPACE_FONT,
-    fontSize: 13,
+    fontSize: Typography.body,
   },
   strong: {
     fontWeight: '700',
@@ -382,10 +382,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   listMarker: {
-    minWidth: 14,
+    minWidth: 18,
     flexShrink: 0,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: Typography.reading,
+    lineHeight: 24,
     textAlign: 'right',
     fontWeight: '600',
   },
@@ -413,8 +413,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   tableCellText: {
-    fontSize: 12.5,
-    lineHeight: 18,
+    fontSize: Typography.body,
+    lineHeight: 21,
   },
   tableHeaderText: {
     fontWeight: '700',
