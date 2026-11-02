@@ -1,3 +1,3 @@
 - insert:
     - id: dsh-connect-connector
-      name: '@local/dsh-connect-connector'
+      name: '@lxyapp/dsh-connect'

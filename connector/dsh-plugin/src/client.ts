@@ -62,7 +62,7 @@ declare global {
 }
 
 window.__ModuleLoader__.load({
-  id: '@local/dsh-connect-connector',
+  id: '@lxyapp/dsh-connect',
   factory(require) {
     const React = require('react');
     const h = React.createElement;

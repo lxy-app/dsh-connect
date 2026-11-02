@@ -1,5 +1,5 @@
 {
-  "name": "@local/dsh-connect-connector",
+  "name": "@lxyapp/dsh-connect",
   "version": "0.1.11",
   "private": true,
   "type": "module",
