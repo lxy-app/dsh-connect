@@ -21,6 +21,18 @@ func (f AdminSessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AdminSessionMutation", m)
 }
 
+// The AttachmentBlobFunc type is an adapter to allow the use of ordinary
+// function as AttachmentBlob mutator.
+type AttachmentBlobFunc func(context.Context, *ent.AttachmentBlobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AttachmentBlobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AttachmentBlobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AttachmentBlobMutation", m)
+}
+
 // The AuditEntryFunc type is an adapter to allow the use of ordinary
 // function as AuditEntry mutator.
 type AuditEntryFunc func(context.Context, *ent.AuditEntryMutation) (ent.Value, error)
@@ -103,6 +115,18 @@ func (f PairingCodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PairingCodeMutation", m)
+}
+
+// The SessionAttachmentFunc type is an adapter to allow the use of ordinary
+// function as SessionAttachment mutator.
+type SessionAttachmentFunc func(context.Context, *ent.SessionAttachmentMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SessionAttachmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SessionAttachmentMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionAttachmentMutation", m)
 }
 
 // The UserFunc type is an adapter to allow the use of ordinary

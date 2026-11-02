@@ -15,6 +15,7 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
+	"github.com/deepseek/dsh-connect/server/ent/attachmentblob"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/device"
 	"github.com/deepseek/dsh-connect/server/ent/idempotencyrecord"
@@ -22,6 +23,7 @@ import (
 	"github.com/deepseek/dsh-connect/server/ent/mobiledevice"
 	"github.com/deepseek/dsh-connect/server/ent/mobilepairingcode"
 	"github.com/deepseek/dsh-connect/server/ent/pairingcode"
+	"github.com/deepseek/dsh-connect/server/ent/sessionattachment"
 	"github.com/deepseek/dsh-connect/server/ent/user"
 
 	stdsql "database/sql"
@@ -34,6 +36,8 @@ type Client struct {
 	Schema *migrate.Schema
 	// AdminSession is the client for interacting with the AdminSession builders.
 	AdminSession *AdminSessionClient
+	// AttachmentBlob is the client for interacting with the AttachmentBlob builders.
+	AttachmentBlob *AttachmentBlobClient
 	// AuditEntry is the client for interacting with the AuditEntry builders.
 	AuditEntry *AuditEntryClient
 	// Device is the client for interacting with the Device builders.
@@ -48,6 +52,8 @@ type Client struct {
 	MobilePairingCode *MobilePairingCodeClient
 	// PairingCode is the client for interacting with the PairingCode builders.
 	PairingCode *PairingCodeClient
+	// SessionAttachment is the client for interacting with the SessionAttachment builders.
+	SessionAttachment *SessionAttachmentClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 }
@@ -62,6 +68,7 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.AdminSession = NewAdminSessionClient(c.config)
+	c.AttachmentBlob = NewAttachmentBlobClient(c.config)
 	c.AuditEntry = NewAuditEntryClient(c.config)
 	c.Device = NewDeviceClient(c.config)
 	c.IdempotencyRecord = NewIdempotencyRecordClient(c.config)
@@ -69,6 +76,7 @@ func (c *Client) init() {
 	c.MobileDevice = NewMobileDeviceClient(c.config)
 	c.MobilePairingCode = NewMobilePairingCodeClient(c.config)
 	c.PairingCode = NewPairingCodeClient(c.config)
+	c.SessionAttachment = NewSessionAttachmentClient(c.config)
 	c.User = NewUserClient(c.config)
 }
 
@@ -163,6 +171,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ctx:               ctx,
 		config:            cfg,
 		AdminSession:      NewAdminSessionClient(cfg),
+		AttachmentBlob:    NewAttachmentBlobClient(cfg),
 		AuditEntry:        NewAuditEntryClient(cfg),
 		Device:            NewDeviceClient(cfg),
 		IdempotencyRecord: NewIdempotencyRecordClient(cfg),
@@ -170,6 +179,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		MobileDevice:      NewMobileDeviceClient(cfg),
 		MobilePairingCode: NewMobilePairingCodeClient(cfg),
 		PairingCode:       NewPairingCodeClient(cfg),
+		SessionAttachment: NewSessionAttachmentClient(cfg),
 		User:              NewUserClient(cfg),
 	}, nil
 }
@@ -191,6 +201,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ctx:               ctx,
 		config:            cfg,
 		AdminSession:      NewAdminSessionClient(cfg),
+		AttachmentBlob:    NewAttachmentBlobClient(cfg),
 		AuditEntry:        NewAuditEntryClient(cfg),
 		Device:            NewDeviceClient(cfg),
 		IdempotencyRecord: NewIdempotencyRecordClient(cfg),
@@ -198,6 +209,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		MobileDevice:      NewMobileDeviceClient(cfg),
 		MobilePairingCode: NewMobilePairingCodeClient(cfg),
 		PairingCode:       NewPairingCodeClient(cfg),
+		SessionAttachment: NewSessionAttachmentClient(cfg),
 		User:              NewUserClient(cfg),
 	}, nil
 }
@@ -228,9 +240,9 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AdminSession, c.AuditEntry, c.Device, c.IdempotencyRecord,
+		c.AdminSession, c.AttachmentBlob, c.AuditEntry, c.Device, c.IdempotencyRecord,
 		c.MobileAccessGrant, c.MobileDevice, c.MobilePairingCode, c.PairingCode,
-		c.User,
+		c.SessionAttachment, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -240,9 +252,9 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AdminSession, c.AuditEntry, c.Device, c.IdempotencyRecord,
+		c.AdminSession, c.AttachmentBlob, c.AuditEntry, c.Device, c.IdempotencyRecord,
 		c.MobileAccessGrant, c.MobileDevice, c.MobilePairingCode, c.PairingCode,
-		c.User,
+		c.SessionAttachment, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -253,6 +265,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *AdminSessionMutation:
 		return c.AdminSession.mutate(ctx, m)
+	case *AttachmentBlobMutation:
+		return c.AttachmentBlob.mutate(ctx, m)
 	case *AuditEntryMutation:
 		return c.AuditEntry.mutate(ctx, m)
 	case *DeviceMutation:
@@ -267,6 +281,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.MobilePairingCode.mutate(ctx, m)
 	case *PairingCodeMutation:
 		return c.PairingCode.mutate(ctx, m)
+	case *SessionAttachmentMutation:
+		return c.SessionAttachment.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	default:
@@ -355,7 +371,7 @@ func (c *AdminSessionClient) DeleteOne(_m *AdminSession) *AdminSessionDeleteOne 
 func (c *AdminSessionClient) DeleteOneID(id string) *AdminSessionDeleteOne {
 	builder := c.Delete().Where(adminsession.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &AdminSessionDeleteOne{builder}
 }
 
@@ -404,6 +420,139 @@ func (c *AdminSessionClient) mutate(ctx context.Context, m *AdminSessionMutation
 		return (&AdminSessionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AdminSession mutation op: %q", m.Op())
+	}
+}
+
+// AttachmentBlobClient is a client for the AttachmentBlob schema.
+type AttachmentBlobClient struct {
+	config
+}
+
+// NewAttachmentBlobClient returns a client for the AttachmentBlob from the given config.
+func NewAttachmentBlobClient(c config) *AttachmentBlobClient {
+	return &AttachmentBlobClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `attachmentblob.Hooks(f(g(h())))`.
+func (c *AttachmentBlobClient) Use(hooks ...Hook) {
+	c.hooks.AttachmentBlob = append(c.hooks.AttachmentBlob, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `attachmentblob.Intercept(f(g(h())))`.
+func (c *AttachmentBlobClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AttachmentBlob = append(c.inters.AttachmentBlob, interceptors...)
+}
+
+// Create returns a builder for creating a AttachmentBlob entity.
+func (c *AttachmentBlobClient) Create() *AttachmentBlobCreate {
+	mutation := newAttachmentBlobMutation(c.config, OpCreate)
+	return &AttachmentBlobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AttachmentBlob entities.
+func (c *AttachmentBlobClient) CreateBulk(builders ...*AttachmentBlobCreate) *AttachmentBlobCreateBulk {
+	return &AttachmentBlobCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AttachmentBlobClient) MapCreateBulk(slice any, setFunc func(*AttachmentBlobCreate, int)) *AttachmentBlobCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AttachmentBlobCreateBulk{err: fmt.Errorf("calling to AttachmentBlobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AttachmentBlobCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AttachmentBlobCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AttachmentBlob.
+func (c *AttachmentBlobClient) Update() *AttachmentBlobUpdate {
+	mutation := newAttachmentBlobMutation(c.config, OpUpdate)
+	return &AttachmentBlobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AttachmentBlobClient) UpdateOne(_m *AttachmentBlob) *AttachmentBlobUpdateOne {
+	mutation := newAttachmentBlobMutation(c.config, OpUpdateOne, withAttachmentBlob(_m))
+	return &AttachmentBlobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AttachmentBlobClient) UpdateOneID(id string) *AttachmentBlobUpdateOne {
+	mutation := newAttachmentBlobMutation(c.config, OpUpdateOne, withAttachmentBlobID(id))
+	return &AttachmentBlobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AttachmentBlob.
+func (c *AttachmentBlobClient) Delete() *AttachmentBlobDelete {
+	mutation := newAttachmentBlobMutation(c.config, OpDelete)
+	return &AttachmentBlobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AttachmentBlobClient) DeleteOne(_m *AttachmentBlob) *AttachmentBlobDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AttachmentBlobClient) DeleteOneID(id string) *AttachmentBlobDeleteOne {
+	builder := c.Delete().Where(attachmentblob.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.SetOp(OpDeleteOne)
+	return &AttachmentBlobDeleteOne{builder}
+}
+
+// Query returns a query builder for AttachmentBlob.
+func (c *AttachmentBlobClient) Query() *AttachmentBlobQuery {
+	return &AttachmentBlobQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAttachmentBlob},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AttachmentBlob entity by its id.
+func (c *AttachmentBlobClient) Get(ctx context.Context, id string) (*AttachmentBlob, error) {
+	return c.Query().Where(attachmentblob.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AttachmentBlobClient) GetX(ctx context.Context, id string) *AttachmentBlob {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AttachmentBlobClient) Hooks() []Hook {
+	return c.hooks.AttachmentBlob
+}
+
+// Interceptors returns the client interceptors.
+func (c *AttachmentBlobClient) Interceptors() []Interceptor {
+	return c.inters.AttachmentBlob
+}
+
+func (c *AttachmentBlobClient) mutate(ctx context.Context, m *AttachmentBlobMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AttachmentBlobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AttachmentBlobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AttachmentBlobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AttachmentBlobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AttachmentBlob mutation op: %q", m.Op())
 	}
 }
 
@@ -488,7 +637,7 @@ func (c *AuditEntryClient) DeleteOne(_m *AuditEntry) *AuditEntryDeleteOne {
 func (c *AuditEntryClient) DeleteOneID(id int) *AuditEntryDeleteOne {
 	builder := c.Delete().Where(auditentry.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &AuditEntryDeleteOne{builder}
 }
 
@@ -621,7 +770,7 @@ func (c *DeviceClient) DeleteOne(_m *Device) *DeviceDeleteOne {
 func (c *DeviceClient) DeleteOneID(id string) *DeviceDeleteOne {
 	builder := c.Delete().Where(device.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &DeviceDeleteOne{builder}
 }
 
@@ -754,7 +903,7 @@ func (c *IdempotencyRecordClient) DeleteOne(_m *IdempotencyRecord) *IdempotencyR
 func (c *IdempotencyRecordClient) DeleteOneID(id int) *IdempotencyRecordDeleteOne {
 	builder := c.Delete().Where(idempotencyrecord.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &IdempotencyRecordDeleteOne{builder}
 }
 
@@ -887,7 +1036,7 @@ func (c *MobileAccessGrantClient) DeleteOne(_m *MobileAccessGrant) *MobileAccess
 func (c *MobileAccessGrantClient) DeleteOneID(id string) *MobileAccessGrantDeleteOne {
 	builder := c.Delete().Where(mobileaccessgrant.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &MobileAccessGrantDeleteOne{builder}
 }
 
@@ -1020,7 +1169,7 @@ func (c *MobileDeviceClient) DeleteOne(_m *MobileDevice) *MobileDeviceDeleteOne 
 func (c *MobileDeviceClient) DeleteOneID(id string) *MobileDeviceDeleteOne {
 	builder := c.Delete().Where(mobiledevice.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &MobileDeviceDeleteOne{builder}
 }
 
@@ -1153,7 +1302,7 @@ func (c *MobilePairingCodeClient) DeleteOne(_m *MobilePairingCode) *MobilePairin
 func (c *MobilePairingCodeClient) DeleteOneID(id int) *MobilePairingCodeDeleteOne {
 	builder := c.Delete().Where(mobilepairingcode.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &MobilePairingCodeDeleteOne{builder}
 }
 
@@ -1286,7 +1435,7 @@ func (c *PairingCodeClient) DeleteOne(_m *PairingCode) *PairingCodeDeleteOne {
 func (c *PairingCodeClient) DeleteOneID(id int) *PairingCodeDeleteOne {
 	builder := c.Delete().Where(pairingcode.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &PairingCodeDeleteOne{builder}
 }
 
@@ -1335,6 +1484,139 @@ func (c *PairingCodeClient) mutate(ctx context.Context, m *PairingCodeMutation) 
 		return (&PairingCodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown PairingCode mutation op: %q", m.Op())
+	}
+}
+
+// SessionAttachmentClient is a client for the SessionAttachment schema.
+type SessionAttachmentClient struct {
+	config
+}
+
+// NewSessionAttachmentClient returns a client for the SessionAttachment from the given config.
+func NewSessionAttachmentClient(c config) *SessionAttachmentClient {
+	return &SessionAttachmentClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sessionattachment.Hooks(f(g(h())))`.
+func (c *SessionAttachmentClient) Use(hooks ...Hook) {
+	c.hooks.SessionAttachment = append(c.hooks.SessionAttachment, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sessionattachment.Intercept(f(g(h())))`.
+func (c *SessionAttachmentClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SessionAttachment = append(c.inters.SessionAttachment, interceptors...)
+}
+
+// Create returns a builder for creating a SessionAttachment entity.
+func (c *SessionAttachmentClient) Create() *SessionAttachmentCreate {
+	mutation := newSessionAttachmentMutation(c.config, OpCreate)
+	return &SessionAttachmentCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SessionAttachment entities.
+func (c *SessionAttachmentClient) CreateBulk(builders ...*SessionAttachmentCreate) *SessionAttachmentCreateBulk {
+	return &SessionAttachmentCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SessionAttachmentClient) MapCreateBulk(slice any, setFunc func(*SessionAttachmentCreate, int)) *SessionAttachmentCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SessionAttachmentCreateBulk{err: fmt.Errorf("calling to SessionAttachmentClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SessionAttachmentCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SessionAttachmentCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SessionAttachment.
+func (c *SessionAttachmentClient) Update() *SessionAttachmentUpdate {
+	mutation := newSessionAttachmentMutation(c.config, OpUpdate)
+	return &SessionAttachmentUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SessionAttachmentClient) UpdateOne(_m *SessionAttachment) *SessionAttachmentUpdateOne {
+	mutation := newSessionAttachmentMutation(c.config, OpUpdateOne, withSessionAttachment(_m))
+	return &SessionAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SessionAttachmentClient) UpdateOneID(id string) *SessionAttachmentUpdateOne {
+	mutation := newSessionAttachmentMutation(c.config, OpUpdateOne, withSessionAttachmentID(id))
+	return &SessionAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SessionAttachment.
+func (c *SessionAttachmentClient) Delete() *SessionAttachmentDelete {
+	mutation := newSessionAttachmentMutation(c.config, OpDelete)
+	return &SessionAttachmentDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SessionAttachmentClient) DeleteOne(_m *SessionAttachment) *SessionAttachmentDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SessionAttachmentClient) DeleteOneID(id string) *SessionAttachmentDeleteOne {
+	builder := c.Delete().Where(sessionattachment.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.SetOp(OpDeleteOne)
+	return &SessionAttachmentDeleteOne{builder}
+}
+
+// Query returns a query builder for SessionAttachment.
+func (c *SessionAttachmentClient) Query() *SessionAttachmentQuery {
+	return &SessionAttachmentQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSessionAttachment},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SessionAttachment entity by its id.
+func (c *SessionAttachmentClient) Get(ctx context.Context, id string) (*SessionAttachment, error) {
+	return c.Query().Where(sessionattachment.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SessionAttachmentClient) GetX(ctx context.Context, id string) *SessionAttachment {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SessionAttachmentClient) Hooks() []Hook {
+	return c.hooks.SessionAttachment
+}
+
+// Interceptors returns the client interceptors.
+func (c *SessionAttachmentClient) Interceptors() []Interceptor {
+	return c.inters.SessionAttachment
+}
+
+func (c *SessionAttachmentClient) mutate(ctx context.Context, m *SessionAttachmentMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SessionAttachmentCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SessionAttachmentUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SessionAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SessionAttachmentDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SessionAttachment mutation op: %q", m.Op())
 	}
 }
 
@@ -1419,7 +1701,7 @@ func (c *UserClient) DeleteOne(_m *User) *UserDeleteOne {
 func (c *UserClient) DeleteOneID(id string) *UserDeleteOne {
 	builder := c.Delete().Where(user.ID(id))
 	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
+	builder.mutation.SetOp(OpDeleteOne)
 	return &UserDeleteOne{builder}
 }
 
@@ -1474,12 +1756,14 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AdminSession, AuditEntry, Device, IdempotencyRecord, MobileAccessGrant,
-		MobileDevice, MobilePairingCode, PairingCode, User []ent.Hook
+		AdminSession, AttachmentBlob, AuditEntry, Device, IdempotencyRecord,
+		MobileAccessGrant, MobileDevice, MobilePairingCode, PairingCode,
+		SessionAttachment, User []ent.Hook
 	}
 	inters struct {
-		AdminSession, AuditEntry, Device, IdempotencyRecord, MobileAccessGrant,
-		MobileDevice, MobilePairingCode, PairingCode, User []ent.Interceptor
+		AdminSession, AttachmentBlob, AuditEntry, Device, IdempotencyRecord,
+		MobileAccessGrant, MobileDevice, MobilePairingCode, PairingCode,
+		SessionAttachment, User []ent.Interceptor
 	}
 )
 

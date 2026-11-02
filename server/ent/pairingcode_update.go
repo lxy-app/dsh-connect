@@ -116,7 +116,7 @@ func (_u *PairingCodeUpdate) ExecX(ctx context.Context) {
 
 func (_u *PairingCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(pairingcode.Table, pairingcode.Columns, sqlgraph.NewFieldSpec(pairingcode.FieldID, field.TypeInt))
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
@@ -276,7 +276,7 @@ func (_u *PairingCodeUpdateOne) sqlSave(ctx context.Context) (_node *PairingCode
 			}
 		}
 	}
-	if ps := _u.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.Predicates(); len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
