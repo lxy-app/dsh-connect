@@ -1,4 +1,11 @@
 ROOT := $(CURDIR)
+# Website deployment secrets and private paths are loaded from .env below.
+WEBSITE_SSH_OPTIONS = -o BatchMode=yes $(if $(WEBSITE_SSH_KEY),-i "$(WEBSITE_SSH_KEY)" -o IdentitiesOnly=yes)
+WEBSITE_PACKAGE_TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
+WEBSITE_PACKAGE ?= $(ROOT)/.tmp/dsh-connect-website-$(WEBSITE_PACKAGE_TIMESTAMP).tar.gz
+WEBSITE_REMOTE_PACKAGE ?= /tmp/$(notdir $(WEBSITE_PACKAGE))
+# bsdtar on macOS emits Apple provenance xattrs; strip them when supported.
+WEBSITE_TAR_METADATA_FLAGS := $(shell tar --no-mac-metadata --no-xattrs -cf /dev/null --files-from /dev/null >/dev/null 2>&1 && printf '%s' '--no-mac-metadata --no-xattrs')
 export GOCACHE ?= $(ROOT)/.tmp/go-build
 export GOMODCACHE ?= $(ROOT)/.tmp/go-mod
 export NPM_CONFIG_CACHE ?= $(ROOT)/.tmp/npm-cache
@@ -18,7 +25,7 @@ endif
 
 .PHONY: help db-up db-down db-reset test test-server test-connector test-e2e \
 	test-admin test-mobile vet check run-server run-admin run-mobile admin-install \
-	admin-build mobile-install mobile-build ent-gen
+	admin-build website-deploy website-deploy-check mobile-install mobile-build ent-gen
 
 help:
 	@echo "db-up          启动 PostgreSQL 18（docker compose）"
@@ -30,6 +37,7 @@ help:
 	@echo "test           全部既有测试（Server + Connector）"
 	@echo "check          vet + 全部测试 + 跨语言 E2E + Web/Mobile 静态检查"
 	@echo "ent-gen        修改 ent/schema 后重新生成实体代码"
+	@echo "website-deploy 编译 Website，使用 SSH 密钥通过 SCP 部署到 lxy.app"
 
 # ---------- 数据库 ----------
 
@@ -86,6 +94,24 @@ run-admin:
 
 admin-build:
 	npm --prefix apps/admin run build
+
+# Package and verify the static site, back up the current site, then upload once.
+# BatchMode disables password prompts; WEBSITE_SSH_KEY optionally selects a key.
+website-deploy-check:
+	@if [ -z "$(strip $(WEBSITE_REMOTE))" ] || [ -z "$(strip $(WEBSITE_REMOTE_DIR))" ] || [ -z "$(strip $(WEBSITE_BACKUP_DIR))" ]; then \
+		printf '%s\n' 'Missing website deployment configuration. Set WEBSITE_REMOTE, WEBSITE_REMOTE_DIR and WEBSITE_BACKUP_DIR in .env (see .env.example).'; \
+		exit 1; \
+	fi
+
+website-deploy: website-deploy-check
+	npm --prefix website run build
+	mkdir -p "$(dir $(WEBSITE_PACKAGE))"
+	cd "$(ROOT)/website/out" && COPYFILE_DISABLE=1 tar $(WEBSITE_TAR_METADATA_FLAGS) -czf "$(WEBSITE_PACKAGE)" --exclude='._*' --exclude='.DS_Store' *
+	tar -tzf "$(WEBSITE_PACKAGE)" >/dev/null
+	ssh $(WEBSITE_SSH_OPTIONS) "$(WEBSITE_REMOTE)" 'set -eu; mkdir -p "$(WEBSITE_REMOTE_DIR)" "$(WEBSITE_BACKUP_DIR)"; test ! -e "$(WEBSITE_REMOTE_PACKAGE)"; if [ -n "$$(find "$(WEBSITE_REMOTE_DIR)" -mindepth 1 -maxdepth 1 -print -quit)" ]; then backup="$(WEBSITE_BACKUP_DIR)/dsh-connect-$$(date +%Y%m%d-%H%M%S).tar.gz"; test ! -e "$$backup"; tar -czf "$$backup" -C "$(WEBSITE_REMOTE_DIR)" .; printf "Remote backup: %s\n" "$$backup"; fi'
+	scp $(WEBSITE_SSH_OPTIONS) "$(WEBSITE_PACKAGE)" "$(WEBSITE_REMOTE):$(WEBSITE_REMOTE_PACKAGE)"
+	ssh $(WEBSITE_SSH_OPTIONS) "$(WEBSITE_REMOTE)" 'set -eu; package="$(WEBSITE_REMOTE_PACKAGE)"; trap "rm -f \"$$package\"" EXIT; tar --no-same-owner --no-same-permissions -xzf "$$package" -C "$(WEBSITE_REMOTE_DIR)"; test -f "$(WEBSITE_REMOTE_DIR)/index.html"; test -d "$(WEBSITE_REMOTE_DIR)/_next"; test -f "$(WEBSITE_REMOTE_DIR)/images/icon.png"'
+	rm -f "$(WEBSITE_PACKAGE)"
 
 mobile-install:
 	npm --prefix apps/mobile install
