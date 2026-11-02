@@ -166,16 +166,16 @@ export class InteractionBridge {
   }
 
   async #relayApproval(request: ApprovalRequest, next: () => Promise<unknown>): Promise<ApprovalOutcome> {
-    const sessionId = sessionOf(request.agent);
-    const workspaceId = sessionId ? this.#workspaceOf(sessionId) : undefined;
-    if (!sessionId || !workspaceId || !this.#canRelay(workspaceId)) return next() as Promise<ApprovalOutcome>;
+    const toolName = bounded(request.toolName, MAX_LABEL);
+    const target = this.#relayTarget('approval', sessionOf(request.agent), toolName);
+    if (!target) return next() as Promise<ApprovalOutcome>;
     return this.#relay(
       'approval',
       {
-        sessionId,
-        workspaceId,
-        title: bounded(request.toolName, MAX_LABEL) ?? '工具审批',
-        toolName: bounded(request.toolName, MAX_LABEL),
+        sessionId: target.sessionId,
+        workspaceId: target.workspaceId,
+        title: toolName ?? '工具审批',
+        toolName,
         reason: bounded(request.displayReason ?? request.reason, MAX_DETAIL),
         callId: bounded(request.callId, 256),
       },
@@ -185,16 +185,15 @@ export class InteractionBridge {
   }
 
   async #relayQuestion(request: AskUserQuestionRequest, next: () => Promise<unknown>): Promise<AskUserQuestionAnswer> {
-    const sessionId = sessionOf(request.agent);
-    const workspaceId = sessionId ? this.#workspaceOf(sessionId) : undefined;
-    if (!sessionId || !workspaceId || !this.#canRelay(workspaceId)) return next() as Promise<AskUserQuestionAnswer>;
+    const target = this.#relayTarget('question', sessionOf(request.agent), undefined);
+    if (!target) return next() as Promise<AskUserQuestionAnswer>;
     const questions = this.#questionsOf(request.questions);
     if (questions.length === 0) return next() as Promise<AskUserQuestionAnswer>;
     return this.#relay(
       'question',
       {
-        sessionId,
-        workspaceId,
+        sessionId: target.sessionId,
+        workspaceId: target.workspaceId,
         title: bounded(questions[0]?.header, MAX_LABEL) ?? '需要你的回答',
         callId: bounded(request.wait?.callId, 256),
         questions,
@@ -218,7 +217,14 @@ export class InteractionBridge {
     next: () => Promise<unknown>,
     signal: AbortSignal | undefined,
   ): Promise<unknown> {
-    if (!(await this.#watching(view.workspaceId))) return next();
+    if (!(await this.#watching(view.workspaceId))) {
+      this.#skip(kind, 'no-watching-phone', {
+        sessionId: view.sessionId,
+        workspaceId: view.workspaceId,
+        toolName: view.toolName,
+      });
+      return next();
+    }
 
     const interactionId = `int_${randomUUID()}`;
     const pending = this.#open(kind, interactionId, view.sessionId, this.#questionsOf(view.questions ?? []));
@@ -380,8 +386,52 @@ export class InteractionBridge {
     }
   }
 
-  #canRelay(workspaceId: string): boolean {
-    return this.#policy.hasScope('approve') && this.#policy.allowsWorkspace(workspaceId);
+  /**
+   * Resolve which granted workspace owns a DSH interaction request.
+   *
+   * Every reason the phone cannot own the prompt is reported here: the desktop
+   * keeps its native prompt in all of them, so a silent skip is
+   * indistinguishable from "remote approvals are broken". Operators get one
+   * `info` line per declined request naming the exact gate.
+   */
+  #relayTarget(
+    kind: RelayKind,
+    sessionId: string | undefined,
+    toolName: string | undefined,
+  ): { readonly sessionId: string; readonly workspaceId: string } | undefined {
+    if (!sessionId) {
+      this.#skip(kind, 'missing-session', { toolName });
+      return undefined;
+    }
+    const workspaceId = this.#workspaceOf(sessionId);
+    if (!workspaceId) {
+      this.#skip(kind, 'session-not-in-workspace', { sessionId, toolName });
+      return undefined;
+    }
+    if (!this.#policy.hasScope('approve')) {
+      this.#skip(kind, 'desktop-scope-missing', { sessionId, workspaceId, toolName });
+      return undefined;
+    }
+    if (!this.#policy.allowsWorkspace(workspaceId)) {
+      this.#skip(kind, 'desktop-workspace-not-granted', { sessionId, workspaceId, toolName });
+      return undefined;
+    }
+    return { sessionId, workspaceId };
+  }
+
+  #skip(
+    kind: RelayKind,
+    reason: string,
+    detail: { sessionId?: string; workspaceId?: string; toolName?: string },
+  ): void {
+    const fields = [
+      `kind=${kind}`,
+      `reason=${reason}`,
+      detail.sessionId ? `session=${detail.sessionId}` : '',
+      detail.workspaceId ? `workspace=${detail.workspaceId}` : '',
+      detail.toolName ? `tool=${bounded(detail.toolName, 120) ?? ''}` : '',
+    ].filter(Boolean);
+    this.#logger.info?.(`DSH Connect: interaction kept on the desktop (${fields.join(' ')})`);
   }
 
   #workspaceOf(sessionId: string): string | undefined {

@@ -65,11 +65,12 @@ class FakeTransport implements MessageTransport {
 
 function build(
   scopes: readonly string[] = ['read', 'approve'],
-  options: { watching?: boolean; graceMs?: number; audienceThrows?: boolean } = {},
+  options: { watching?: boolean; graceMs?: number; audienceThrows?: boolean; logs?: string[] } = {},
 ) {
   const cordis = fakeCordis();
   const transport = new FakeTransport();
   const state = { audienceCalls: 0, watching: options.watching ?? true };
+  const logs = options.logs ?? [];
   const bridge = new InteractionBridge({
     ctx: cordis.ctx,
     workspaceRegistry: registry,
@@ -77,6 +78,7 @@ function build(
     deviceId: 'dev-1',
     emit: (event) => transport.send(event),
     graceMs: options.graceMs ?? 60_000,
+    logger: { info: (message) => logs.push(message) },
     audience: async () => {
       state.audienceCalls += 1;
       if (options.audienceThrows) throw new Error('server offline');
@@ -84,7 +86,7 @@ function build(
     },
   });
   bridge.attach();
-  return { bridge, cordis, transport, state };
+  return { bridge, cordis, transport, state, logs };
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -247,4 +249,84 @@ test('command handler routes interaction.respond to the bridge', async () => {
   });
   assert.equal(await pending, 'allowed-once');
   assert.deepEqual(commandTransport.sent[0]?.result, { accepted: true, interactionId });
+});
+
+test('a desktop without the approve scope reports the declined relay', async () => {
+  const logs: string[] = [];
+  const { cordis, state, transport } = build(['read', 'prompt'], { logs });
+  const result = await cordis.fire('approval/request', approvalRequest(), () => Promise.resolve('rejected'));
+  assert.equal(result, 'rejected');
+  assert.equal(state.audienceCalls, 0);
+  assert.equal(transport.sent.length, 0);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0] ?? '', /kind=approval/);
+  assert.match(logs[0] ?? '', /reason=desktop-scope-missing/);
+  assert.match(logs[0] ?? '', /session=sess-1/);
+  assert.match(logs[0] ?? '', /workspace=ws-1/);
+});
+
+test('a session outside every workspace reports the declined relay', async () => {
+  const logs: string[] = [];
+  const { cordis } = build(['read', 'approve'], { logs });
+  await cordis.fire(
+    'approval/request',
+    { agent: { session: { id: 'sess-elsewhere' } }, toolName: 'bash' },
+    () => Promise.resolve('rejected'),
+  );
+  assert.equal(logs.length, 1);
+  assert.match(logs[0] ?? '', /reason=session-not-in-workspace/);
+  assert.match(logs[0] ?? '', /session=sess-elsewhere/);
+});
+
+test('a workspace the desktop has not granted reports the declined relay', async () => {
+  const cordis = fakeCordis();
+  const logs: string[] = [];
+  const bridge = new InteractionBridge({
+    ctx: cordis.ctx,
+    workspaceRegistry: {
+      list: () => [{
+        id: 'ws-2',
+        path: '/work/b',
+        title: 'Project B',
+        sessionIds: ['sess-2'],
+        createdAt: 'now',
+        updatedAt: 'now',
+      }],
+    },
+    policy: policy(['read', 'approve']),
+    deviceId: 'dev-1',
+    emit: () => undefined,
+    logger: { info: (message) => logs.push(message) },
+    audience: async () => true,
+  });
+  bridge.attach();
+  await cordis.fire(
+    'approval/request',
+    { agent: { session: { id: 'sess-2' } }, toolName: 'bash' },
+    () => Promise.resolve('rejected'),
+  );
+  assert.equal(logs.length, 1);
+  assert.match(logs[0] ?? '', /reason=desktop-workspace-not-granted/);
+  assert.match(logs[0] ?? '', /workspace=ws-2/);
+});
+
+test('an idle phone reports why the prompt stayed on the desktop', async () => {
+  const logs: string[] = [];
+  const { cordis, state, transport } = build(['read', 'approve'], { watching: false, logs });
+  const result = await cordis.fire('approval/request', approvalRequest(), () => Promise.resolve('rejected'));
+  assert.equal(result, 'rejected');
+  assert.equal(state.audienceCalls, 1);
+  assert.equal(transport.sent.length, 0);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0] ?? '', /reason=no-watching-phone/);
+  assert.match(logs[0] ?? '', /tool=bash/);
+});
+
+test('a relayed prompt logs nothing because the phone owns it', async () => {
+  const logs: string[] = [];
+  const { cordis, transport } = build(['read', 'approve'], { logs });
+  void cordis.fire('approval/request', approvalRequest(), () => new Promise(() => undefined));
+  await tick();
+  assert.equal(logs.length, 0);
+  assert.ok(transport.sent.some((message) => message.kind === 'interaction.request'));
 });

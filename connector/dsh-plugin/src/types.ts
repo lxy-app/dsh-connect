@@ -65,6 +65,12 @@ export interface CommandMessage {
 }
 
 export interface Logger {
+  /**
+   * Routine, non-failing diagnostics. Used when the Connector deliberately
+   * leaves a decision on the desktop, so an operator can tell "no phone was
+   * watching" apart from "the relay is broken".
+   */
+  info?(message: string, ...args: unknown[]): void;
   warn?(message: string, ...args: unknown[]): void;
 }
 
