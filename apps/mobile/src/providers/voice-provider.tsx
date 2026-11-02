@@ -44,12 +44,21 @@ const DEFAULT_SETTINGS: VoiceSettings = {
   autoPlay: false,
 };
 
+export type SpeakOptions = {
+  /** Settings snapshot to speak with; defaults to the saved settings. */
+  overrides?: VoiceSettings;
+  /** Caller key (for example a message id) used to report playback state. */
+  key?: string;
+};
+
 type VoiceContextValue = {
   settings: VoiceSettings;
   hydrated: boolean;
   updateSettings: (patch: Partial<VoiceSettings>) => Promise<void>;
-  speak: (text: string, overrides?: VoiceSettings) => Promise<void>;
+  speak: (text: string, options?: SpeakOptions) => Promise<void>;
   stopSpeaking: () => Promise<void>;
+  /** Key of the utterance playing right now, so its trigger can show a playing state and stop accepting taps. */
+  speakingKey: string | null;
 };
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
@@ -86,9 +95,17 @@ function restoreSettings(stored: string): VoiceSettings {
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
+  const [speakingKey, setSpeakingKey] = useState<string | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
   const audioFileRef = useRef<File | null>(null);
   const playbackGeneration = useRef(0);
+  // Mirrors speakingKey so a second tap on the same trigger is rejected before React re-renders.
+  const speakingKeyRef = useRef<string | null>(null);
+
+  const markSpeaking = useCallback((key: string | null) => {
+    speakingKeyRef.current = key;
+    setSpeakingKey(key);
+  }, []);
 
   const releasePlayback = useCallback(() => {
     void Speech.stop();
@@ -123,19 +140,43 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const stopSpeaking = useCallback(async () => {
     playbackGeneration.current += 1;
+    markSpeaking(null);
     releasePlayback();
     await Speech.stop();
-  }, [releasePlayback]);
+  }, [markSpeaking, releasePlayback]);
 
-  const speak = useCallback(async (text: string, overrides?: VoiceSettings) => {
-    const config = overrides ?? settings;
+  const speak = useCallback(async (text: string, options?: SpeakOptions) => {
+    const config = options?.overrides ?? settings;
+    const key = options?.key ?? null;
     const content = text.trim();
     if (!content) return;
+    // Tapping the trigger that is already playing must not queue a second utterance.
+    if (key !== null && speakingKeyRef.current === key) return;
+
     const generation = ++playbackGeneration.current;
     releasePlayback();
+    markSpeaking(key);
+    // Only the utterance that still owns the player may report "finished".
+    const settle = () => {
+      if (watchdog) clearTimeout(watchdog);
+      if (generation === playbackGeneration.current) markSpeaking(null);
+    };
+    // A provider that never reports completion (silent-mode iOS, a decoder that
+    // rejects the stream) must not leave the trigger disabled forever.
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    if (key !== null) {
+      const budget = Math.max(30_000, (content.length * 400) / Math.max(config.rate, 0.5));
+      watchdog = setTimeout(settle, budget);
+    }
 
     if (config.ttsProvider === 'system') {
-      Speech.speak(content, { language: config.language, rate: config.rate });
+      Speech.speak(content, {
+        language: config.language,
+        rate: config.rate,
+        onDone: settle,
+        onStopped: settle,
+        onError: settle,
+      });
       return;
     }
 
@@ -168,14 +209,18 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         playerRef.current = null;
         if (file.exists) file.delete();
         if (audioFileRef.current === file) audioFileRef.current = null;
+        settle();
       });
       player.play();
+    } catch (cause) {
+      settle();
+      throw cause;
     } finally {
       clearTimeout(timeout);
     }
-  }, [releasePlayback, settings]);
+  }, [markSpeaking, releasePlayback, settings]);
 
-  return <VoiceContext.Provider value={{ settings, hydrated, updateSettings, speak, stopSpeaking }}>{children}</VoiceContext.Provider>;
+  return <VoiceContext.Provider value={{ settings, hydrated, updateSettings, speak, stopSpeaking, speakingKey }}>{children}</VoiceContext.Provider>;
 }
 
 export function useVoice(): VoiceContextValue {
