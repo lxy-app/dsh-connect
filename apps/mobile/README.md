@@ -19,6 +19,7 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 - 在 `prompt` 授权下发送排队提示词，在 `cancel` 授权下停止当前 Turn；按住说话支持火山 Agent Plan Seed ASR 2.0 双向/单向 WebSocket 转写与系统 ASR，回复朗读和自动播报支持 Agent Plan Seed TTS 2.0 与系统 TTS。Agent Plan 密钥只通过 Keychain / Keystore 加密保存，云端错误会明确提示，不用格式检查或系统语音冒充云端调用成功。
 - 在 `approve` 授权下接收桌面转发的一次性审批与提问：首页横幅与“待处理”页展示，会话内也会固定显示待答卡片；审批只能 `allow-once` 或 `reject`，提问支持选项与自定义文本。
 - 支持撤销本机授权、断开本机并尽力吊销 Server 端手机凭据。
+- “我的 → 外观”支持跟随系统、浅色和深色三种模式，选择会持久保存；页面、Markdown、底部导航、状态栏与原生弹窗同步切换，深色启动页使用独立背景色。
 
 尚未实现：离线草稿、附件、推送（APNs/FCM）、生物识别和 Web 端火山 ASR 中继。待处理列表由 2 秒轮询维持，App 回到前台会立即刷新，进入后台后停止轮询。
 
@@ -31,7 +32,8 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - Expo Router 文件路由与 typed routes。
 - Continuous Native Generation（CNG），原生目录由 `app.json` 和配置插件生成。
 - `expo-dev-client`：使用自己的 Development Build，不以 Expo Go 作为目标运行环境。
-- `expo-secure-store`：保存手机 Access/Refresh Token，使用 Keychain / Keystore。
+- `expo-secure-store`：保存手机 Access/Refresh Token，以及语音和外观偏好，使用 Keychain / Keystore。
+- `expo-system-ui`：支持 Android 明暗外观，并在主题切换时同步原生根视图背景色。
 - `expo-local-authentication`：后续用于应用解锁和敏感操作确认。
 - `expo-camera`：扫描配对二维码，不启用 Android 录音权限。
 - `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。

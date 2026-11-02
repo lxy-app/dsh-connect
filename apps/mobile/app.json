@@ -37,9 +37,14 @@
         {
           "backgroundColor": "#585CE8",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "dark": {
+            "backgroundColor": "#0F1117",
+            "image": "./assets/images/splash-icon.png"
+          }
         }
       ],
+      "expo-system-ui",
       "expo-dev-client",
       [
         "expo-secure-store",

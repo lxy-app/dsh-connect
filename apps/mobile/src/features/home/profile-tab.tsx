@@ -6,7 +6,15 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { ActionButton } from '@/components/action-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import type { ThemePreference } from '@/lib/theme-preference';
+import { useThemeSettings } from '@/providers/theme-provider';
 import type { StoredMobileSession } from '@/types/mobile';
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: '跟随系统' },
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' },
+];
 
 export function ProfileTab({
   session,
@@ -22,8 +30,16 @@ export function ProfileTab({
   onRepair: () => void;
 }) {
   const theme = useAppTheme();
+  const { preference, setPreference } = useThemeSettings();
   const router = useRouter();
   const [disconnecting, setDisconnecting] = useState(false);
+
+  const selectTheme = (next: ThemePreference) => {
+    if (next === preference) return;
+    void setPreference(next).catch(() => {
+      Alert.alert('外观已切换', '本次设置已生效，但无法保存偏好，下次启动可能恢复上次设置。');
+    });
+  };
 
   const confirmDisconnect = () => {
     Alert.alert('断开这台手机？', '本机安全存储中的凭据会被删除，桌面授权也会随之撤销。下次使用需要重新配对。', [
@@ -88,6 +104,22 @@ export function ProfileTab({
         <Row label="本地内容" value="不缓存会话正文；每次打开向桌面拉取" />
       </Section>
 
+      <Section title="外观">
+        <View style={styles.themeChoices}>
+          {THEME_OPTIONS.map((option) => (
+            <ThemeChoice
+              key={option.value}
+              label={option.label}
+              selected={preference === option.value}
+              onPress={() => selectTheme(option.value)}
+            />
+          ))}
+        </View>
+        <Text style={[styles.help, { color: theme.textSecondary }]}>
+          深色模式会同步应用到会话、Markdown、状态栏和原生弹窗。
+        </Text>
+      </Section>
+
       <Section title="智能交互">
         <Pressable accessibilityRole="button" onPress={() => router.push('/voice-settings')} style={styles.row}>
           <Text style={[styles.rowLabel, { color: theme.textSecondary }]}>语音与模型服务</Text>
@@ -123,6 +155,37 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
         {children}
       </View>
     </View>
+  );
+}
+
+function ThemeChoice({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.themeChoice,
+        {
+          backgroundColor: selected ? theme.accentSoft : theme.surfaceMuted,
+          borderColor: selected ? theme.accent : 'transparent',
+        },
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text style={[styles.themeChoiceText, { color: selected ? theme.accent : theme.textSecondary }]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -271,6 +334,29 @@ const styles = StyleSheet.create({
     fontSize: Typography.secondary,
     lineHeight: 20,
     paddingBottom: 10,
+  },
+  themeChoices: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  themeChoice: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+  },
+  themeChoiceText: {
+    fontSize: Typography.body,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  pressed: {
+    opacity: 0.65,
   },
   actions: {
     gap: 10,
