@@ -75,7 +75,8 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 				SetMime(record.Mime).
 				SetBytes(record.Bytes).
 				SetNillableDescription(nilIfEmpty(record.Description)).
-				SetState(sessionattachment.StateKnown).
+				SetState(initialAttachmentState(record.State)).
+				SetNillableErrorCode(nilIfEmpty(record.ErrorCode)).
 				SetCreatedAt(now).
 				SetUpdatedAt(now).
 				SetExpiresAt(record.ExpiresAt).
@@ -86,7 +87,7 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 		case err != nil:
 			return fmt.Errorf("load session attachment %s: %w", record.ID, err)
 		default:
-			if _, updateErr := s.client.SessionAttachment.UpdateOneID(existing.ID).
+			update := s.client.SessionAttachment.UpdateOneID(existing.ID).
 				SetDeviceID(record.DeviceID).
 				SetSessionID(record.SessionID).
 				SetWorkspaceID(record.WorkspaceID).
@@ -99,8 +100,12 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 				SetBytes(record.Bytes).
 				SetNillableDescription(nilIfEmpty(record.Description)).
 				SetUpdatedAt(now).
-				SetExpiresAt(record.ExpiresAt).
-				Save(ctx); updateErr != nil {
+				SetExpiresAt(record.ExpiresAt)
+			// A row the Server already completed keeps "ready"; everything else
+			// follows the newest declaration (for example a file that moved
+			// outside the workspace since the last refresh).
+			applyDeclaredVerdict(update, existing.State, record)
+			if _, updateErr := update.Save(ctx); updateErr != nil {
 				return fmt.Errorf("update session attachment %s: %w", record.ID, updateErr)
 			}
 		}
@@ -109,6 +114,25 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 }
 
 // SessionAttachment returns one learned attachment row by opaque id.
+// applyDeclaredVerdict lets a non-ready row follow the newest declaration while
+// keeping Server-owned progress intact: a completed row never regresses, and a
+// row mid-fetch is not reset by a refresh that raced with it.
+func applyDeclaredVerdict(
+	update *ent.SessionAttachmentUpdateOne,
+	current sessionattachment.State,
+	record SessionAttachmentRecord,
+) {
+	if record.State == "" {
+		return
+	}
+	switch current {
+	case sessionattachment.StateReady, sessionattachment.StateFetching:
+		return
+	}
+	update.SetState(initialAttachmentState(record.State))
+	update.SetNillableErrorCode(nilIfEmpty(record.ErrorCode))
+}
+
 func (s *Store) SessionAttachment(ctx context.Context, id string) (SessionAttachmentRecord, error) {
 	entity, err := s.client.SessionAttachment.Get(ctx, id)
 	if ent.IsNotFound(err) {
@@ -175,6 +199,26 @@ func (s *Store) FailAttachment(ctx context.Context, id, code string, now time.Ti
 	if updated != 1 {
 		return ErrAttachmentNotFound
 	}
+	return nil
+}
+
+// FailAttachmentIfFetching records a failure only while the row is still being
+// fetched. A late command error therefore cannot overwrite a row that another
+// concurrent request already completed with bytes.
+func (s *Store) FailAttachmentIfFetching(ctx context.Context, id, code string, now time.Time) error {
+	updated, err := s.client.SessionAttachment.Update().
+		Where(
+			sessionattachment.IDEQ(id),
+			sessionattachment.StateEQ(sessionattachment.StateFetching),
+		).
+		SetState(sessionattachment.StateFailed).
+		SetErrorCode(code).
+		SetUpdatedAt(now).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("fail attachment %s: %w", id, err)
+	}
+	_ = updated
 	return nil
 }
 
@@ -259,6 +303,19 @@ func attachmentRecordFromEnt(entity *ent.SessionAttachment) SessionAttachmentRec
 		CreatedAt:   entity.CreatedAt,
 		UpdatedAt:   entity.UpdatedAt,
 		ExpiresAt:   entity.ExpiresAt,
+	}
+}
+
+// initialAttachmentState keeps a declaration's failed/unavailable verdict so the
+// App can explain the refusal; anything else starts as "known".
+func initialAttachmentState(state string) sessionattachment.State {
+	switch state {
+	case string(sessionattachment.StateFailed):
+		return sessionattachment.StateFailed
+	case string(sessionattachment.StateUnavailable):
+		return sessionattachment.StateUnavailable
+	default:
+		return sessionattachment.StateKnown
 	}
 }
 

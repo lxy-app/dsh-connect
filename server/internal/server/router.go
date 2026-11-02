@@ -174,7 +174,7 @@ func (r *Router) executeDirect(ctx context.Context, method, deviceID, requestID 
 
 func requiredScope(method string) (string, bool) {
 	switch method {
-	case protocol.MethodSessionList, protocol.MethodSessionPage, protocol.MethodSessionTranscript, protocol.MethodSessionFollow, protocol.MethodSessionUnfollow:
+	case protocol.MethodSessionList, protocol.MethodSessionPage, protocol.MethodSessionTranscript, protocol.MethodSessionFollow, protocol.MethodSessionUnfollow, protocol.MethodSessionAttachmentFetch:
 		return "read", true
 	case protocol.MethodSessionCreate, protocol.MethodSessionPrompt:
 		return "prompt", true

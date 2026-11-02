@@ -437,6 +437,9 @@ type MobileAttachment struct {
 	Description  string `json:"description,omitempty"`
 	State        string `json:"state"`
 	ErrorCode    string `json:"errorCode,omitempty"`
+	// SHA256 is the digest of the stored bytes once state is "ready". The App
+	// uses it to bust image caches after a failed or stale fetch.
+	SHA256 string `json:"sha256,omitempty"`
 	// Preview is optional inline text for small text files. The Server passes
 	// it through and never persists it.
 	Preview string `json:"preview,omitempty"`
