@@ -21,6 +21,7 @@ import { InteractionCard } from '@/features/interactions/interaction-card';
 import { SessionDrawer } from '@/features/navigation/session-drawer';
 import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { MarkdownText } from '@/components/markdown';
+import { SpeakerIcon } from '@/components/speaker-icon';
 import { StatusBadge } from '@/components/status-badge';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import {
@@ -434,7 +435,7 @@ export function ChatScreen() {
     if (latest.seq === lastSpokenSeq.current) return;
     lastSpokenSeq.current = latest.seq;
     if (voiceHydrated && voiceSettings.autoPlay && !transcript?.active && !streamText) {
-      void speak(markdownToPlainText(latest.text)).catch((cause: unknown) => {
+      void speak(markdownToPlainText(latest.text), { key: messageKey(latest) }).catch((cause: unknown) => {
         Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
       });
     }
@@ -1021,9 +1022,10 @@ function MessageRow({
   streaming?: boolean;
 }) {
   const theme = useAppTheme();
-  const { hydrated: voiceHydrated, speak } = useVoice();
+  const { hydrated: voiceHydrated, speak, speakingKey } = useVoice();
   const user = message.role === 'user';
   const [expanded, setExpanded] = useState(false);
+  const speaking = !user && speakingKey === messageKey(message);
   const collapsible = !streaming && message.text.length > 700;
   // Assistant replies are Markdown; collapse the plain-text preview so a long
   // answer stays scannable until the reader expands the formatted version.
@@ -1073,32 +1075,48 @@ function MessageRow({
             {state === 'sending' ? '发送中…' : '已排队'}
           </Text>
         ) : null}
-        <Text
-          style={[
-            styles.messageTime,
-            { color: user ? theme.onAccent : theme.textSecondary, opacity: user ? 0.7 : 1 },
-          ]}
-        >
-          {streaming ? '流式接收中' : formatTime(message.occurredAt)}
-        </Text>
-        {!user ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="朗读回复"
-            disabled={!voiceHydrated}
-            onPress={() => {
-              void speak(markdownToPlainText(message.text)).catch((cause: unknown) => {
-                Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
-              });
-            }}
-            style={styles.messageTts}
+        <View style={styles.messageFooter}>
+          {!user ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={speaking ? '正在朗读回复' : '朗读回复'}
+              accessibilityState={{ disabled: speaking || !voiceHydrated, busy: speaking }}
+              disabled={speaking || !voiceHydrated}
+              hitSlop={8}
+              onPress={() => {
+                void speak(preview, { key: messageKey(message) }).catch((cause: unknown) => {
+                  Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
+                });
+              }}
+              style={({ pressed }) => [styles.messageTts, pressed && !speaking && styles.pressed]}
+            >
+              <SpeakerIcon color={speaking ? theme.textSecondary : theme.accent} size={12} />
+              <Text
+                style={[
+                  styles.messageTtsText,
+                  { color: speaking ? theme.textSecondary : theme.accent },
+                ]}
+              >
+                {speaking ? '朗读中' : '朗读'}
+              </Text>
+            </Pressable>
+          ) : null}
+          <Text
+            style={[
+              styles.messageTime,
+              { color: user ? theme.onAccent : theme.textSecondary, opacity: user ? 0.7 : 1 },
+            ]}
           >
-            <Text style={[styles.messageTtsText, { color: theme.accent }]}>▷ 朗读</Text>
-          </Pressable>
-        ) : null}
+            {streaming ? '流式接收中' : formatTime(message.occurredAt)}
+          </Text>
+        </View>
       </View>
     </View>
   );
+}
+
+function messageKey(message: MobileMessage): string {
+  return `message-${message.seq}`;
 }
 
 function isInjectedContext(text: string): boolean {
@@ -1285,10 +1303,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 3,
+  },
   messageTime: {
     fontSize: 9,
     lineHeight: 13,
-    alignSelf: 'flex-end',
+    marginLeft: 'auto',
   },
   messageState: {
     fontSize: 9,
@@ -1297,11 +1321,14 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   messageTts: {
-    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingVertical: 2,
   },
   messageTtsText: {
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: '600',
   },
   waitingHead: {

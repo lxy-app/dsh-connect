@@ -75,7 +75,7 @@ function VoiceSettingsContent() {
     if (!validateCloud()) return;
     setPreviewing(true);
     try {
-      await speak('你好，这是 DSH Connect 的火山语音播报预览。', form);
+      await speak('你好，这是 DSH Connect 的火山语音播报预览。', { overrides: form });
     } catch (cause) {
       Alert.alert('试听失败', cause instanceof Error ? cause.message : '请稍后重试。');
     } finally {
