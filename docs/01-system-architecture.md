@@ -288,6 +288,12 @@ App 发送 requestId
 - App 不直接执行工具，不通过远程接入自动改为 `never`。
 - 同一交互只能由一个客户端消费一次；Server 内存态 + CAS，重启或 Connector 断连即清空。
 - 需要手机 grant 与桌面 Connector 都具备 `approve`，且会话所属工作区已授权。
+- 已生效（`active`）的手机授权不能就地扩权：补授 `approve` 必须撤销后重新申请，并由桌面再次确认。
+- 任一前置条件不满足时保持失败关闭：Connector 立即调用 `next()` 交还桌面原生审批链，并写一行诊断日志
+  `DSH Connect: interaction kept on the desktop (kind=… reason=…)`。`reason` 取 `missing-session`、
+  `session-not-in-workspace`、`desktop-scope-missing`、`desktop-workspace-not-granted`、`no-watching-phone`，
+  用于把“没有手机在场”和“转发链路故障”区分开，避免静默失败。
+- App 侧在授权缺 `approve` 时不得显示“没有待处理事项”：待处理页与访问页都要提示“本机未获远程审批授权”并给出补授入口。
 
 ## 12. 数据与存储
 
