@@ -54,11 +54,24 @@ export function AccessScreen() {
           for (const desktop of next.desktops) {
             if (merged[desktop.deviceId]) continue;
             const availableScopes = desktop.availableScopes;
+            // Re-requesting after a revoke restores the ordinary actions the
+            // user already picked once. `approve` is never restored silently:
+            // granting remote approvals always stays an explicit tap.
+            const remembered = (desktop.grant?.scopes ?? []).filter(
+              (scope) => scope !== 'approve' && availableScopes.includes(scope),
+            );
+            const rememberedWorkspaces = (desktop.grant?.workspaces ?? [])
+              .map((workspace) => workspace.id)
+              .filter((id) => desktop.availableWorkspaces.some((workspace) => workspace.id === id));
             merged[desktop.deviceId] = {
-              workspaces: desktop.availableWorkspaces.map((workspace) => workspace.id),
-              scopes: availableScopes.includes('read')
-                ? ['read']
-                : availableScopes.slice(0, 1),
+              workspaces: rememberedWorkspaces.length > 0
+                ? rememberedWorkspaces
+                : desktop.availableWorkspaces.map((workspace) => workspace.id),
+              scopes: remembered.length > 0
+                ? remembered
+                : availableScopes.includes('read')
+                  ? ['read']
+                  : availableScopes.slice(0, 1),
             };
           }
           return merged;
@@ -149,20 +162,24 @@ export function AccessScreen() {
   };
 
   const cancelRequest = (grantId: string) => {
-    Alert.alert('撤销当前访问？', '撤销后需要重新提交申请，并由桌面再次确认；期间的待处理审批也会一并失效。', [
-      { text: '保留', style: 'cancel' },
-      {
-        text: '撤销',
-        style: 'destructive',
-        onPress: () => {
-          setBusyGrantId(grantId);
-          void authorized((serverUrl, token) => revokeMobileAccess(serverUrl, token, grantId))
-            .then(() => load('refresh'))
-            .catch((cause: unknown) => Alert.alert('取消失败', describeMobileApiError(cause)))
-            .finally(() => setBusyGrantId(null));
+    Alert.alert(
+      '撤销并重新申请？',
+      '已生效的授权不能就地扩权，补授「远程审批」只能撤销后重新申请。撤销后需重新提交申请并由桌面再次确认，期间的待处理审批也会一并失效。',
+      [
+        { text: '保留', style: 'cancel' },
+        {
+          text: '撤销',
+          style: 'destructive',
+          onPress: () => {
+            setBusyGrantId(grantId);
+            void authorized((serverUrl, token) => revokeMobileAccess(serverUrl, token, grantId))
+              .then(() => load('refresh'))
+              .catch((cause: unknown) => Alert.alert('撤销失败', describeMobileApiError(cause)))
+              .finally(() => setBusyGrantId(null));
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   return (
@@ -292,8 +309,13 @@ function DesktopAccessCard({
           <Text style={[styles.help, { color: theme.textSecondary }]}>
             动作：{formatScopes(grant.scopes) || '—'}。返回会话页即可查看这些工作区。
           </Text>
+          {grant.scopes.includes('approve') ? null : (
+            <Text style={[styles.help, { color: theme.warning }]}>
+              未包含「远程审批」：桌面弹出的审批不会推送到这台手机。补授需要撤销后重新申请。
+            </Text>
+          )}
           <ActionButton
-            label={busyGrantId === grant.grantId ? '处理中…' : '调整授权范围'}
+            label={busyGrantId === grant.grantId ? '处理中…' : '撤销并重新申请'}
             loading={busyGrantId === grant.grantId}
             onPress={() => onCancelRequest(grant.grantId)}
             variant="secondary"
@@ -408,6 +430,12 @@ function DesktopAccessCard({
                 })}
               </View>
 
+              {desktop.availableScopes.includes('approve') && !selection.scopes.includes('approve') ? (
+                <Text style={[styles.help, { color: theme.warning }]}>
+                  不勾选「远程审批」，桌面弹出审批时手机收不到任何副本；补授只能在撤销授权后重新申请。
+                </Text>
+              ) : null}
+
               {desktop.availableScopes.includes('approve') ? null : (
                 <Text style={[styles.help, { color: theme.warning }]}>
                   桌面尚未开放“远程审批”。请先在桌面 DSH 的 DSH Connect 面板点击“启用远程审批”，再回到这里刷新并勾选。
@@ -443,7 +471,7 @@ function scopeHelp(scope: string): string {
     case 'prompt':
       return '向会话发送补充指令，可能驱动 Agent 修改文件';
     case 'approve':
-      return '在手机上批准一次性工具调用或回答 DSH 的提问';
+      return '在手机上批准一次性工具调用或回答 DSH 的提问；不勾选则桌面审批不会推送到手机';
     case 'cancel':
       return '停止会话当前正在执行的 Turn';
     default:

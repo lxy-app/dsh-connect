@@ -67,7 +67,7 @@ APP='/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness'
 CLI='/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'
 
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop add \
-  '/absolute/path/to/lxyapp-dsh-connect-0.1.1.tgz'
+  '/absolute/path/to/lxyapp-dsh-connect-0.1.2.tgz'
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop why \
   '@lxyapp/dsh-connect'
 ```
