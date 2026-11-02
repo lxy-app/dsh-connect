@@ -862,6 +862,7 @@ export function ChatScreen() {
             <View
               style={[
                 styles.bubble,
+                styles.bubbleAssistant,
                 {
                   backgroundColor: theme.surface,
                   borderColor: theme.border,
@@ -1279,8 +1280,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 5,
   },
+  // Assistant replies own the whole message column so long Markdown does not
+  // leave an empty strip on the right; user bubbles stay content-sized.
   bubbleAssistant: {
-    width: '84%',
+    flex: 1,
+    maxWidth: '100%',
   },
   bubbleText: {
     fontSize: Typography.reading,
