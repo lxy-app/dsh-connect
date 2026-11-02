@@ -140,6 +140,7 @@ dsh-connect/
 | [03-prototype-guide.md](docs/03-prototype-guide.md) | 独立 HTML 的页面与演示边界 |
 | [04-implementation-roadmap.md](docs/04-implementation-roadmap.md) | 阶段、验收标准、测试重点与风险 |
 | [05-p0-verification.md](docs/05-p0-verification.md) | P0 已实现范围、自动化结果与真实 DSH 验收清单 |
+| [06-mobile-attachments-design.md](docs/06-mobile-attachments-design.md) | 移动端文件与图片展示：来源、契约、字节通道、安全与分阶段实施 |
 | [server/README.md](server/README.md) | Server 配置、PostgreSQL/ent 迁移与管理 API |
 | [apps/admin/README.md](apps/admin/README.md) | 管理后台开发、页面与权限模型 |
 | [apps/mobile/README.md](apps/mobile/README.md) | Expo 工程、Development Build、模块与安全边界 |

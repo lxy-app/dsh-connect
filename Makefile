@@ -25,7 +25,8 @@ endif
 
 .PHONY: help db-up db-down db-reset test test-server test-connector test-e2e \
 	test-admin test-mobile vet check run-server run-admin run-mobile admin-install \
-	admin-build website-deploy website-deploy-check mobile-install mobile-build ent-gen
+	admin-build website-deploy website-deploy-check mobile-install mobile-build ent-gen \
+	ent-upgrade-check
 
 help:
 	@echo "db-up          启动 PostgreSQL 18（docker compose）"
@@ -37,6 +38,7 @@ help:
 	@echo "test           全部既有测试（Server + Connector）"
 	@echo "check          vet + 全部测试 + 跨语言 E2E + Web/Mobile 静态检查"
 	@echo "ent-gen        修改 ent/schema 后重新生成实体代码"
+	@echo "ent-upgrade-check 检查 ent 是否已发布含 Go 1.27 修复的正式版"
 	@echo "website-deploy 编译 Website，使用 SSH 密钥通过 SCP 部署到 lxy.app"
 
 # ---------- 数据库 ----------
@@ -125,8 +127,9 @@ mobile-build:
 # ---------- 代码生成 ----------
 
 ent-gen:
-	# ent 0.14.6's generator is not compatible with Go 1.27; pin the toolchain
-	# declared by go.mod and the generator version used by the generated code.
-	GOTOOLCHAIN=go1.26.0 go -C server run entgo.io/ent/cmd/ent@v0.14.6 generate \
+	# The generator version must match the entgo.io/ent version in server/go.mod.
+	# It resolves through server/go.sum rather than ent's own go.sum, so the
+	# generator is run in its isolated module context.
+	go -C server run entgo.io/ent/cmd/ent@v0.14.7-0.20261014065818-8037bc89bcab generate \
 		--feature sql/upsert,sql/execquery,sql/lock ./ent/schema
 	gofmt -w server/ent

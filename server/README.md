@@ -154,6 +154,18 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 make ent-gen
 ```
 
+`make ent-gen` 里的生成器版本必须与 `server/go.mod` 中的 `entgo.io/ent` 保持一致；两处不一致会产出与运行时版本不匹配的代码。
+
+目前 ent 依赖指向 master 快照 `v0.14.7-0.20261014065818-8037bc89bcab`（伪版本），因为正式版尚未包含 Go 1.27 支持：ent v0.14.6 的生成器使用 x/tools v0.51.0，无法解析 Go 1.27 的导出数据格式，在 Go 1.27 工具链下执行代码生成会报 `internal error: package "context" without types was imported`。上游修复见 [PR #4530](https://github.com/ent/ent/pull/4530)，该修复将 x/tools 升级至 v0.52.0，因此需要先于正式版使用。
+
+`entgo.io/ent` 发布含该修复的正式版本（v0.14.7 或更高）后，应执行：
+
+```sh
+go -C server get entgo.io/ent@<正式版本>
+```
+
+随后同步修改 Makefile 中 `ent-gen` 的版本号，重跑 `make ent-gen` 与 `make vet test-server`，并移除本节关于伪版本的说明。生成代码在该版本会一并出现模板变化（字段 setter 移入实体包的 `mutation.go`、`*_delete.go`/`*_update.go` 改用 `mutation.Predicates()`），属于预期 churn。
+
 ## 测试
 
 ```sh
