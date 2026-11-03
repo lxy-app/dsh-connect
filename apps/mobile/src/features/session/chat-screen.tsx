@@ -1249,7 +1249,7 @@ function MessageRow({
               {/* Icon only: the label lives in accessibility so the footer stays compact.
                   While speaking the icon dims inside a soft pill, which keeps the
                   "busy / not pressable" signal the old 朗读中 text used to carry. */}
-              <ChatIcon name="read" color={speaking ? theme.textSecondary : theme.accent} size={16} />
+              <ChatIcon name="read" color={speaking ? theme.textSecondary : theme.accent} size={14} />
             </Pressable>
           ) : null}
           <Text
