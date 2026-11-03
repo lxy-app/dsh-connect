@@ -394,3 +394,53 @@ func TestAuditListingFiltersAndPaginates(t *testing.T) {
 		t.Fatalf("paged audit=%+v total=%d", paged, pagedTotal)
 	}
 }
+
+func TestAttachmentFailureSurvivesTranscriptRefresh(t *testing.T) {
+	persistent := newStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	declaration := store.SessionAttachmentRecord{
+		ID: "att_retryable_failure", DeviceID: "dev-1", SessionID: "sess-1", WorkspaceID: "ws-1",
+		Source: protocol.AttachmentSourceDeliverable, Kind: "image", DisplayName: "image.png",
+		Mime: "image/png", Bytes: 128, State: protocol.AttachmentStateKnown, ExpiresAt: now.Add(time.Hour),
+	}
+	if err := persistent.UpsertSessionAttachments(ctx, []store.SessionAttachmentRecord{declaration}, now); err != nil {
+		t.Fatalf("learn attachment: %v", err)
+	}
+	won, err := persistent.BeginAttachmentFetch(ctx, declaration.ID, now)
+	if err != nil || !won {
+		t.Fatalf("begin attachment fetch won=%v err=%v", won, err)
+	}
+	if err := persistent.FailAttachmentIfFetching(ctx, declaration.ID, protocol.AttachmentErrorFailed, now); err != nil {
+		t.Fatalf("fail attachment fetch: %v", err)
+	}
+
+	// Polling the same declaration must not erase the failure and create an
+	// endless known -> fetching -> failed loop without showing the real error.
+	if err := persistent.UpsertSessionAttachments(ctx, []store.SessionAttachmentRecord{declaration}, now.Add(time.Second)); err != nil {
+		t.Fatalf("refresh attachment declaration: %v", err)
+	}
+	failed, err := persistent.SessionAttachment(ctx, declaration.ID)
+	if err != nil {
+		t.Fatalf("load failed attachment: %v", err)
+	}
+	if failed.State != protocol.AttachmentStateFailed || failed.ErrorCode != protocol.AttachmentErrorFailed {
+		t.Fatalf("failed verdict was reset by transcript: %+v", failed)
+	}
+
+	// A real download request remains the explicit retry boundary.
+	won, err = persistent.BeginAttachmentFetch(ctx, declaration.ID, now.Add(2*time.Second))
+	if err != nil || !won {
+		t.Fatalf("retry failed attachment won=%v err=%v", won, err)
+	}
+	if err := persistent.UpsertSessionAttachments(ctx, []store.SessionAttachmentRecord{declaration}, now.Add(3*time.Second)); err != nil {
+		t.Fatalf("refresh in-flight attachment: %v", err)
+	}
+	retrying, err := persistent.SessionAttachment(ctx, declaration.ID)
+	if err != nil {
+		t.Fatalf("load retrying attachment: %v", err)
+	}
+	if retrying.State != protocol.AttachmentStateFetching {
+		t.Fatalf("in-flight retry regressed to another state: %+v", retrying)
+	}
+}

@@ -101,9 +101,10 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 				SetNillableDescription(nilIfEmpty(record.Description)).
 				SetUpdatedAt(now).
 				SetExpiresAt(record.ExpiresAt)
-			// A row the Server already completed keeps "ready"; everything else
-			// follows the newest declaration (for example a file that moved
-			// outside the workspace since the last refresh).
+			// A row the Server already completed or started keeps its state. A
+			// transport/upload failure also survives a routine transcript refresh;
+			// only a mobile GET may explicitly retry it via BeginAttachmentFetch.
+			// A fresh desktop-side verdict (denied, missing, too large) still wins.
 			applyDeclaredVerdict(update, existing.State, record)
 			if _, updateErr := update.Save(ctx); updateErr != nil {
 				return fmt.Errorf("update session attachment %s: %w", record.ID, updateErr)
@@ -113,10 +114,11 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 	return nil
 }
 
-// SessionAttachment returns one learned attachment row by opaque id.
-// applyDeclaredVerdict lets a non-ready row follow the newest declaration while
-// keeping Server-owned progress intact: a completed row never regresses, and a
-// row mid-fetch is not reset by a refresh that raced with it.
+// applyDeclaredVerdict keeps Server-owned progress and retryable failures
+// stable across identical transcript refreshes. A Connector "known" declaration
+// is not evidence that a failed upload succeeded; the mobile GET is the explicit
+// retry boundary. Fresh desktop-side failed/unavailable verdicts still replace
+// older state, while ready and fetching never regress.
 func applyDeclaredVerdict(
 	update *ent.SessionAttachmentUpdateOne,
 	current sessionattachment.State,
@@ -127,6 +129,9 @@ func applyDeclaredVerdict(
 	}
 	switch current {
 	case sessionattachment.StateReady, sessionattachment.StateFetching:
+		return
+	}
+	if current == sessionattachment.StateFailed && record.State == string(sessionattachment.StateKnown) {
 		return
 	}
 	update.SetState(initialAttachmentState(record.State))
