@@ -21,7 +21,7 @@ import { InteractionCard } from '@/features/interactions/interaction-card';
 import { SessionDrawer } from '@/features/navigation/session-drawer';
 import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { MarkdownText } from '@/components/markdown';
-import { SpeakerIcon } from '@/components/speaker-icon';
+import { ChatIcon } from '@/components/chat-icon';
 import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -1048,11 +1048,7 @@ export function ChatScreen() {
                   pressed && styles.pressed,
                 ]}
               >
-                {voiceMode ? (
-                  <Text style={[styles.voiceSwitchText, { color: theme.accent }]}>⌨</Text>
-                ) : (
-                  <SpeakerIcon color={theme.accent} size={18} />
-                )}
+                <ChatIcon name={voiceMode ? 'keyboard' : 'voice'} color={theme.accent} size={18} />
               </Pressable>
               {voiceMode ? (
                 <View
@@ -1243,7 +1239,7 @@ function MessageRow({
               }}
               style={({ pressed }) => [styles.messageTts, pressed && !speaking && styles.pressed]}
             >
-              <SpeakerIcon color={speaking ? theme.textSecondary : theme.accent} size={12} />
+              <ChatIcon name="read" color={speaking ? theme.textSecondary : theme.accent} size={12} />
               <Text
                 style={[
                   styles.messageTtsText,
@@ -1575,10 +1571,6 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  voiceSwitchText: {
-    fontSize: 16,
-    fontWeight: '700',
   },
   moreOptionsText: {
     fontSize: 24,
