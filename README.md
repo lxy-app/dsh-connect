@@ -127,7 +127,7 @@ dsh-connect/
 │   ├── ent/                      # ent schema 与生成的实体代码
 │   └── internal/                 # API、Hub、路由、协议、Store 与 pgtest
 ├── docs/                         # 产品、架构、原型与实施路线
-└── dsh-connect-prototype.html    # 独立高保真交互原型
+└── prototype/                    # 独立 HTML 交互原型（产品 + 官网）
 ```
 
 ## 文档索引
@@ -148,7 +148,7 @@ dsh-connect/
 
 ## 查看交互原型
 
-直接用浏览器打开 [dsh-connect-prototype.html](dsh-connect-prototype.html)。它不需要 Server，不连接真实 DSH，所有设备、会话和审批均为模拟数据。
+直接用浏览器打开 [prototype/dsh-connect-prototype.html](prototype/dsh-connect-prototype.html)（产品交互原型），或 [prototype/dsh-connect-website-prototype.html](prototype/dsh-connect-website-prototype.html)（官网主页原型）。两者都不需要 Server、不连接真实 DSH、不依赖构建，页面内的设备、会话和审批均为模拟数据。
 
 ## 许可证
 

@@ -1,6 +1,6 @@
 # DSH Connect 高保真原型说明
 
-- 原型文件：[../dsh-connect-prototype.html](../dsh-connect-prototype.html)
+- 原型文件：[../prototype/dsh-connect-prototype.html](../prototype/dsh-connect-prototype.html)
 - 类型：独立、可交互 HTML
 - 状态：用于产品评审与交互演示
 - 数据：全部为模拟数据

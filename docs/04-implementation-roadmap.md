@@ -126,7 +126,7 @@ dsh-connect/
 │   └── schemas/
 ├── docs/
 ├── deploy/
-└── dsh-connect-prototype.html
+└── prototype/
 ```
 
 ## 4. 核心验收标准

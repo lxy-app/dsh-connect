@@ -20,7 +20,7 @@ server/internal/store/       PostgreSQL 持久化
 server/ent/schema/           ent schema（手写）
 server/ent/                  ent 生成代码（除 schema 外不要手改）
 docs/                        架构、产品、实施路线与验收说明
-dsh-connect-prototype.html   独立模拟交互原型，不连接真实服务
+prototype/                   独立 HTML 交互原型（产品 + 官网），不连接真实服务
 ```
 
 实现真实功能时不要改原型代替产品代码。详细说明优先查阅根目录及各组件的 `README.md`。
