@@ -1,6 +1,6 @@
 # DSH Connect Website 主页原型说明
 
-- 原型文件：[../dsh-connect-website-prototype.html](../dsh-connect-website-prototype.html)
+- 原型文件：[../prototype/dsh-connect-website-prototype.html](../prototype/dsh-connect-website-prototype.html)
 - 类型：独立、可交互的单文件 HTML 设计原型
 - 状态：待设计评审；尚未进入真实 Website 工程实现
 - 目标线上地址：`https://lxy.app/dsh-connect`
@@ -8,9 +8,9 @@
 
 ## 1. 打开方式
 
-直接使用浏览器打开根目录的 `dsh-connect-website-prototype.html`。
+直接使用浏览器打开 `prototype/dsh-connect-website-prototype.html`。
 
-原型不依赖构建工具、Go Server、DeepSeek Harness 或互联网，HTML、CSS、JavaScript、SVG 图标与品牌 PNG 均包含在同一文件中。页面内的“体验交互原型”会打开仓库已有的 `dsh-connect-prototype.html`；GitHub 链接需要联网。
+原型不依赖构建工具、Go Server、DeepSeek Harness 或互联网，HTML、CSS、JavaScript、SVG 图标与品牌 PNG 均包含在同一文件中。页面内的“体验交互原型”会打开同目录的 `prototype/dsh-connect-prototype.html`；GitHub 链接需要联网。
 
 ## 2. 设计方向
 
