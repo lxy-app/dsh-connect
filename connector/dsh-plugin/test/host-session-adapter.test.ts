@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { HostSessionAdapter } from '../src/lib/host-session-adapter.js';
+import type { AttachmentWiring } from '../src/lib/host-session-adapter.js';
 import { WorkspacePolicy } from '../src/lib/workspace-policy.js';
 import type {
   SessionController,
@@ -43,6 +44,7 @@ type EmittedEvent = Record<string, unknown>;
 
 interface SetupOverrides {
   readonly controller?: Partial<SessionController>;
+  readonly attachments?: AttachmentWiring;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -97,9 +99,15 @@ function setup(overrides: SetupOverrides = {}) {
   const adapter = new HostSessionAdapter({
     controller, workspaceRegistry, policy, deviceId: 'dev-1', emit: (event) => emitted.push(event),
     logger: { warn() {} },
+    ...(overrides.attachments ? { attachments: overrides.attachments } : {}),
   });
   return { adapter, emitted, calls, controller, workspaces };
 }
+
+const unusedAttachmentWiring: AttachmentWiring = {
+  async readBytes() { throw new Error('not used by transcript projection'); },
+  async upload() { throw new Error('not used by transcript projection'); },
+};
 
 test('list derives workspace ownership from workspaceRegistry and filters grants', async () => {
   const { adapter } = setup();
@@ -390,4 +398,54 @@ test('transcript rejects a workspace claim that does not own the session', async
     adapter.transcript({ sessionId: 's1', workspaceId: 'ws-b' }, { signal: new AbortController().signal }),
     { code: 'workspace_mismatch' },
   );
+});
+
+test('transcript mounts a present delivery on the final assistant message of the same turn', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 1 } } },
+    { type: 'event' as const, event: { type: 'deliverables/presented', seq: 2, time: 2_000, data: { turn: 1, files: [{ path: '/work/a/diagram.png' }] } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 3, time: 3_000, data: { message: { id: 'a1', content: [{ type: 'text', text: '图片已生成' }] } } } },
+    { type: 'event' as const, event: { type: 'turn/end', seq: 4, time: 4_000, data: {} } },
+  ];
+  const { adapter } = setup({
+    attachments: unusedAttachmentWiring,
+    controller: { async page() { return { records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+
+  assert.equal(result.messages.length, 1);
+  assert.equal(result.messages[0]?.id, 'a1');
+  assert.equal(result.messages[0]?.delivery, undefined);
+  assert.equal(result.messages[0]?.attachments?.[0]?.name, 'diagram.png');
+  assert.equal(JSON.stringify(result).includes('/work/a'), false);
+});
+
+test('transcript never mounts an empty turn delivery on the previous turn', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 1 } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 2, time: 2_000, data: { message: { id: 'a1', content: [{ type: 'text', text: '上一轮' }] } } } },
+    { type: 'event' as const, event: { type: 'turn/end', seq: 3, time: 3_000, data: {} } },
+    { type: 'event' as const, event: { type: 'turn/start', seq: 4, time: 4_000, data: { turn: 2 } } },
+    { type: 'event' as const, event: { type: 'deliverables/presented', seq: 5, time: 5_000, data: { turn: 2, files: [{ path: '/work/a/diagram.png' }] } } },
+    { type: 'event' as const, event: { type: 'turn/end', seq: 6, time: 6_000, data: {} } },
+  ];
+  const { adapter } = setup({
+    attachments: unusedAttachmentWiring,
+    controller: { async page() { return { records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+
+  assert.equal(result.messages.length, 2);
+  assert.equal(result.messages[0]?.attachments, undefined);
+  assert.equal(result.messages[1]?.delivery, true);
+  assert.equal(result.messages[1]?.seq, 5);
+  assert.equal(result.messages[1]?.attachments?.[0]?.name, 'diagram.png');
 });

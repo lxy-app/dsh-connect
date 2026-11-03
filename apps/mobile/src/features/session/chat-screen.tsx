@@ -316,8 +316,11 @@ export function ChatScreen() {
   }, [loadLatest]);
 
   const awaitingReply = sending || pendingReply !== null || transcript?.active === true;
+  const waitingForAttachments = transcript?.messages.some((message) =>
+    message.attachments?.some((attachment) => attachment.state === 'known' || attachment.state === 'fetching'),
+  ) === true;
   const shouldStream = Boolean(
-    session && (sending || pendingReply !== null || transcript?.active === true),
+    session && (sending || pendingReply !== null || transcript?.active === true || waitingForAttachments),
   );
 
   useEffect(() => {

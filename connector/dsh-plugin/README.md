@@ -22,7 +22,7 @@
 - 未确认桌面授权前不接受会话命令。
 - 工作区不默认全选；面板默认只选择 `read`，`prompt/cancel` 需显式开启。
 - 创建会话也要求 `prompt` scope。
-- 不支持任意 `cwd`、任意 Shell、附件或远程关闭审批。
+- 不支持任意 `cwd`、任意 Shell 或远程关闭审批。附件只接受会话中明确声明的交付文件：手机仅持有不透明 id，Connector 校验工作区边界、敏感名单、符号链接与声明基线后通过 Host `workspaceFiles` 读取，不提供任意路径读盘。
 - 远程审批/提问使用 `prepend` 注册 `approval/request` 与 `user-questions/request` answerer，并先向 Server 查询 `interaction.audience`：只有“有 `approve` 的手机正在轮询”时，手机才接管这次请求。
 - 手机接管时先不启动桌面审批链，手机独占一个 grace 窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 6 秒）；窗口内作答则桌面完全不会弹卡。窗口结束则**先撤回手机副本**，再调用 `next()` 交给桌面原生审批链，因此两端不会同时出现两张卡，也不会留下已失效的卡片。
 - 没有手机在轮询时直接走桌面原生链，手机不会收到无法处理的副本。
@@ -141,6 +141,6 @@ create → follow snapshot → prompt(queue,稳定 requestId)
 ## P0 尚未包含
 
 - APNs/FCM 推送；移动端当前通过轮询读取 transcript 与待处理审批。
-- 附件、模型/Preset 完整选择和多实例 Server。
+- M2 文件保存/分享、M3 消息附件与手机上行、模型/Preset 完整选择和多实例 Server。
 - 大于 64 KiB 的单帧工具输出分块；超限会明确报错并依靠 snapshot/page 恢复，不会静默丢弃。
 - 系统安全存储中的设备密钥，以及 Connector 请求结果的持久化缓存。

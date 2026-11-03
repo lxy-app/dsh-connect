@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createMobileSession, MobileApiError } from './mobile-api';
+import { createMobileSession, getMobileTranscript, MobileApiError } from './mobile-api';
 
 test('mobile session create posts only the supported grant-scoped fields', async (t) => {
   const originalFetch = globalThis.fetch;
@@ -44,4 +44,63 @@ test('mobile session create rejects an incomplete desktop result', async (t) => 
     }),
     (error: unknown) => error instanceof MobileApiError && error.code === 'invalid_response',
   );
+});
+
+test('mobile transcript preserves delivered attachments and delivery-only messages', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    sessionId: 'sess-1',
+    deviceId: 'dev-1',
+    workspaceId: 'ws-1',
+    messages: [{
+      id: 'delivery-12-0',
+      seq: 12,
+      role: 'assistant',
+      text: '',
+      delivery: true,
+      occurredAt: '2026-11-03T01:00:00.000Z',
+      attachments: [{
+        attachmentId: 'att_b7Qk2m9xT4pL0rVc8sN1',
+        kind: 'image',
+        name: 'architecture.png',
+        mime: 'image/png',
+        bytes: 184320,
+        width: 1280,
+        height: 720,
+        source: 'deliverable',
+        description: '本轮的架构图',
+        state: 'ready',
+        sha256: '9f2c0123456789abcdef',
+      }],
+    }],
+    hasMore: false,
+    active: false,
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  const transcript = await getMobileTranscript(
+    'https://connect.example.com',
+    'mobile-token',
+    'sess-1',
+    { deviceId: 'dev-1', workspaceId: 'ws-1' },
+  );
+
+  assert.equal(transcript.messages.length, 1);
+  assert.equal(transcript.messages[0]?.delivery, true);
+  assert.deepEqual(transcript.messages[0]?.attachments, [{
+    attachmentId: 'att_b7Qk2m9xT4pL0rVc8sN1',
+    kind: 'image',
+    name: 'architecture.png',
+    mime: 'image/png',
+    bytes: 184320,
+    width: 1280,
+    height: 720,
+    source: 'deliverable',
+    description: '本轮的架构图',
+    state: 'ready',
+    sha256: '9f2c0123456789abcdef',
+  }]);
 });

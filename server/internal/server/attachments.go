@@ -142,6 +142,10 @@ func (s *Server) handleMobileAttachment(w http.ResponseWriter, r *http.Request) 
 		writeAPIError(w, *commandError)
 		return
 	}
+	if row.ErrorCode == protocol.AttachmentErrorTooLarge {
+		writeAPIError(w, protocol.NewError(protocol.CodePayloadTooLarge, "attachment exceeds the configured size limit", false))
+		return
+	}
 	// A sticky desktop verdict is final regardless of the state it left the row
 	// in: retrying a denied or changed file only repeats the same refusal.
 	if nonRetryableAttachmentErrors[row.ErrorCode] {

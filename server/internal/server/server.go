@@ -34,6 +34,12 @@ func New(ctx context.Context, config Config) (*Server, error) {
 		_ = persistentStore.Close()
 		return nil, err
 	}
+	// A fetching command cannot outlive the process that issued it. Release
+	// those rows so a restart does not leave mobile downloads pending forever.
+	if err := persistentStore.RecoverAttachmentFetches(ctx, nowUTC()); err != nil {
+		_ = persistentStore.Close()
+		return nil, err
+	}
 	// No Connector can be connected before the listener starts, so any persisted
 	// "online" status is stale.
 	if err := persistentStore.SetAllOffline(ctx, nowUTC()); err != nil {

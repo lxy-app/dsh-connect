@@ -1,5 +1,7 @@
 # 移动端文件与图片展示方案设计
 
+> **实施状态（2026-11-03）**：M1 主体已通过 PR #8 合入；第 1～3 节记录的是设计前断点，不代表当前代码仍完全未实现。后续真实链路审查又修复了 Mobile 附件字段丢失、`attachment.fetch` 方法名不匹配、Host 读取窗口超限、`attachment.ready` 被过滤、turn 错挂及 Server 重启后永久 `fetching` 等问题。当前验证与剩余边界见第 18 节。
+
 ## 1. 结论摘要
 
 移动端看不到会话"返回的文件"，不是渲染问题，而是链路上有三处断点同时存在：
@@ -825,3 +827,31 @@ sequenceDiagram
 - 架构与安全基线：`docs/01-system-architecture.md` 第 9、12、13 节。
 - 阶段与验收：`docs/04-implementation-roadmap.md`（本方案把 P3 的"图片和附件"提前为可独立交付的 M1/M2）。
 - 移动端工程约束：`apps/mobile/AGENTS.md`（Expo SDK 版本化 API、lint/typecheck 门槛）。
+
+## 18. 实施进展与验证记录（2026-11-03）
+
+### 已合入与本轮修复
+
+- M1 主体已由 PR #8 合入：协议附件模型、Server 学习型索引与 blob 下载、Connector 声明/读取/上传、Mobile 图片网格和全屏查看器。
+- 本轮工作区继续修复真实闭环审查发现的问题：
+  1. Mobile `parseMessage` 现在保留 `attachments` 与 `delivery`，否则 UI 永远收到空附件列表。
+  2. Connector 的 `attachment.fetch` 方法名与命令分派保持一致，避免命令未到 Host 就返回 `method_not_found`。
+  3. Host 字节读取改用完整文件契约 `{}`；不再把 Connector 的 20 MiB 上限错误当作 DSH 默认 2 MiB 的 ranged window。Connector 仍在读取前后执行 20 MiB 限制与基线校验。
+  4. Server 移动 WSS 放行 `attachment.ready`；有待拉取附件时 App 保持实时监听，轮询仍作为兜底。
+  5. 交付按 `candidate.turn` 归属到该轮最后一条 assistant 文本；无文本 turn 合成最小 delivery 消息，不再错挂上一轮。
+  6. Server 启动时把上一进程遗留的 `fetching` 恢复为 `known`；桌面删除/不可读保留 `attachment_unavailable`，声明超限下载返回 `413`。
+- 跨语言 E2E 新增 `present → transcript → Host read → upload → mobile GET 200 + attachment.ready`，Host 仿真忠实执行 2 MiB 窗口与 32 MiB 完整文件限制，并校验手机收到逐字节一致的内容。
+
+### 已执行验证
+
+- `go test ./...`（Server 全部包，含 PostgreSQL 18 pgtest）与 `go vet ./...`：通过。
+- Connector typecheck/build/test：91 项通过。
+- Mobile ESLint + TypeScript：通过；API/语音等 27 项测试通过，其中包含附件与 delivery-only transcript 解析回归。
+- `make test-e2e`（独立临时 PostgreSQL 18、真实 Go Server 与 Connector、可控 Host 仿真）：通过，覆盖上述附件字节闭环与 ready 事件。
+
+### 仍需后续验收或实现
+
+- 尚未用真实 DSH 会话执行 `present` / `dsh_im_return_file` smoke，也未做新的 iOS/Android 原生构建与真机图片验收；Host 仿真 E2E 不等于这些门槛已通过。
+- Mobile 的 `>2 MiB` 点击后加载、明确的 202/404/失败重试，以及 Android 捏合缩放仍需补齐；当前全屏 `ScrollView` 缩放主要适用于 iOS。
+- blob TTL 定时回收、LRU 与总容量执行仍未实现；当前只有配置、元数据时间与读取时 `last_used_at` 更新。
+- M2 文件卡、文本预览、下载/保存/分享与完整交付卡，M3 消息附件和手机上行，M4 通知与离线增强均未开始。

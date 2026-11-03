@@ -17,7 +17,7 @@ func TestMobileStreamEventFiltersRawToolPayloads(t *testing.T) {
 		}
 		return protocol.Event{V: 1, Type: protocol.TypeEvent, EventID: "evt_1", DeviceID: "dev_1", SessionID: "s1", Kind: kind, OccurredAt: at, Data: data}
 	}
-	for _, kind := range []string{"assistant.stream", "session.snapshot", "connector.error", "session.resync_required"} {
+	for _, kind := range []string{"assistant.stream", "session.snapshot", "connector.error", "session.resync_required", protocol.EventKindAttachmentReady} {
 		if !mobileStreamEvent(protocol.Event{Kind: kind}) {
 			t.Fatalf("kind %q should be allowed on the mobile socket", kind)
 		}

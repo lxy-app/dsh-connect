@@ -1,6 +1,7 @@
 import type {
   MobileAccessGrant,
   MobileAccessOverview,
+  MobileAttachment,
   MobileDevice,
   MobileInteraction,
   MobileInteractionAnswer,
@@ -657,8 +658,35 @@ function parseMessage(value: unknown): MobileMessage {
     ...(typeof value.toolName === 'string' ? { toolName: value.toolName } : {}),
     ...(typeof value.toolCallId === 'string' ? { toolCallId: value.toolCallId } : {}),
     ...(value.isError === true ? { isError: true } : {}),
+    ...(value.attachments !== undefined ? { attachments: parseAttachments(value.attachments) } : {}),
+    ...(value.delivery === true ? { delivery: true } : {}),
     occurredAt: requiredDate(value.occurredAt),
   };
+}
+
+function parseAttachments(value: unknown): MobileAttachment[] {
+  if (!Array.isArray(value)) throw invalidResponse();
+  return value.map((entry): MobileAttachment => {
+    if (!isRecord(entry)) throw invalidResponse();
+    if (typeof entry.bytes !== 'number' || !Number.isSafeInteger(entry.bytes) || entry.bytes < 0) {
+      throw invalidResponse();
+    }
+    return {
+      attachmentId: requiredString(entry.attachmentId),
+      kind: requiredString(entry.kind),
+      name: requiredString(entry.name),
+      mime: requiredString(entry.mime),
+      bytes: entry.bytes,
+      ...(typeof entry.width === 'number' && Number.isFinite(entry.width) ? { width: entry.width } : {}),
+      ...(typeof entry.height === 'number' && Number.isFinite(entry.height) ? { height: entry.height } : {}),
+      source: requiredString(entry.source),
+      ...(typeof entry.description === 'string' ? { description: entry.description } : {}),
+      state: requiredString(entry.state),
+      ...(typeof entry.errorCode === 'string' ? { errorCode: entry.errorCode } : {}),
+      ...(typeof entry.sha256 === 'string' ? { sha256: entry.sha256 } : {}),
+      ...(typeof entry.preview === 'string' ? { preview: entry.preview } : {}),
+    };
+  });
 }
 
 function parseWorkspaceSummaries(value: unknown): MobileWorkspaceSummary[] {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
+	"github.com/deepseek/dsh-connect/server/internal/store"
 )
 
 // readConnectorCommand waits for one Server command and returns it together
@@ -203,7 +204,6 @@ func TestMobileAttachmentLearnFetchUploadDownload(t *testing.T) {
 	if params["attachmentId"] != attachmentID || params["sessionId"] != "sess-1" || params["workspaceId"] != "ws-1" {
 		t.Fatalf("unexpected fetch params: %+v", params)
 	}
-	reply(map[string]any{"status": "ready", "bytes": len(fileBytes), "sha256": digestOf(fileBytes), "mime": "image/png"})
 	pending := <-downloads
 	if pending.status != http.StatusAccepted {
 		t.Fatalf("first download status=%d body=%s", pending.status, pending.body)
@@ -217,6 +217,7 @@ func TestMobileAttachmentLearnFetchUploadDownload(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("upload status=%d body=%s", status, body)
 	}
+	reply(map[string]any{"status": "ready", "bytes": len(fileBytes), "sha256": digestOf(fileBytes), "mime": "image/png"})
 
 	// A ready attachment serves its bytes with a digest ETag.
 	response, served := getAttachment(t, environment.http.URL, phone.AccessToken, attachmentID, "")
@@ -308,6 +309,11 @@ func TestMobileAttachmentRejectsUnknownWrongDeviceAndBadDigest(t *testing.T) {
 						"mime": "image/png", "bytes": 0, "source": "deliverable",
 						"state": "unavailable", "errorCode": "attachment_denied",
 					},
+					{
+						"attachmentId": "att_large11111111111", "kind": "image", "name": "large.png",
+						"mime": "image/png", "bytes": 25 * 1024 * 1024, "source": "deliverable",
+						"state": "failed", "errorCode": "attachment_too_large",
+					},
 				},
 			},
 		},
@@ -325,8 +331,8 @@ func TestMobileAttachmentRejectsUnknownWrongDeviceAndBadDigest(t *testing.T) {
 	// the reason instead of retrying a file that will never be served.
 	var learned protocol.MobileTranscriptResponse
 	decodeTestJSON(t, body, &learned)
-	if len(learned.Messages) != 1 || len(learned.Messages[0].Attachments) != 2 {
-		t.Fatalf("expected two learned attachments: %+v", learned.Messages)
+	if len(learned.Messages) != 1 || len(learned.Messages[0].Attachments) != 3 {
+		t.Fatalf("expected three learned attachments: %+v", learned.Messages)
 	}
 	denied := learned.Messages[0].Attachments[1]
 	if denied.State != protocol.AttachmentStateUnavailable || denied.ErrorCode != protocol.AttachmentErrorDenied {
@@ -335,6 +341,10 @@ func TestMobileAttachmentRejectsUnknownWrongDeviceAndBadDigest(t *testing.T) {
 	response, refused := getAttachment(t, environment.http.URL, phone.AccessToken, "att_denied1111111111", "")
 	if response.StatusCode != http.StatusConflict {
 		t.Fatalf("denied attachment status=%d body=%s", response.StatusCode, refused)
+	}
+	response, oversizedDeclaration := getAttachment(t, environment.http.URL, phone.AccessToken, "att_large11111111111", "")
+	if response.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized declaration status=%d body=%s", response.StatusCode, oversizedDeclaration)
 	}
 
 	// An id the Server never learned stays a 404 even with a valid grant.
@@ -379,5 +389,40 @@ func TestMobileAttachmentRejectsUnknownWrongDeviceAndBadDigest(t *testing.T) {
 	)
 	if status != http.StatusConflict {
 		t.Fatalf("wrong session upload status=%d body=%s", status, body)
+	}
+}
+
+func TestServerStartRecoversInterruptedAttachmentFetch(t *testing.T) {
+	environment := newAttachmentEnvironment(t)
+	const attachmentID = "att_interrupted111111"
+	now := nowUTC()
+	if err := environment.server.store.UpsertSessionAttachments(context.Background(), []store.SessionAttachmentRecord{{
+		ID: attachmentID, DeviceID: "dev-1", SessionID: "sess-1", WorkspaceID: "ws-1",
+		Source: protocol.AttachmentSourceDeliverable, Kind: "image", DisplayName: "diagram.png",
+		Mime: "image/png", Bytes: 128, State: protocol.AttachmentStateKnown, ExpiresAt: now.Add(time.Hour),
+	}}, now); err != nil {
+		t.Fatalf("learn attachment: %v", err)
+	}
+	won, err := environment.server.store.BeginAttachmentFetch(context.Background(), attachmentID, now)
+	if err != nil || !won {
+		t.Fatalf("begin fetch won=%v err=%v", won, err)
+	}
+	environment.server.Close()
+
+	restarted, err := New(context.Background(), Config{
+		BootstrapToken: testBootstrapToken,
+		DatabaseURL:    environment.databaseURL,
+		AttachmentDir:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("restart Server: %v", err)
+	}
+	t.Cleanup(restarted.Close)
+	row, err := restarted.store.SessionAttachment(context.Background(), attachmentID)
+	if err != nil {
+		t.Fatalf("load recovered attachment: %v", err)
+	}
+	if row.State != protocol.AttachmentStateKnown || row.ErrorCode != "" {
+		t.Fatalf("interrupted fetch was not released: %+v", row)
 	}
 }
