@@ -1234,23 +1234,22 @@ function MessageRow({
               accessibilityLabel={speaking ? '正在朗读回复' : '朗读回复'}
               accessibilityState={{ disabled: speaking || !voiceHydrated, busy: speaking }}
               disabled={speaking || !voiceHydrated}
-              hitSlop={8}
+              hitSlop={10}
               onPress={() => {
                 void speak(preview, { key: messageKey(message) }).catch((cause: unknown) => {
                   Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
                 });
               }}
-              style={({ pressed }) => [styles.messageTts, pressed && !speaking && styles.pressed]}
+              style={({ pressed }) => [
+                styles.messageTts,
+                speaking && { backgroundColor: theme.accentSoft },
+                pressed && !speaking && styles.pressed,
+              ]}
             >
-              <ChatIcon name="read" color={speaking ? theme.textSecondary : theme.accent} size={12} />
-              <Text
-                style={[
-                  styles.messageTtsText,
-                  { color: speaking ? theme.textSecondary : theme.accent },
-                ]}
-              >
-                {speaking ? '朗读中' : '朗读'}
-              </Text>
+              {/* Icon only: the label lives in accessibility so the footer stays compact.
+                  While speaking the icon dims inside a soft pill, which keeps the
+                  "busy / not pressable" signal the old 朗读中 text used to carry. */}
+              <ChatIcon name="read" color={speaking ? theme.textSecondary : theme.accent} size={14} />
             </Pressable>
           ) : null}
           <Text
@@ -1469,12 +1468,13 @@ const styles = StyleSheet.create({
   messageFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 3,
+    gap: 8,
+    marginTop: 6,
+    minHeight: 24,
   },
   messageTime: {
-    fontSize: 9,
-    lineHeight: 13,
+    fontSize: Typography.caption,
+    lineHeight: 17,
     marginLeft: 'auto',
   },
   messageState: {
@@ -1484,15 +1484,12 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   messageTts: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-  },
-  messageTtsText: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '600',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    marginLeft: -4,
+    borderRadius: 8,
   },
   waitingHead: {
     flexDirection: 'row',
