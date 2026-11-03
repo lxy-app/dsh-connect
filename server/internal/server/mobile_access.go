@@ -457,6 +457,11 @@ func (s *Server) handleMobileSessionMessages(w http.ResponseWriter, r *http.Requ
 	if transcript.Messages == nil {
 		transcript.Messages = []protocol.MobileMessage{}
 	}
+	// Learn every attachment the desktop declared, then overwrite the state with
+	// the Server-owned value so all phones agree on one attachment's fate.
+	if s.attachmentsEnabled() {
+		s.learnTranscriptAttachments(r.Context(), deviceID, workspaceID, sessionID, transcript.Messages)
+	}
 	writeJSON(w, http.StatusOK, protocol.MobileTranscriptResponse{
 		SessionID:   sessionID,
 		DeviceID:    deviceID,

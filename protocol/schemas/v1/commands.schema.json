@@ -36,6 +36,7 @@
             "session.follow",
             "session.unfollow",
             "session.cancel",
+            "session.attachment.fetch",
             "interaction.respond"
           ]
         },

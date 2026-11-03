@@ -22,6 +22,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/sessions/{sessionId}/cancel", s.requireAdmin(s.handleSessionCancel))
 	mux.HandleFunc("GET /v1/events/ws", s.requireAdmin(s.handleEvents))
 	s.mobileRoutes(mux)
+	s.attachmentRoutes(mux)
 	s.adminRoutes(mux)
 	return s.corsMiddleware(mux)
 }

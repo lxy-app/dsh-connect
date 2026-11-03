@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -41,16 +42,21 @@ func main() {
 	startupContext, cancelStartup := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelStartup()
 	server, err := connectserver.New(startupContext, connectserver.Config{
-		BootstrapToken:         bootstrapToken,
-		DatabaseURL:            os.Getenv("DSH_CONNECT_DATABASE_URL"),
-		ServerURL:              serverURL,
-		AdminOrigin:            os.Getenv("DSH_CONNECT_ADMIN_ORIGIN"),
-		MobilePairingCodeTTL:   envDuration("DSH_CONNECT_MOBILE_PAIRING_TTL", 5*time.Minute),
-		MobileAccessTokenTTL:   envDuration("DSH_CONNECT_MOBILE_ACCESS_TTL", 15*time.Minute),
-		MobileRefreshTokenTTL:  envDuration("DSH_CONNECT_MOBILE_REFRESH_TTL", 30*24*time.Hour),
-		BootstrapOwnerEmail:    os.Getenv("DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL"),
-		BootstrapOwnerPassword: os.Getenv("DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD"),
-		BootstrapOwnerName:     os.Getenv("DSH_CONNECT_BOOTSTRAP_OWNER_NAME"),
+		BootstrapToken:          bootstrapToken,
+		DatabaseURL:             os.Getenv("DSH_CONNECT_DATABASE_URL"),
+		ServerURL:               serverURL,
+		AdminOrigin:             os.Getenv("DSH_CONNECT_ADMIN_ORIGIN"),
+		MobilePairingCodeTTL:    envDuration("DSH_CONNECT_MOBILE_PAIRING_TTL", 5*time.Minute),
+		MobileAccessTokenTTL:    envDuration("DSH_CONNECT_MOBILE_ACCESS_TTL", 15*time.Minute),
+		MobileRefreshTokenTTL:   envDuration("DSH_CONNECT_MOBILE_REFRESH_TTL", 30*24*time.Hour),
+		AttachmentsMode:         envOrDefault("DSH_CONNECT_ATTACHMENTS", "read"),
+		MaxAttachmentBytes:      envInt64("DSH_CONNECT_MAX_ATTACHMENT_BYTES", 20<<20),
+		MaxAttachmentStoreBytes: envInt64("DSH_CONNECT_MAX_ATTACHMENT_STORE_BYTES", 2<<30),
+		AttachmentTTL:           envDuration("DSH_CONNECT_ATTACHMENT_TTL", 7*24*time.Hour),
+		AttachmentDir:           os.Getenv("DSH_CONNECT_ATTACHMENT_DIR"),
+		BootstrapOwnerEmail:     os.Getenv("DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL"),
+		BootstrapOwnerPassword:  os.Getenv("DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD"),
+		BootstrapOwnerName:      os.Getenv("DSH_CONNECT_BOOTSTRAP_OWNER_NAME"),
 	})
 	if err != nil {
 		log.Fatalf("initialize server: %v", err)
@@ -122,6 +128,18 @@ func envDuration(name string, fallback time.Duration) time.Duration {
 	value, err := time.ParseDuration(raw)
 	if err != nil || value <= 0 {
 		log.Fatalf("%s must be a positive Go duration, got %q", name, raw)
+	}
+	return value
+}
+
+func envInt64(name string, fallback int64) int64 {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value <= 0 {
+		log.Fatalf("%s must be a positive integer, got %q", name, raw)
 	}
 	return value
 }

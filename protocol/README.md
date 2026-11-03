@@ -46,6 +46,17 @@ App REST         POST /v1/mobile/interactions/{interactionId}/decision
 
 REST 请求 DTO 与 command params 均禁止未定义字段，Server 对未知 JSON 字段返回 `invalid_request`，不会静默丢弃。
 
+## 附件 v1
+
+会话声明的文件走两条独立通道，元数据与字节严格分离：
+
+- `session.attachment.fetch`（v1 `command`，要求 `read` scope）：params 为 `sessionId/workspaceId/attachmentId`，30s 默认超时上限内由 Server 用 60s 触发。Connector 在**命令返回前**把字节上传到 `POST /v1/connector/attachments/{attachmentId}`（`application/octet-stream`，device token 认证，`X-DSH-Attachment-{Session,Bytes,Sha256}`），随后返回 `{status:"ready",bytes,sha256,mime}`。
+- `GET /v1/mobile/attachments/{attachmentId}`：手机只用不可猜测的 `attachmentId`，从不提交路径。`200` 字节（`ETag` 支持 `If-None-Match` → `304`）、`202` 拉取中（`Retry-After`）、`409` 桌面侧判定（`changed`/`denied`/`too_large` 等）、`404` 未知或已过期、`413` 超限、`403` grant 失效。
+
+`MobileMessage.attachments[]` 为可选字段，旧客户端忽略即可；`state` 由 Server 覆盖（Connector 只报初始判定），因此同一附件在不同手机上状态一致。字节就绪后 Server 向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅 `attachmentId/bytes/sha256`）。
+
+`MobileMessage.delivery` 标记 Server/Connector 合成的"本轮交付"N 个文件"消息：当某个 turn 有交付但没有任何 assistant 文本时使用，避免图片无处挂载。附件 id 形如 `att_` + base64url(sha256(sessionId\0source\0seq\0index))[:24]，确定性且不含路径。
+
 ## 手机配对 v1
 
 手机配对与桌面配对完全独立，流程为：

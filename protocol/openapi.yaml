@@ -666,6 +666,122 @@ paths:
         "503": {$ref: "#/components/responses/DeviceOffline"}
         "504": {$ref: "#/components/responses/CommandTimeout"}
         "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/attachments/{attachmentId}:
+    get:
+      tags: [mobileAccess]
+      operationId: downloadMobileAttachment
+      summary: Download the bytes of one declared attachment
+      description: |
+        The phone only ever names an opaque `attachmentId` learned from a
+        transcript; it never supplies a path. The Server authorizes against the
+        owner recorded on its own row (device + workspace + session), so an id
+        from one session cannot be read through another session's grant.
+
+        `202` means the Connector was asked to read and upload the file; retry
+        after `Retry-After`. `409` reports a desktop-side failure (file changed,
+        too large, denied by policy) through a stable `errorCode`.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {name: attachmentId, in: path, required: true, schema: {type: string, pattern: "^att_[A-Za-z0-9_-]{8,64}$"}}
+      responses:
+        "200":
+          description: Attachment bytes.
+          headers:
+            ETag:
+              description: Content digest; supports If-None-Match.
+              schema: {type: string}
+            Cache-Control:
+              schema: {type: string}
+            X-Content-Type-Options:
+              schema: {type: string, enum: [nosniff]}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        "202":
+          description: The Connector is reading the file; poll again.
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: {type: string, enum: [fetching]}
+                  retryAfterMs: {type: integer, minimum: 0}
+        "304":
+          description: Not modified (If-None-Match matched the current digest).
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The desktop reported a stable attachment failure.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: {type: string, enum: [failed, unavailable]}
+                  errorCode: {type: string}
+        "413":
+          description: The declared file exceeds the configured attachment size limit.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/connector/attachments/{attachmentId}:
+    post:
+      tags: [connector]
+      operationId: uploadConnectorAttachment
+      summary: Upload attachment bytes from the desktop Connector
+      description: |
+        Called by the Connector while serving `session.attachment.fetch`, before
+        it answers the command, so the Server never holds orphaned bytes. The
+        body is raw octet-stream; metadata travels in headers. The digest header
+        must match the body, and the row's device must match the authenticated
+        device token.
+      security:
+        - connectorDevice: []
+      parameters:
+        - {name: attachmentId, in: path, required: true, schema: {type: string, pattern: "^att_[A-Za-z0-9_-]{8,64}$"}}
+        - {name: X-DSH-Attachment-Sha256, in: header, required: true, schema: {type: string, pattern: "^[a-f0-9]{64}$"}}
+        - {name: X-DSH-Attachment-Session, in: header, required: true, schema: {type: string, minLength: 1}}
+        - {name: X-DSH-Attachment-Bytes, in: header, required: true, schema: {type: integer, minimum: 0}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        "200":
+          description: Bytes stored and the row advanced to `ready`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, bytes, sha256]
+                properties:
+                  state: {type: string, enum: [ready]}
+                  bytes: {type: integer, minimum: 0}
+                  sha256: {type: string}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The digest, declared size, or owning device does not match.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "413":
+          description: The body exceeds the configured attachment size limit.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
 components:
   securitySchemes:
     bootstrapBearer:
@@ -678,6 +794,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
       description: Short-lived mobile access token returned by /v1/mobile/pair or refresh.
+    connectorDevice:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Desktop device token issued at pairing; identifies the Connector instance.
   parameters:
     DeviceId:
       name: deviceId

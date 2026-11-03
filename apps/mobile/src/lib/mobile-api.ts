@@ -42,6 +42,12 @@ type PairDeviceInput = {
   appVersion: string;
 };
 
+/** Absolute URL for one attachment's bytes; the phone never sends a path. */
+export function buildAttachmentUrl(serverUrl: string, attachmentId: string): string {
+  const base = normalizeServerUrl(serverUrl).replace(/\/+$/, '');
+  return `${base}/v1/mobile/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
 export function normalizeServerUrl(raw: string): string {
   const value = raw.trim();
   if (!value) {

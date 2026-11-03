@@ -6,6 +6,7 @@ import { isRecord } from '../types.js';
 import { CommandHandler } from './command-handler.js';
 import type { FileStateStore } from './file-state-store.js';
 import { HostSessionAdapter } from './host-session-adapter.js';
+import type { AttachmentWiring } from './host-session-adapter.js';
 import { InteractionBridge } from './interaction-bridge.js';
 import { PairingController } from './pairing.js';
 import { protocolError } from './request-cache.js';
@@ -25,6 +26,7 @@ export class ConnectorRuntime extends EventEmitter {
   readonly #ctx: RuntimeHostContext;
   readonly #store: FileStateStore;
   readonly #logger: Logger;
+  readonly #serverUrl: string;
   readonly #transport: ConnectorTransport;
   readonly #pairing: PairingController;
   readonly #policy = new WorkspacePolicy();
@@ -42,6 +44,7 @@ export class ConnectorRuntime extends EventEmitter {
     this.#ctx = ctx;
     this.#store = store;
     this.#logger = logger;
+    this.#serverUrl = serverUrl;
     this.#transport = new ConnectorTransport({
       serverUrl,
       getDeviceToken: () => store.get('deviceToken'),
@@ -227,11 +230,70 @@ export class ConnectorRuntime extends EventEmitter {
     this.#serverRequests.clear();
   }
 
+  /**
+   * Connects the attachment pipeline to the Host service and the Server upload
+   * endpoint. When the Host offers no workspace-files service the Connector
+   * simply declares nothing, rather than reading bytes behind its back.
+   */
+  #attachmentWiring(): AttachmentWiring | undefined {
+    const workspaceFiles = this.#ctx.workspaceFiles;
+    if (!workspaceFiles) return undefined;
+    const maxBytes = attachmentMaxBytes();
+    return {
+      maxBytes,
+      readBytes: async ({ sessionId, workspaceRoot, path, maxBytes: limit, signal }) => {
+        const result = await workspaceFiles.readBytes(
+          { sessionId, workspaceRoot },
+          path,
+          { range: { offset: 0, length: limit } },
+          signal,
+        );
+        if (!result.eof) {
+          const tooLarge = new Error('The declared file exceeds the attachment size limit');
+          throw Object.assign(tooLarge, { code: 'attachment_too_large', retryable: false });
+        }
+        return result.data;
+      },
+      upload: async ({ attachmentId, sessionId, bytes, sha256, signal }) => {
+        await this.#uploadAttachment({ attachmentId, sessionId, bytes, sha256, signal });
+      },
+    };
+  }
+
+  async #uploadAttachment(input: {
+    readonly attachmentId: string;
+    readonly sessionId: string;
+    readonly bytes: Uint8Array;
+    readonly sha256: string;
+    readonly signal: AbortSignal;
+  }): Promise<void> {
+    const deviceToken = await this.#store.get('deviceToken');
+    if (!deviceToken) throw new Error('Connector is not paired');
+    const url = `${this.#serverUrl.replace(/\/$/, '')}/v1/connector/attachments/${encodeURIComponent(input.attachmentId)}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        'Content-Type': 'application/octet-stream',
+        'X-DSH-Attachment-Session': input.sessionId,
+        'X-DSH-Attachment-Bytes': String(input.bytes.byteLength),
+        'X-DSH-Attachment-Sha256': input.sha256,
+      },
+      // Node's fetch accepts any BufferSource; the DOM typing here does not.
+      body: input.bytes as unknown as BodyInit,
+      signal: input.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`attachment upload failed with status ${response.status}`);
+    }
+  }
+
   #configureHost({ deviceId, workspaces, scopes }: WorkspaceGrants & { readonly deviceId: string }): void {
     this.#interactions?.dispose();
     this.#host?.dispose();
     this.#commands?.dispose(protocolError('connector_reconfigured', 'Connector Host configuration changed'));
     this.#policy.replace({ workspaces, scopes });
+    const attachments = this.#attachmentWiring();
     this.#host = new HostSessionAdapter({
       controller: this.#ctx.sessionController,
       workspaceRegistry: this.#ctx.workspaceRegistry,
@@ -239,6 +301,7 @@ export class ConnectorRuntime extends EventEmitter {
       deviceId,
       emit: (event) => this.#transport.send(event),
       logger: this.#logger,
+      ...(attachments ? { attachments } : {}),
     });
     this.#interactions = new InteractionBridge({
       ctx: this.#ctx,
@@ -257,6 +320,13 @@ export class ConnectorRuntime extends EventEmitter {
       interactions: this.#interactions,
     });
   }
+}
+
+function attachmentMaxBytes(): number {
+  const raw = process.env.DSH_CONNECT_MAX_ATTACHMENT_BYTES;
+  if (!raw) return 20 << 20;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20 << 20;
 }
 
 function interactionGraceMs(): number | undefined {

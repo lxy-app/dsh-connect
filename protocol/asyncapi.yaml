@@ -71,7 +71,17 @@ channels:
       cursor:
         schema: {type: string}
     publish:
-      description: Frames produced by Server for the granted mobile WebSocket client.
+      description: |
+        Frames produced by Server for the granted mobile WebSocket client.
+        Besides relayed session frames, the Server emits an `attachment.ready`
+        event once the Connector has uploaded the bytes of an attachment this
+        phone asked for, so the App can reload the image without polling:
+
+          {v: 1, type: "event", kind: "attachment.ready", deviceId, sessionId,
+           data: {attachmentId, bytes, sha256}}
+
+        The event carries metadata only; bytes are always fetched over the
+        HTTPS attachment endpoint.
       message:
         oneOf:
           - $ref: schemas/v1/events.schema.json#/$defs/FollowResult

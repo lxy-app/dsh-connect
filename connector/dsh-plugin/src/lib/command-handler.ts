@@ -7,6 +7,7 @@ import type {
   SessionListParams,
   SessionPageParams,
   SessionPromptParams,
+  SessionAttachmentFetchParams,
   SessionTranscriptParams,
   SessionUnfollowParams,
 } from './host-session-adapter.js';
@@ -22,10 +23,11 @@ const METHODS = new Set([
   'session.follow',
   'session.unfollow',
   'session.cancel',
+  'session.attachment.fetch',
   'interaction.respond',
 ]);
 
-type SessionMethod = 'list' | 'create' | 'page' | 'transcript' | 'prompt' | 'follow' | 'unfollow' | 'cancel';
+type SessionMethod = 'list' | 'create' | 'page' | 'transcript' | 'prompt' | 'follow' | 'unfollow' | 'cancel' | 'attachment.fetch';
 type CommandMethod = SessionMethod | 'interaction.respond';
 
 export interface CommandContext {
@@ -46,6 +48,7 @@ export interface CommandHost {
   follow?(params: SessionFollowParams, context: CommandContext): ReturnType<HostMethod>;
   unfollow?(params: SessionUnfollowParams, context: CommandContext): ReturnType<HostMethod>;
   cancel?(params: SessionCancelParams, context: CommandContext): ReturnType<HostMethod>;
+  'attachment.fetch'?(params: SessionAttachmentFetchParams, context: CommandContext): ReturnType<HostMethod>;
   respondInteraction?(params: InteractionRespondParams): ReturnType<HostMethod>;
 }
 
@@ -153,6 +156,9 @@ export class CommandHandler {
           return await this.#requireMethod('unfollow', command.method).call(this.#host, params as SessionUnfollowParams, context);
         case 'cancel':
           return await this.#requireMethod('cancel', command.method).call(this.#host, params as SessionCancelParams, context);
+        case 'attachment.fetch':
+          return await this.#requireMethod('attachment.fetch', command.method)
+            .call(this.#host, params as SessionAttachmentFetchParams, context);
         case 'interaction.respond': {
           if (!this.#interactions) {
             throw protocolError('method_not_found', `Host adapter does not implement ${command.method}`);

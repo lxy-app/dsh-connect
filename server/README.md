@@ -134,6 +134,28 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 - 手机 logout、管理员吊销手机、桌面吊销都会撤销相关 grant。
 - **移动 Access Token 不能访问 `/v1/devices`、`/v1/sessions` 或 `/v1/events/ws` 等调试接口。** 移动端仅使用受 grant 约束的 `/v1/mobile/*` API；`/v1/mobile/events/ws` 先校验 grant，再以 compact follow 推送 assistant 增量，原始工具 payload 由 Server 过滤。
 
+## 移动端附件
+
+会话中"交付/返回"的文件由 Connector 声明（不含路径、不含字节），随 transcript 下发；手机点开时再由 Connector 按桌面侧校验读盘并上传，手机通过独立 HTTPS 端点取图。**路径永不出桌面，字节不进 WSS/JSON。**
+
+| 端点 | 调用方 | 说明 |
+|---|---|---|
+| `GET /v1/mobile/attachments/{attachmentId}` | App | `200` 字节（带 `ETag`，支持 `If-None-Match` → `304`）；`202` 正在拉取（`Retry-After`）；`409` 桌面侧失败（带 `errorCode`）；`403` grant 失效；`404` 未知/过期；`413` 超限 |
+| `POST /v1/connector/attachments/{attachmentId}` | Connector | `application/octet-stream`，device token 认证；`X-DSH-Attachment-{Session,Bytes,Sha256}` 必须与行内归属和 body 一致 |
+
+实现要点：
+
+- **学习式索引**：Server 在处理 `GET /v1/mobile/sessions/{id}/messages` 时把 Connector 返回的 `attachments` upsert 进 `session_attachments`；未被学习过的 id 一律 `404`，从源头阻断枚举。
+- **反向授权**：下载端点只按行内记录的 device/workspace/session 校验 grant，不信任手机提交的任何归属参数。
+- **状态由 Server 拥有**：Connector 只报 `known`，`fetching/ready/failed/unavailable` 与 `sha256` 由 Server 推进；`ready` 不会因新的 transcript 回落。
+- **字节与元数据分离**：内容寻址写 `DSH_CONNECT_ATTACHMENT_DIR/<sha[0:2]>/<sha>`，DB 只存引用；上传先写临时文件再 rename，避免半成品。
+- **就绪通知**：上传成功后向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅元数据），App 立即重载而不轮询。
+- **失败关闭**：Connector 侧路径必须落在会话工作区内（默认拒绝工作区外交付）、拒绝 final symlink、命中敏感名单直接拒绝、并在读盘前重新 `stat` 比对基线，变化返回 `attachment_changed` 且不发送内容。
+
+M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/翻页；非图片文件显示为信息行（下载/保存/打开属 M2）；手机上行为 M3。配置项见 `.env.example` 的 `DSH_CONNECT_ATTACHMENT*`（默认 `DSH_CONNECT_ATTACHMENTS=read`，单文件 20 MiB，blob 目录总量 2 GiB，blob TTL 168h）。
+
+已知未实现：blob TTL 的定时回收任务（当前仅记录 TTL 配置，不主动删除过期 blob）；消息 `image`/`file` 内容块（M3）；手机上行的 `readwrite` 写入路径。
+
 ## 数据模型（ent schema）
 
 | 表 | 用途 |
@@ -147,6 +169,8 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | `mobile_pairing_codes` | 手机一次性配对码 hash、目标用户与消费状态 |
 | `mobile_devices` | 手机身份、平台、Access/Refresh Token hash、过期与吊销状态 |
 | `mobile_access_grants` | 手机—桌面—工作区/动作授权：`pending/active/denied/revoked` |
+| `session_attachments` | 会话声明的文件元数据：归属、来源、状态、digest、过期时间（不含路径与字节） |
+| `attachment_blobs` | 按 sha256 去重的 blob 索引，字节存 `DSH_CONNECT_ATTACHMENT_DIR` |
 
 修改 schema 后重新生成：
 

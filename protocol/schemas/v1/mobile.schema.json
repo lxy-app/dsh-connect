@@ -638,6 +638,84 @@
       },
       "additionalProperties": false
     },
+    "MobileAttachment": {
+      "type": "object",
+      "required": [
+        "attachmentId",
+        "kind",
+        "name",
+        "mime",
+        "bytes",
+        "source",
+        "state"
+      ],
+      "properties": {
+        "attachmentId": {
+          "type": "string",
+          "pattern": "^att_[A-Za-z0-9_-]{8,64}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "image",
+            "file"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "deliverable",
+            "message",
+            "tool"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "known",
+            "fetching",
+            "ready",
+            "failed",
+            "unavailable"
+          ]
+        },
+        "errorCode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "preview": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "MobileMessage": {
       "type": "object",
       "required": [
@@ -676,6 +754,15 @@
           "minLength": 1
         },
         "isError": {
+          "type": "boolean"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileAttachment"
+          }
+        },
+        "delivery": {
           "type": "boolean"
         },
         "occurredAt": {

@@ -10,14 +10,15 @@ import (
 )
 
 type Server struct {
-	config       Config
-	store        *store.Store
-	hub          *Hub
-	events       *EventHub
-	interactions *InteractionStore
-	router       *Router
-	handler      http.Handler
-	closeOnce    sync.Once
+	config          Config
+	store           *store.Store
+	hub             *Hub
+	events          *EventHub
+	interactions    *InteractionStore
+	router          *Router
+	attachmentBlobs attachmentBlobs
+	handler         http.Handler
+	closeOnce       sync.Once
 }
 
 func New(ctx context.Context, config Config) (*Server, error) {
@@ -44,11 +45,12 @@ func New(ctx context.Context, config Config) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{
-		config:       config,
-		store:        persistentStore,
-		hub:          NewHub(),
-		events:       NewEventHub(config.EventBuffer),
-		interactions: NewInteractionStore(interactionMaxTTL),
+		config:          config,
+		store:           persistentStore,
+		hub:             NewHub(),
+		events:          NewEventHub(config.EventBuffer),
+		interactions:    NewInteractionStore(interactionMaxTTL),
+		attachmentBlobs: attachmentBlobs{dir: config.AttachmentDir},
 	}
 	s.router = NewRouter(s)
 	s.handler = s.routes()

@@ -24,6 +24,19 @@ type Config struct {
 	AdminSessionTTL       time.Duration
 	AdminOrigin           string
 
+	// AttachmentsMode is off | read | readwrite. "read" lets a phone download
+	// files a session declared; anything else is rejected at startup.
+	AttachmentsMode string
+	// MaxAttachmentBytes caps one declared file the Connector may upload.
+	MaxAttachmentBytes int64
+	// MaxAttachmentStoreBytes caps the whole blob directory.
+	MaxAttachmentStoreBytes int64
+	// AttachmentTTL is how long an unread blob is retained.
+	AttachmentTTL time.Duration
+	// AttachmentDir holds the content-addressed blobs; container deployments
+	// must mount a volume here or blobs vanish when the container is recreated.
+	AttachmentDir string
+
 	BootstrapOwnerEmail    string
 	BootstrapOwnerPassword string
 	BootstrapOwnerName     string
@@ -72,6 +85,21 @@ func (c Config) withDefaults() (Config, error) {
 	if c.AdminSessionTTL == 0 {
 		c.AdminSessionTTL = 12 * time.Hour
 	}
+	if c.AttachmentsMode == "" {
+		c.AttachmentsMode = attachmentsModeRead
+	}
+	if c.MaxAttachmentBytes == 0 {
+		c.MaxAttachmentBytes = 20 << 20
+	}
+	if c.MaxAttachmentStoreBytes == 0 {
+		c.MaxAttachmentStoreBytes = 2 << 30
+	}
+	if c.AttachmentTTL == 0 {
+		c.AttachmentTTL = 7 * 24 * time.Hour
+	}
+	if c.AttachmentDir == "" {
+		c.AttachmentDir = "dsh-connect-attachments"
+	}
 	if c.BootstrapOwnerName == "" {
 		c.BootstrapOwnerName = "Owner"
 	}
@@ -87,5 +115,21 @@ func (c Config) withDefaults() (Config, error) {
 	if c.AdminSessionTTL <= 0 {
 		return Config{}, errors.New("invalid admin session TTL")
 	}
+	switch c.AttachmentsMode {
+	case attachmentsModeOff, attachmentsModeRead, attachmentsModeReadWrite:
+	default:
+		return Config{}, errors.New("DSH_CONNECT_ATTACHMENTS must be off, read or readwrite")
+	}
+	if c.MaxAttachmentBytes < 1 || c.MaxAttachmentStoreBytes < c.MaxAttachmentBytes || c.AttachmentTTL <= 0 {
+		return Config{}, errors.New("invalid attachment size or TTL configuration")
+	}
 	return c, nil
 }
+
+// Attachment mode values. M1 implements "read"; "readwrite" is reserved for
+// the mobile upload path and currently behaves like "read".
+const (
+	attachmentsModeOff       = "off"
+	attachmentsModeRead      = "read"
+	attachmentsModeReadWrite = "readwrite"
+)

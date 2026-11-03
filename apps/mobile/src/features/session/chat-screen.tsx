@@ -38,6 +38,8 @@ import { resolvePendingReply } from '@/lib/pending-reply';
 import { openSessionStream } from '@/lib/session-stream';
 import { openVolcAsrSession, type VolcAsrSession } from '@/lib/volc-asr';
 import { useInteractions } from '@/providers/interactions-provider';
+import { AttachmentGrid } from '@/components/attachment-grid';
+import type { AttachmentAuth } from '@/components/attachment-grid';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useVoice } from '@/providers/voice-provider';
 import type { MobileMessage, MobileSession, MobileTranscript } from '@/types/mobile';
@@ -47,6 +49,9 @@ export function ChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { authorized, session, connection, rememberSession } = useMobileSession();
+  // Attachment images need a live bearer token in their request headers, so the
+  // screen resolves one connection snapshot and refreshes it with the session.
+  const [attachmentAuth, setAttachmentAuth] = useState<AttachmentAuth | null>(null);
   const { settings: voiceSettings, hydrated: voiceHydrated, speak } = useVoice();
   const { interactions, busyId, decide } = useInteractions();
   const params = useLocalSearchParams<{
@@ -412,9 +417,25 @@ export function ChatScreen() {
       : awaitingReply && waitSeconds >= 45
         ? '还没有收到响应。桌面可能正在等待审批、仍在执行，或 Connector 已断开。可以立即刷新确认。'
         : '响应会自动刷新；需要立即确认时可以手动刷新。';
+  useEffect(() => {
+    let disposed = false;
+    void connection()
+      .then(({ serverUrl, accessToken }) => {
+        if (!disposed) setAttachmentAuth({ serverUrl, accessToken });
+      })
+      .catch(() => {
+        if (!disposed) setAttachmentAuth(null);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [connection, session?.accessToken]);
+
   const canRefreshManually = awaitingReply && (waitSeconds >= 6 || error !== null);
   useEffect(() => {
-    const latest = [...conversation].reverse().find((message) => message.role === 'assistant');
+    const latest = [...conversation]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.text.trim().length > 0);
     if (!latest) return;
     if (!speechInitialized.current) {
       speechInitialized.current = true;
@@ -825,6 +846,7 @@ export function ChatScreen() {
           conversation.map((message) => (
             <MessageRow
               key={`${message.seq}-${message.id}`}
+              attachmentAuth={attachmentAuth}
               message={message}
               state={
                 optimistic?.id === message.id
@@ -1025,10 +1047,12 @@ function MessageRow({
   message,
   state,
   streaming = false,
+  attachmentAuth = null,
 }: {
   message: MobileMessage;
   state?: 'sending' | 'queued';
   streaming?: boolean;
+  attachmentAuth?: AttachmentAuth | null;
 }) {
   const theme = useAppTheme();
   const { hydrated: voiceHydrated, speak, speakingKey } = useVoice();
@@ -1067,6 +1091,7 @@ function MessageRow({
             {streaming ? ' ▍' : ''}
           </Text>
         )}
+        <AttachmentGrid attachments={message.attachments ?? []} auth={attachmentAuth} />
         {collapsible ? (
           <Pressable
             accessibilityRole="button"
