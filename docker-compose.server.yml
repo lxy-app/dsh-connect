@@ -12,9 +12,15 @@ services:
       # The local development .env may use 127.0.0.1; that would make the
       # published container port unreachable, so always override it here.
       DSH_CONNECT_LISTEN_ADDR: 0.0.0.0:8787
+      DSH_CONNECT_ATTACHMENT_DIR: /data/attachments
     ports:
       - "${DSH_CONNECT_HTTP_PORT:-8787}:8787"
+    volumes:
+      - dsh-connect-attachments:/data/attachments
     extra_hosts:
       # Allows DSH_CONNECT_DATABASE_URL to reach PostgreSQL on the Docker host
       # via host.docker.internal. A remote database can use its DNS name or IP.
       - "host.docker.internal:host-gateway"
+
+volumes:
+  dsh-connect-attachments:

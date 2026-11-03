@@ -24,13 +24,16 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-
 FROM docker.m.daocloud.io/library/alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S -g 10001 app \
-    && adduser -S -D -H -u 10001 -G app app
+    && adduser -S -D -H -u 10001 -G app app \
+    && mkdir -p /data/attachments \
+    && chown -R app:app /data
 WORKDIR /app
 COPY --from=server-build /out/dsh-connect-server /usr/local/bin/dsh-connect-server
 COPY --from=admin-build /src/admin/dist/ ./admin/
 
 ENV DSH_CONNECT_LISTEN_ADDR=0.0.0.0:8787 \
-    DSH_CONNECT_ADMIN_DIR=/app/admin
+    DSH_CONNECT_ADMIN_DIR=/app/admin \
+    DSH_CONNECT_ATTACHMENT_DIR=/data/attachments
 EXPOSE 8787
 USER app
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
