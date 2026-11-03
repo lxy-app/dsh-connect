@@ -15,7 +15,7 @@ import { extractAttachmentCandidates } from './attachment-extract.js';
 import type { AttachmentCandidate } from './attachment-extract.js';
 import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
 import type { AttachmentByteReader, AttachmentUploader } from './attachment-fetch.js';
-import { evaluateAttachmentPath, ATTACHMENT_ERROR_DENIED, ATTACHMENT_ERROR_TOO_LARGE } from './attachment-policy.js';
+import { evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE } from './attachment-policy.js';
 import { CursorJournal } from './cursor-journal.js';
 import { pageInput, promptInput, sessionAddress } from './input-validation.js';
 import type { PageInputParams, PromptInputParams } from './input-validation.js';
@@ -265,14 +265,21 @@ export class HostSessionAdapter {
       throughSeq: context.throughSeq,
     }, signal);
     const messages: TranscriptMessage[] = [];
+    const messageTurns = new WeakMap<TranscriptMessage, number>();
     let active = false;
     let turnEndSeq = 0;
     let truncated = false;
+    let currentTurn = 0;
+    let nextTurn = 1;
 
     for (const record of result.records) {
       const event = record.event;
       const seq = Number(event.seq);
       if (event.type === 'turn/start') {
+        const data = isRecord(event.data) ? event.data : {};
+        const declaredTurn = typeof data.turn === 'number' ? data.turn : 0;
+        currentTurn = Number.isSafeInteger(declaredTurn) && declaredTurn > 0 ? declaredTurn : nextTurn;
+        nextTurn = Math.max(nextTurn, currentTurn + 1);
         active = true;
         continue;
       }
@@ -296,13 +303,15 @@ export class HostSessionAdapter {
       const payload = isRecord(data.message) ? data.message : data;
       const text = messageText(payload.content);
       if (!text) continue;
-      messages.push({
+      const message: TranscriptMessage = {
         id: typeof payload.id === 'string' && payload.id ? payload.id : `message-${seq}`,
         seq,
         role: event.type === 'user/message' ? 'user' : 'assistant',
         text,
         occurredAt: new Date(event.time).toISOString(),
-      });
+      };
+      messages.push(message);
+      messageTurns.set(message, currentTurn);
     }
 
     // Keep the newest conversation and let older content load through the
@@ -317,14 +326,16 @@ export class HostSessionAdapter {
     let visible = messages.slice(firstVisible);
     const only = visible[0];
     if (visible.length === 1 && only !== undefined && only.text.length > MAX_TRANSCRIPT_CHARS) {
-      visible = [{
+      const shortened: TranscriptMessage = {
         ...only,
         text: truncate(only.text, MAX_TRANSCRIPT_CHARS),
-      }];
+      };
+      visible = [shortened];
+      messageTurns.set(shortened, messageTurns.get(only) ?? 0);
       truncated = true;
     }
     if (this.#attachments) {
-      await this.#attachDeclarations(sessionId, workspaceId, result.records, visible, signal);
+      await this.#attachDeclarations(sessionId, workspaceId, result.records, visible, messageTurns, signal);
     }
     const droppedOlder = firstVisible > 0;
     const firstRecordSeq = result.records[0]?.event.seq;
@@ -608,7 +619,7 @@ export class HostSessionAdapter {
   }
 
   /** Serves `session.attachment.fetch`; the index decides what may be read. */
-  async attachmentFetch(
+  async 'attachment.fetch'(
     params: SessionAttachmentFetchParams,
     { signal }: { readonly signal: AbortSignal },
   ): Promise<TransportEnvelope> {
@@ -643,6 +654,7 @@ export class HostSessionAdapter {
     workspaceId: string,
     records: readonly { readonly event: { readonly type: string; readonly seq: unknown; readonly time: unknown; readonly data: unknown } }[],
     messages: TranscriptMessage[],
+    messageTurns: WeakMap<TranscriptMessage, number>,
     signal: AbortSignal,
   ): Promise<void> {
     const wiring = this.#attachments;
@@ -685,7 +697,7 @@ export class HostSessionAdapter {
             source: candidate.source,
             ...(candidate.description ? { description: candidate.description } : {}),
             state: verdict.errorCode === ATTACHMENT_ERROR_TOO_LARGE ? 'failed' : 'unavailable',
-            errorCode: verdict.errorCode === ATTACHMENT_ERROR_TOO_LARGE ? ATTACHMENT_ERROR_TOO_LARGE : ATTACHMENT_ERROR_DENIED,
+            errorCode: verdict.errorCode,
           };
       if (verdict.ok) {
         index.remember({
@@ -703,23 +715,38 @@ export class HostSessionAdapter {
           baseline: verdict.baseline,
         });
       }
-      this.#mountAttachment(messages, candidate, attachment);
+      this.#mountAttachment(messages, messageTurns, candidate, attachment);
     }
   }
 
-  /** Mounts one attachment on the turn's last assistant message, or synthesizes one. */
-  #mountAttachment(messages: TranscriptMessage[], candidate: AttachmentCandidate, attachment: TranscriptAttachment): void {
+  /** Mounts one attachment on the same turn's last assistant message, or synthesizes one. */
+  #mountAttachment(
+    messages: TranscriptMessage[],
+    messageTurns: WeakMap<TranscriptMessage, number>,
+    candidate: AttachmentCandidate,
+    attachment: TranscriptAttachment,
+  ): void {
     let target: TranscriptMessage | undefined;
     for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      if (candidate.turn > 0) {
+        // A present event normally precedes the final assistant text. Use the
+        // declared turn rather than event order, and never borrow the previous
+        // turn's reply when this turn has no text of its own.
+        if (messageTurns.get(message) === candidate.turn) target = message;
+        continue;
+      }
+      // Compatibility for sources without turn metadata: retain the old
+      // sequence-based behaviour only for that legacy case.
       if (message.seq > candidate.seq) break;
-      if (message.role === 'assistant') target = message;
+      target = message;
     }
     if (target) {
       const merged = [...(target.attachments ?? []), attachment];
       Object.assign(target, { attachments: merged });
       return;
     }
-    messages.push({
+    const delivery: TranscriptMessage = {
       id: `delivery-${candidate.seq}-${candidate.index}`,
       seq: candidate.seq,
       role: 'assistant',
@@ -727,7 +754,11 @@ export class HostSessionAdapter {
       delivery: true,
       attachments: [attachment],
       occurredAt: candidate.occurredAt,
-    });
+    };
+    messageTurns.set(delivery, candidate.turn);
+    const insertAt = messages.findIndex((message) => message.seq > candidate.seq);
+    if (insertAt < 0) messages.push(delivery);
+    else messages.splice(insertAt, 0, delivery);
   }
 
   #workspaceRoot(workspaceId: string): string {

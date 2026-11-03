@@ -42,8 +42,10 @@ interface RawRecord {
  */
 export function extractAttachmentCandidates(records: readonly RawRecord[], options: ExtractOptions): AttachmentCandidate[] {
   const allowlist = new Set(options.toolAllowlist ?? DEFAULT_TOOL_ALLOWLIST);
-  const calls = new Map<string, string>();
+  const calls = new Map<string, { readonly path: string; readonly turn: number }>();
   const candidates: AttachmentCandidate[] = [];
+  let currentTurn = 0;
+  let nextTurn = 1;
 
   for (const record of records) {
     const event = record.event;
@@ -51,6 +53,13 @@ export function extractAttachmentCandidates(records: readonly RawRecord[], optio
     if (!Number.isSafeInteger(seq)) continue;
     if (options.minimumSeq !== undefined && seq < options.minimumSeq) continue;
     const data = isRecord(event.data) ? event.data : {};
+
+    if (event.type === 'turn/start') {
+      const declaredTurn = typeof data.turn === 'number' ? data.turn : 0;
+      currentTurn = Number.isSafeInteger(declaredTurn) && declaredTurn > 0 ? declaredTurn : nextTurn;
+      nextTurn = Math.max(nextTurn, currentTurn + 1);
+      continue;
+    }
 
     if (event.type === 'deliverables/presented') {
       const turn = Number(data.turn);
@@ -78,23 +87,23 @@ export function extractAttachmentCandidates(records: readonly RawRecord[], optio
       if (!allowlist.has(name)) continue;
       const callId = typeof data.callId === 'string' ? data.callId : undefined;
       const path = pathFromArguments(data.arguments);
-      if (callId && path) calls.set(callId, path);
+      if (callId && path) calls.set(callId, { path, turn: currentTurn });
       continue;
     }
     if (event.type === 'tool/result') {
       const message = isRecord(data.message) ? data.message : data;
       const callId = typeof message.toolCallId === 'string' ? message.toolCallId : undefined;
       if (!callId || message.isError === true) continue;
-      const path = calls.get(callId);
-      if (!path) continue;
+      const call = calls.get(callId);
+      if (!call) continue;
       calls.delete(callId);
       candidates.push(candidate({
         sessionId: options.sessionId,
         seq,
-        turn: 0,
+        turn: call.turn,
         index: 0,
         source: 'tool',
-        path,
+        path: call.path,
         occurredAt: eventTime(event.time),
       }));
     }

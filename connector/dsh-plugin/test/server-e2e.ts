@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -70,12 +70,18 @@ async function main(): Promise<void> {
         DSH_CONNECT_BOOTSTRAP_TOKEN: token,
         DSH_CONNECT_LISTEN_ADDR: `127.0.0.1:${port}`,
         DSH_CONNECT_SERVER_URL: serverUrl,
+        DSH_CONNECT_ATTACHMENT_DIR: join(temp, 'attachments'),
       },
     });
     server.stdout?.on('data', (data: Buffer) => serverLog.push(data.toString()));
     server.stderr?.on('data', (data: Buffer) => serverLog.push(data.toString()));
     const pairing = await waitForServer();
-    const host = createHost();
+    const workspaceRoot = join(temp, 'workspace');
+    await mkdir(workspaceRoot, { recursive: true });
+    const attachmentPath = join(workspaceRoot, 'diagram.png');
+    const attachmentBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+    await writeFile(attachmentPath, attachmentBytes);
+    const host = createHost(workspaceRoot, attachmentPath, attachmentBytes);
     const store = new FileStateStore(join(temp, 'connector-state.json'));
     const persist = store.setMany.bind(store);
     store.setMany = async (values) => {
@@ -99,7 +105,7 @@ async function main(): Promise<void> {
     assert.equal(runtime.pairing.state, 'waiting_desktop_authorization');
     assert.equal(runtime.pairing.publicChallenge()?.deviceId, challenge.deviceId);
     const authorizing = runtime.authorize({
-      workspaces: [{ id: 'ws-1', name: 'E2E Workspace', path: '/work/e2e' }],
+      workspaces: [{ id: 'ws-1', name: 'E2E Workspace', path: workspaceRoot }],
       scopes: ['read', 'prompt', 'cancel'],
     });
     const deviceId = challenge.deviceId;
@@ -219,11 +225,50 @@ async function main(): Promise<void> {
     );
     assert.ok(mobileSessions.sessions.some((session) => session.sessionId === 'existing-session'));
     assert.ok(mobileSessions.sessions.some((session) => session.sessionId === mobileCreated.sessionId));
-    const mobileTranscript = await mobileRequest<{ readonly messages: readonly { readonly role: string }[]; readonly turnEndSeq?: number }>(
+    const mobileTranscript = await mobileRequest<{
+      readonly messages: readonly {
+        readonly role: string;
+        readonly attachments?: readonly { readonly attachmentId: string; readonly state: string; readonly name: string }[];
+      }[];
+      readonly turnEndSeq?: number;
+    }>(
       `/v1/mobile/sessions/existing-session/messages?deviceId=${deviceId}&workspaceId=ws-1`, phone.accessToken,
     );
     assert.deepEqual(mobileTranscript.messages.map((message) => message.role), ['user', 'assistant']);
-    assert.equal(mobileTranscript.turnEndSeq, 3);
+    assert.equal(mobileTranscript.turnEndSeq, 5);
+    const declared = mobileTranscript.messages[1]?.attachments?.[0];
+    assert.equal(declared?.name, 'diagram.png');
+    assert.equal(declared?.state, 'known');
+    assert.ok(declared, 'present file must be projected into the mobile transcript');
+
+    const mobileEvents = new EventClient(
+      `${serverUrl.replace('http:', 'ws:')}/v1/mobile/events/ws?deviceId=${deviceId}&workspaceId=ws-1&sessionId=existing-session`,
+      phone.accessToken,
+    );
+    await mobileEvents.open();
+    let downloaded: Uint8Array | undefined;
+    for (let attempt = 0; attempt < 100 && !downloaded; attempt += 1) {
+      const response = await fetch(`${serverUrl}/v1/mobile/attachments/${declared.attachmentId}`, {
+        headers: { Authorization: `Bearer ${phone.accessToken}` },
+      });
+      const payload = new Uint8Array(await response.arrayBuffer());
+      if (response.status === 200) {
+        downloaded = payload;
+        break;
+      }
+      if (response.status !== 202) throw new Error(`attachment download failed: ${response.status} ${new TextDecoder().decode(payload)}`);
+      await delay(50);
+    }
+    if (!downloaded) {
+      const debugTranscript = await mobileRequest<{
+        readonly messages: readonly { readonly attachments?: readonly unknown[] }[];
+      }>(`/v1/mobile/sessions/existing-session/messages?deviceId=${deviceId}&workspaceId=ws-1`, phone.accessToken);
+      serverLog.push(`attachment did not become ready; reads=${host.attachmentReads}; state=${JSON.stringify(debugTranscript.messages[1]?.attachments)}\n`);
+    }
+    assert.deepEqual(downloaded, attachmentBytes, 'mobile must receive the exact Host-read bytes');
+    assert.equal(host.attachmentReads, 1, 'concurrent pending downloads must share one Host read');
+    await mobileEvents.waitFor((message) => message.kind === 'attachment.ready');
+    mobileEvents.close();
     const mobilePrompt = await mobileRequest<{ readonly status: string }>(
       `/v1/mobile/sessions/${mobileCreated.sessionId}/prompt`, phone.accessToken,
       {
@@ -256,6 +301,7 @@ async function main(): Promise<void> {
         'device token reconnect',
         'mobile access request + desktop approval',
         'mobile workspaces/sessions/create/transcript/prompt',
+        'present attachment → Host bytes → upload → mobile download + attachment.ready',
         'offline fast failure',
       ],
       host: 'controlled Host simulation; real DSH smoke test remains separate',
@@ -341,22 +387,49 @@ async function waitForServer(): Promise<{ readonly code: string }> {
 interface HostFixture {
   createCalls: number;
   promptCalls: number;
+  attachmentReads: number;
   followAborted(sessionId: string): boolean;
   readonly ctx: RuntimeHostContext;
 }
 
-function createHost(): HostFixture {
+function createHost(workspaceRoot: string, attachmentPath: string, attachmentBytes: Uint8Array): HostFixture {
   const workspaces: HostWorkspace[] = [{
-    id: 'ws-1', path: '/work/e2e', title: 'E2E Workspace', sessionIds: ['existing-session'],
+    id: 'ws-1', path: workspaceRoot, title: 'E2E Workspace', sessionIds: ['existing-session'],
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
   }];
   const follows = new Map<string, FollowQueue>();
   const host: HostFixture = {
     createCalls: 0,
     promptCalls: 0,
+    attachmentReads: 0,
     followAborted: (sessionId) => follows.get(sessionId)?.signal.aborted ?? false,
     ctx: {
       workspaceRegistry: { list: () => workspaces },
+      workspaceFiles: {
+        async readBytes(scope, path, options, signal) {
+          host.attachmentReads += 1;
+          try {
+            assert.deepEqual(scope, { sessionId: 'existing-session', workspaceRoot });
+            assert.equal(path, await realpath(attachmentPath));
+            assert.equal(signal.aborted, false);
+            // Match DSH rc.5: one ranged window is 2 MiB, while a complete file
+            // may be 32 MiB. This catches an invalid 20 MiB window request.
+            if (options.range && (options.range.length ?? 2_097_152) > 2_097_152) {
+              throw Object.assign(new Error('window too large'), { code: 'workspace-file/too-large' });
+            }
+            if (!options.range && attachmentBytes.byteLength > 33_554_432) {
+              throw Object.assign(new Error('file too large'), { code: 'workspace-file/too-large' });
+            }
+            return { data: attachmentBytes, offset: 0, eof: true, bytes: attachmentBytes.byteLength };
+          } catch (error) {
+            serverLog.push(`attachment Host read failed: ${String(error)}\n`);
+            throw error;
+          }
+        },
+        async stat(_scope, path) {
+          return { path, bytes: attachmentBytes.byteLength };
+        },
+      },
       sessionController: {
         async list() {
           return {
@@ -379,8 +452,10 @@ function createHost(): HostFixture {
           return {
             records: [
               { type: 'event' as const, event: { type: 'user/message', seq: 1, time: 1_000, data: { id: 'e2e-user', role: 'user', content: [{ type: 'text', text: 'existing question' }] } } },
-              { type: 'event' as const, event: { type: 'assistant/message', seq: 2, time: 2_000, data: { message: { id: 'e2e-assistant', content: [{ type: 'text', text: 'existing answer' }] } } } },
-              { type: 'event' as const, event: { type: 'turn/end', seq: 3, time: 3_000, data: { reason: 'completed' } } },
+              { type: 'event' as const, event: { type: 'turn/start', seq: 2, time: 1_500, data: { turn: 1 } } },
+              { type: 'event' as const, event: { type: 'deliverables/presented', seq: 3, time: 1_750, data: { turn: 1, callId: 'present-1', files: [{ path: attachmentPath, description: 'E2E diagram' }] } } },
+              { type: 'event' as const, event: { type: 'assistant/message', seq: 4, time: 2_000, data: { message: { id: 'e2e-assistant', content: [{ type: 'text', text: 'existing answer' }] } } } },
+              { type: 'event' as const, event: { type: 'turn/end', seq: 5, time: 3_000, data: { reason: 'completed' } } },
             ],
             hasMore: false,
           };

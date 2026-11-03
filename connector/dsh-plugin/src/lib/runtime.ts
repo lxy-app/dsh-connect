@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import type { RuntimeHostContext } from '../host-api.js';
+import type { RuntimeHostContext, WorkspaceFilesService } from '../host-api.js';
 import type { ConnectorDecisionInput, ConnectorMobileAccessList, Logger, UnknownRecord, WorkspaceGrants, WorkspaceInfo } from '../types.js';
 import { isRecord } from '../types.js';
 import { CommandHandler } from './command-handler.js';
 import type { FileStateStore } from './file-state-store.js';
 import { HostSessionAdapter } from './host-session-adapter.js';
 import type { AttachmentWiring } from './host-session-adapter.js';
+import type { AttachmentByteReader } from './attachment-fetch.js';
 import { InteractionBridge } from './interaction-bridge.js';
 import { PairingController } from './pairing.js';
 import { protocolError } from './request-cache.js';
@@ -241,19 +242,7 @@ export class ConnectorRuntime extends EventEmitter {
     const maxBytes = attachmentMaxBytes();
     return {
       maxBytes,
-      readBytes: async ({ sessionId, workspaceRoot, path, maxBytes: limit, signal }) => {
-        const result = await workspaceFiles.readBytes(
-          { sessionId, workspaceRoot },
-          path,
-          { range: { offset: 0, length: limit } },
-          signal,
-        );
-        if (!result.eof) {
-          const tooLarge = new Error('The declared file exceeds the attachment size limit');
-          throw Object.assign(tooLarge, { code: 'attachment_too_large', retryable: false });
-        }
-        return result.data;
-      },
+      readBytes: hostAttachmentByteReader(workspaceFiles),
       upload: async ({ attachmentId, sessionId, bytes, sha256, signal }) => {
         await this.#uploadAttachment({ attachmentId, sessionId, bytes, sha256, signal });
       },
@@ -320,6 +309,29 @@ export class ConnectorRuntime extends EventEmitter {
       interactions: this.#interactions,
     });
   }
+}
+
+/**
+ * Reads a complete file through DSH's bounded `maxFileBytes` path. A ranged
+ * read is capped by the much smaller `maxBytes` window (2 MiB by default), so
+ * using the Connector's 20 MiB attachment limit as a window rejects even small
+ * images before any bytes are returned.
+ */
+export function hostAttachmentByteReader(workspaceFiles: WorkspaceFilesService): AttachmentByteReader {
+  return async ({ sessionId, workspaceRoot, path, signal }) => {
+    try {
+      const result = await workspaceFiles.readBytes({ sessionId, workspaceRoot }, path, {}, signal);
+      if (!result.eof) {
+        throw protocolError('attachment_failed', 'Host returned an incomplete attachment', true);
+      }
+      return result.data;
+    } catch (error) {
+      if (isRecord(error) && error.code === 'workspace-file/too-large') {
+        throw protocolError('attachment_too_large', 'The Host complete-file limit rejected this attachment');
+      }
+      throw error;
+    }
+  };
 }
 
 function attachmentMaxBytes(): number {

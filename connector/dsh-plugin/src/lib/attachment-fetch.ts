@@ -121,8 +121,19 @@ export class AttachmentFetcher {
         signal,
       });
     } catch (error) {
-      if (errorCodeOf(error) === ATTACHMENT_ERROR_TOO_LARGE) throw error;
-      throw protocolError(ATTACHMENT_ERROR_UNAVAILABLE, 'The desktop could not read the declared file');
+      const code = errorCodeOf(error);
+      if (code === ATTACHMENT_ERROR_TOO_LARGE || code === ATTACHMENT_ERROR_UNAVAILABLE
+        || code === ATTACHMENT_ERROR_CHANGED || code === ATTACHMENT_ERROR_DENIED
+        || code === ATTACHMENT_ERROR_FAILED) {
+        throw error;
+      }
+      if (code === 'workspace-file/too-large') {
+        throw protocolError(ATTACHMENT_ERROR_TOO_LARGE, 'The Host file limit rejected this attachment');
+      }
+      if (code?.startsWith('workspace-file/')) {
+        throw protocolError(ATTACHMENT_ERROR_UNAVAILABLE, 'The desktop could not read the declared file');
+      }
+      throw protocolError(ATTACHMENT_ERROR_FAILED, 'The desktop read failed; try the attachment again', true);
     }
     if (data.byteLength > this.#maxBytes) {
       throw protocolError(ATTACHMENT_ERROR_TOO_LARGE, 'The declared file exceeds the attachment size limit');
