@@ -14,3 +14,11 @@ test('Desktop panel can still change its own grants after pairing', async () => 
   // pair.authorize. Losing the call would silently make grants read-only again.
   assert.match(source, /pair\.updateGrants/);
 });
+
+test('Background status polling does not erase authorization errors', async () => {
+  const source = await readFile(new URL('../../dist/client.js', import.meta.url), 'utf8');
+  const refresh = source.split('const refresh = useCallback')[1]?.split('useEffect')[0];
+  assert.ok(refresh, 'refresh callback must remain in the client bundle');
+  assert.doesNotMatch(refresh, /setError\(''\)/);
+  assert.match(source, /DSH Connect authorization submitted/);
+});

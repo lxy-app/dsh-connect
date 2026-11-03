@@ -19,7 +19,7 @@ import { ConnectorRuntime } from './lib/runtime.js';
 import { normalizeServerUrl, normalizeSettings } from './lib/settings.js';
 
 export const name = 'dsh-connect-connector';
-export const inject = ['sessionController', 'workspaceRegistry', 'connection', 'webServer'];
+export const inject = ['sessionController', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles'];
 
 const VERSION = '0.1.2';
 
@@ -154,7 +154,11 @@ export function apply(ctx: HostContext): void {
     async authorize(grants) {
       await ready;
       if (!runtime) throw protocolError('invalid_pairing_state', 'Start desktop pairing first');
-      return runtime.authorize(grants);
+      const deviceId = runtime.pairing.publicChallenge()?.deviceId ?? 'unknown';
+      logger.info?.(`DSH Connect pair.authorize started device=${deviceId} workspaceCount=${grants.workspaces.length} scopeCount=${grants.scopes.length}`);
+      const result = await runtime.authorize(grants);
+      logger.info?.(`DSH Connect pair.authorize completed device=${result.deviceId}`);
+      return result;
     },
 
     cancelPairing() {
@@ -245,6 +249,7 @@ export function apply(ctx: HostContext): void {
           default: return failure('gateway/bad-request', `Unknown Connector endpoint: ${endpoint}`);
         }
       } catch (error) {
+        logger.warn?.(`DSH Connect RPC ${endpoint} failed code=${errorCode(error, 'gateway/internal')}: ${errorMessage(error, String(error))}`);
         return failure(errorCode(error, 'gateway/internal'), errorMessage(error, String(error)));
       }
     });

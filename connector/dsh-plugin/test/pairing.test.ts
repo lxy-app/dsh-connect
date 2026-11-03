@@ -24,7 +24,8 @@ class MemoryStore implements PairingStore {
   }
 
   async set(key: string, value: unknown): Promise<void> {
-    this.values.set(key, value);
+    if (value === null || value === undefined) this.values.delete(key);
+    else this.values.set(key, value);
   }
 }
 
@@ -46,6 +47,7 @@ test('pairing requires explicit desktop authorization before a credential is sto
 
   transport.emit('message', {
     type: 'pair.challenge',
+    requestId: transport.sent[0]?.requestId,
     deviceId: 'dev-1',
     fingerprint: 'AA:BB:CC',
     pairingToken: 'pairing-secret',
@@ -68,6 +70,7 @@ test('pairing requires explicit desktop authorization before a credential is sto
   assert.equal(transport.sent[1]?.pairingToken, 'pairing-secret');
   transport.emit('message', {
     type: 'pair.complete',
+    requestId: transport.sent[1]?.requestId,
     deviceId: 'dev-1',
     deviceToken: 'device-secret',
     fingerprint: 'AA:BB:CC',
@@ -89,7 +92,7 @@ test('an empty workspace grant is rejected on the desktop', async () => {
   const { transport, pairing } = setup();
   const starting = pairing.startPairing({ pairingCode: 'DC-TEST', deviceName: 'MacBook' });
   transport.emit('message', {
-    type: 'pair.challenge', deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
+    type: 'pair.challenge', requestId: transport.sent[0]?.requestId, deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
   });
   await starting;
   await assert.rejects(pairing.authorize({ workspaces: [], scopes: readOnlyScopes }), {
@@ -101,7 +104,7 @@ test('a pending challenge is invalidated when its Connector connection drops', a
   const { transport, pairing } = setup();
   const starting = pairing.startPairing({ pairingCode: 'DC-TEST', deviceName: 'MacBook' });
   transport.emit('message', {
-    type: 'pair.challenge', deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
+    type: 'pair.challenge', requestId: transport.sent[0]?.requestId, deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
   });
   await starting;
   transport.emit('disconnected', { code: 1006 });
@@ -117,7 +120,7 @@ test('a pending challenge is invalidated when its Connector connection drops', a
 test('Server pairing failures do not issue a device identity', async () => {
   const { transport, store, pairing } = setup();
   const starting = pairing.startPairing({ pairingCode: 'DC-USED', deviceName: 'MacBook' });
-  transport.emit('message', { type: 'pair.error', error: { code: 'code_used', message: 'Code used' } });
+  transport.emit('message', { type: 'pair.error', requestId: transport.sent[0]?.requestId, error: { code: 'code_used', message: 'Code used' } });
   await assert.rejects(starting, { code: 'code_used' });
   assert.equal(pairing.state, 'pairing_failed');
   assert.equal(store.values.has('deviceToken'), false);
@@ -134,7 +137,7 @@ test('a delayed challenge write cannot resurrect after disconnect', async () => 
   };
   const starting = pairing.startPairing({ pairingCode: 'DC-TEST', deviceName: 'MacBook' });
   transport.emit('message', {
-    type: 'pair.challenge', deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
+    type: 'pair.challenge', requestId: transport.sent[0]?.requestId, deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
   });
   await new Promise<void>((resolve) => setImmediate(resolve));
   transport.emit('disconnected', { code: 1006 });
@@ -145,4 +148,50 @@ test('a delayed challenge write cannot resurrect after disconnect', async () => 
   assert.equal(pairing.state, 'disconnected');
   assert.equal(pairing.challenge, null);
   assert.equal(pairing.publicChallenge(), null);
+});
+
+test('authorization ignores a completion belonging to another request', async () => {
+  const { transport, store, pairing } = setup();
+  const starting = pairing.startPairing({ pairingCode: 'DC-TEST', deviceName: 'MacBook' });
+  transport.emit('message', {
+    type: 'pair.challenge', requestId: transport.sent[0]?.requestId, deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
+  });
+  await starting;
+  const authorizing = pairing.authorize({ workspaces: [{ id: 'ws-1' }], scopes: readOnlyScopes });
+  transport.emit('message', {
+    type: 'pair.complete', requestId: 'unrelated-request', deviceId: 'dev-1', deviceToken: 'wrong-secret', fingerprint: 'AA:BB:CC',
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(pairing.state, 'waiting_desktop_authorization');
+  assert.equal(store.values.has('deviceToken'), false);
+  transport.emit('message', {
+    type: 'pair.complete', requestId: transport.sent[1]?.requestId, deviceId: 'dev-1', deviceToken: 'device-secret', fingerprint: 'AA:BB:CC',
+  });
+  await authorizing;
+  assert.equal(store.values.get('deviceToken'), 'device-secret');
+});
+
+test('authorization times out and a late completion cannot persist credentials', async () => {
+  const transport = new FakeTransport();
+  const store = new MemoryStore();
+  const pairing = new PairingController({
+    transport, store, connectorVersion: '0.1.0', responseTimeoutMs: 20,
+  });
+  const starting = pairing.startPairing({ pairingCode: 'DC-TEST', deviceName: 'MacBook' });
+  transport.emit('message', {
+    type: 'pair.challenge', requestId: transport.sent[0]?.requestId, deviceId: 'dev-1', fingerprint: 'AA:BB:CC', pairingToken: 'secret',
+  });
+  await starting;
+  const authorizing = pairing.authorize({ workspaces: [{ id: 'ws-1' }], scopes: readOnlyScopes });
+  await assert.rejects(authorizing, { code: 'pairing_response_timeout' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(pairing.state, 'pairing_failed');
+  assert.equal(pairing.publicChallenge(), null);
+  assert.equal(store.values.has('pendingPairing'), false);
+  transport.emit('message', {
+    type: 'pair.complete', requestId: transport.sent[1]?.requestId, deviceId: 'dev-1', deviceToken: 'late-secret', fingerprint: 'AA:BB:CC',
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(store.values.has('deviceToken'), false);
+  assert.equal(pairing.state, 'pairing_failed');
 });

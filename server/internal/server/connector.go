@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -70,9 +71,15 @@ func (s *Server) handleConnector(w http.ResponseWriter, r *http.Request) {
 		done:          make(chan struct{}),
 	}
 	if authenticated && !s.hub.Register(c) {
+		log.Printf("connector connection rejected deviceId=%s reason=server_shutting_down", deviceID)
 		_ = connection.Close(websocket.StatusGoingAway, "server shutting down")
 		return
 	}
+	authMode := "pairing"
+	if authenticated {
+		authMode = "device_token"
+	}
+	log.Printf("connector connected authMode=%s deviceId=%s", authMode, deviceID)
 	go c.heartbeat()
 	c.readLoop()
 }
@@ -184,6 +191,7 @@ func (c *connectorConn) handlePairStart(data []byte) bool {
 		c.sendError(request.RequestID, protocol.NewError(protocol.CodeInvalidRequest, "invalid pair.start fields", false))
 		return false
 	}
+	log.Printf("connector pair.start received requestId=%q connectorVersion=%q", request.RequestID, request.ConnectorVersion)
 	now := nowUTC()
 	deviceID, err := randomToken("dev_")
 	if err != nil {
@@ -212,9 +220,14 @@ func (c *connectorConn) handlePairStart(data []byte) bool {
 		PairingTokenHash: store.HashToken(pairingToken),
 		PairingExpiresAt: &expiresAt,
 	}
-	if err := c.server.store.BeginPairing(context.Background(), store.HashToken(request.PairingCode), record); err != nil {
-		c.sendError(request.RequestID, pairingStoreError(err))
-		c.server.audit(store.AuditEntry{OccurredAt: now, Actor: "connector", Action: "pair.start", RequestID: request.RequestID, DeviceID: deviceID, Result: "error", ErrorCode: pairingStoreError(err).Code})
+	pairingContext, cancelPairing := context.WithTimeout(context.Background(), c.server.config.CommandTimeout)
+	err = c.server.store.BeginPairing(pairingContext, store.HashToken(request.PairingCode), record)
+	cancelPairing()
+	if err != nil {
+		commandError := pairingStoreError(err)
+		log.Printf("connector pair.start failed requestId=%q deviceId=%s errorCode=%s: %v", request.RequestID, deviceID, commandError.Code, err)
+		c.sendError(request.RequestID, commandError)
+		c.server.audit(store.AuditEntry{OccurredAt: now, Actor: "connector", Action: "pair.start", RequestID: request.RequestID, DeviceID: deviceID, Result: "error", ErrorCode: commandError.Code})
 		return false
 	}
 	c.pendingDevice = deviceID
@@ -223,8 +236,10 @@ func (c *connectorConn) handlePairStart(data []byte) bool {
 		DeviceID: deviceID, Fingerprint: print, PairingToken: pairingToken, ExpiresAt: expiresAt,
 	}
 	if err := c.writeJSON(context.Background(), challenge); err != nil {
+		log.Printf("connector pair.start challenge write failed requestId=%q deviceId=%s: %v", request.RequestID, deviceID, err)
 		return false
 	}
+	log.Printf("connector pair.start waiting_desktop_authorization requestId=%q deviceId=%s expiresAt=%s", request.RequestID, deviceID, expiresAt.Format(time.RFC3339))
 	c.server.audit(store.AuditEntry{OccurredAt: now, Actor: "connector", Action: "pair.start", RequestID: request.RequestID, DeviceID: deviceID, Result: "waiting_desktop_authorization"})
 	return true
 }
@@ -235,21 +250,31 @@ func (c *connectorConn) handlePairAuthorize(data []byte) bool {
 		c.sendError(request.RequestID, protocol.NewError(protocol.CodeInvalidRequest, "invalid pair.authorize fields or grants", false))
 		return false
 	}
+	log.Printf("connector pair.authorize received requestId=%q deviceId=%s workspaceCount=%d scopeCount=%d", request.RequestID, c.pendingDevice, len(request.Workspaces), len(request.Scopes))
 	deviceToken, err := randomToken("dct_")
 	if err != nil {
 		c.sendError(request.RequestID, protocol.NewError(protocol.CodeInternalError, "could not generate device token", true))
 		return false
 	}
 	now := nowUTC()
-	record, err := c.server.store.AuthorizePairing(context.Background(), c.pendingDevice, store.HashToken(request.PairingToken), store.HashToken(deviceToken), request.Workspaces, request.Scopes, now)
+	authorizeContext, cancelAuthorize := context.WithTimeout(context.Background(), c.server.config.CommandTimeout)
+	record, err := c.server.store.AuthorizePairing(authorizeContext, c.pendingDevice, store.HashToken(request.PairingToken), store.HashToken(deviceToken), request.Workspaces, request.Scopes, now)
+	cancelAuthorize()
 	if err != nil {
-		c.sendError(request.RequestID, pairingStoreError(err))
+		commandError := pairingStoreError(err)
+		log.Printf("connector pair.authorize store failed requestId=%q deviceId=%s errorCode=%s: %v", request.RequestID, c.pendingDevice, commandError.Code, err)
+		c.sendError(request.RequestID, commandError)
+		c.server.audit(store.AuditEntry{OccurredAt: now, Actor: "connector", Action: "pair.authorize", RequestID: request.RequestID, DeviceID: c.pendingDevice, Result: "error", ErrorCode: commandError.Code})
 		return false
 	}
 	c.deviceID = c.pendingDevice
 	c.pendingDevice = ""
 	c.authenticated = true
 	if !c.server.hub.Register(c) {
+		commandError := protocol.NewError(protocol.CodeInternalError, "Server is shutting down; start pairing again with a new code", true)
+		log.Printf("connector pair.authorize hub registration failed requestId=%q deviceId=%s", request.RequestID, c.deviceID)
+		c.sendError(request.RequestID, commandError)
+		c.server.audit(store.AuditEntry{OccurredAt: now, Actor: "connector", Action: "pair.authorize", RequestID: request.RequestID, DeviceID: c.deviceID, Result: "error", ErrorCode: commandError.Code})
 		return false
 	}
 	complete := protocol.PairComplete{
@@ -257,8 +282,10 @@ func (c *connectorConn) handlePairAuthorize(data []byte) bool {
 		DeviceID: record.Device.DeviceID, DeviceToken: deviceToken, Fingerprint: record.Device.Fingerprint,
 	}
 	if err := c.writeJSON(context.Background(), complete); err != nil {
+		log.Printf("connector pair.authorize complete write failed requestId=%q deviceId=%s: %v", request.RequestID, c.deviceID, err)
 		return false
 	}
+	log.Printf("connector pair.authorize completed requestId=%q deviceId=%s", request.RequestID, c.deviceID)
 	c.server.audit(store.AuditEntry{OccurredAt: now, Actor: "connector", Action: "pair.authorize", RequestID: request.RequestID, DeviceID: c.deviceID, Result: "success"})
 	return true
 }
@@ -273,10 +300,12 @@ func pairingStoreError(err error) protocol.Error {
 		return protocol.NewError(protocol.CodePairingChallengeExpired, "pairing challenge has expired", true)
 	case errors.Is(err, store.ErrPairingAlreadyCompleted):
 		return protocol.NewError(protocol.CodePairingAlreadyCompleted, "pairing has already been completed", false)
-	case errors.Is(err, store.ErrPairingChallengeInvalid):
+	case errors.Is(err, store.ErrPairingChallengeInvalid), errors.Is(err, store.ErrDeviceNotFound):
 		return protocol.NewError(protocol.CodePairingChallengeInvalid, "pairing token does not match this connection", false)
-	default:
+	case errors.Is(err, store.ErrPairingCodeInvalid):
 		return protocol.NewError(protocol.CodePairingCodeInvalid, "pairing code is invalid", false)
+	default:
+		return protocol.NewError(protocol.CodeInternalError, "Server could not complete pairing", true)
 	}
 }
 
@@ -368,9 +397,12 @@ func (c *connectorConn) writeJSON(ctx context.Context, value any) error {
 }
 
 func (c *connectorConn) sendError(requestID string, commandError protocol.Error) {
-	_ = c.writeJSON(context.Background(), protocol.ErrorEnvelope{
+	log.Printf("connector error requestId=%q deviceId=%s pendingDeviceId=%s errorCode=%s", requestID, c.deviceID, c.pendingDevice, commandError.Code)
+	if err := c.writeJSON(context.Background(), protocol.ErrorEnvelope{
 		V: protocol.Version, Type: protocol.TypeError, RequestID: requestID, Error: commandError,
-	})
+	}); err != nil {
+		log.Printf("connector error write failed requestId=%q deviceId=%s errorCode=%s: %v", requestID, c.deviceID, commandError.Code, err)
+	}
 }
 
 func (c *connectorConn) heartbeat() {

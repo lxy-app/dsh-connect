@@ -121,6 +121,10 @@ async function main(): Promise<void> {
       await delay(10);
     }
     await authorizing;
+    const pairingLogs = serverLog.join('');
+    assert.match(pairingLogs, /connector pair\.authorize received/);
+    assert.match(pairingLogs, /connector pair\.authorize completed/);
+    assert.equal(pairingLogs.includes(pairing.code), false, 'server logs must not contain the pairing code');
     assert.ok(listed, 'session.list must complete after pairing');
     assert.equal(listed.sessions[0]?.sessionId, 'existing-session');
     const devices = await request<DevicesResponse>('/v1/devices');
@@ -292,7 +296,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       ok: true,
       coverage: [
-        'pair.start/challenge/authorize/complete',
+        'pair.start/challenge/authorize/complete + redacted stage logs',
         'session.list/create/page/prompt/follow/unfollow/cancel',
         'immediate command after pair.complete',
         'durable events and assistant stream',

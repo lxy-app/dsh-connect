@@ -251,7 +251,6 @@ window.__ModuleLoader__.load({
           }
           return next;
         });
-        setError('');
         if (!initialized.current) {
           setServerUrl(nextStatus.serverUrl ?? 'http://127.0.0.1:8787');
           setDeviceName(nextStatus.deviceName ?? 'DSH Desktop');
@@ -274,6 +273,7 @@ window.__ModuleLoader__.load({
         try {
           await action();
         } catch (reason) {
+          console.warn(`DSH Connect ${name} failed`, reason);
           setError(describeError(reason));
           setBusy('');
           return;
@@ -310,6 +310,7 @@ window.__ModuleLoader__.load({
         const actions = SCOPE_OPTIONS.map(([scope]) => scope).filter((scope) => scopes[scope]);
         if (!grants.length) { setError(t('noWorkspace')); return; }
         if (!actions.length) { setError(t('noScope')); return; }
+        console.info('DSH Connect authorization submitted', { workspaceCount: grants.length, scopes: actions });
         void run('authorize', () => call(ctx, 'pair.authorize', { workspaces: grants, scopes: actions }), t('paired'));
       };
       const toggleWorkspace = (id: string): void => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -533,6 +534,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'dsc-section' }, t('scopes')),
           h('div', { className: 'dsc-scopes' }, SCOPE_OPTIONS.map(([scope]) =>
             h('label', { className: 'dsc-check', key: scope }, h('input', { type: 'checkbox', checked: scopes[scope], onChange: () => toggleScope(scope) }), h('span', { className: 'dsc-check-title' }, scopeLabel(t, scope))))),
+          error && h('div', { className: 'dsc-error', role: 'alert' }, error),
           h('div', { className: 'dsc-warning' }, t('warning')),
           h('div', { className: 'dsc-actions' },
             h(Button, { disabled: Boolean(busy), onClick: () => void run('cancel', () => call(ctx, 'pair.cancel'), t('cancelled')) }, t('cancel')),
@@ -554,7 +556,7 @@ window.__ModuleLoader__.load({
 
       return h('div', { className: 'dsc-root' }, h('main', { className: 'dsc-wrap' },
         h('header', { className: 'dsc-brand' }, h('div', { className: 'dsc-logo' }, h(Icon)), h('div', null, h('div', { className: 'dsc-title' }, t('title')), h('div', { className: 'dsc-sub' }, t('subtitle')))),
-        error && h('div', { className: 'dsc-error', role: 'alert' }, error),
+        error && !status?.challenge && h('div', { className: 'dsc-error', role: 'alert' }, error),
         notice && h('div', { className: 'dsc-notice', role: 'status' }, notice),
         content,
         h('div', { className: 'dsc-foot' }, t('outbound'))));

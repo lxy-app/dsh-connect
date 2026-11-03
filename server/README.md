@@ -93,6 +93,8 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | GET WS | `/v1/events/ws` | follow 并中继事件 |
 | GET WS | `/v1/connector/ws` | Connector 配对、认证、命令/事件单连接（唯一免管理鉴权通道） |
 
+Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start received/waiting_desktop_authorization`、`pair.authorize received/completed` 及错误码日志。日志只包含 requestId、deviceId、数量与错误等白名单字段，不记录配对码、token/hash、Authorization、原始帧或工作区路径。配对数据库操作受 `CommandTimeout`（默认 15 秒）约束，内部错误返回 `internal_error`，不会误报为配对码无效。
+
 `session.create` 与 `session.prompt` 的 `requestId` 都是持久幂等键，由 PostgreSQL 唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。两类命令必须使用不同 requestId。
 
 ## 手机配对 API

@@ -263,6 +263,33 @@ func TestWaitingDesktopAuthorizationControlRequestDoesNotDropChallenge(t *testin
 	}
 }
 
+func TestPairingAuthorizeReportsHubShutdown(t *testing.T) {
+	environment := newTestEnvironment(t)
+	code := createPairingCode(t, environment)
+	connection := dialWebSocket(t, environment.http.URL, "/v1/connector/ws", "")
+	defer connection.Close(websocket.StatusNormalClosure, "test complete")
+	writeTestFrame(t, connection, protocol.PairStart{
+		V: 1, Type: protocol.TypePairStart, RequestID: "shutdown-start", PairingCode: code.Code, DeviceName: "Shutdown", ConnectorVersion: "0.1.0",
+	})
+	challenge := readTestFrame[protocol.PairChallenge](t, connection)
+	environment.server.hub.CloseAll()
+	writeTestFrame(t, connection, protocol.PairAuthorize{
+		V: 1, Type: protocol.TypePairAuthorize, RequestID: "shutdown-authorize", PairingToken: challenge.PairingToken,
+		Workspaces: []protocol.Workspace{{ID: "ws-1", Name: "Project", Path: "/tmp/project"}}, Scopes: []string{"read"},
+	})
+	response := readTestFrame[protocol.ErrorEnvelope](t, connection)
+	if response.Error.Code != protocol.CodeInternalError || !response.Error.Retryable {
+		t.Fatalf("hub shutdown authorization error code=%q retryable=%t", response.Error.Code, response.Error.Retryable)
+	}
+}
+
+func TestPairingStoreErrorDoesNotMisclassifyInternalFailures(t *testing.T) {
+	commandError := pairingStoreError(fmt.Errorf("database unavailable"))
+	if commandError.Code != protocol.CodeInternalError || !commandError.Retryable {
+		t.Fatalf("internal pairing error code=%q retryable=%t", commandError.Code, commandError.Retryable)
+	}
+}
+
 func TestSessionListRoutesOverAuthorizedConnector(t *testing.T) {
 	environment := newTestEnvironment(t)
 	connector := pairConnector(t, environment)

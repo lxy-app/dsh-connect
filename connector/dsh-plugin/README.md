@@ -42,7 +42,9 @@
 
 正式面板通过 `settings.update` 保存 Server 地址和桌面名称。未保存界面配置时，`DSH_CONNECT_URL`（兼容别名 `DSH_CONNECT_SERVER_URL`）仅作为初始连接地址；用户在界面保存后，持久配置优先于环境变量。更换已配对 Server 必须明确确认并重新配对，旧设备令牌不会发送到新 Server。
 
-若配对在 `pair.complete` 传输或本地凭据落盘前中断，Server 不会恢复明文设备令牌。面板会使旧 challenge 失效；请生成新配对码重配，不要复用旧指纹或旧 challenge。
+若配对在 `pair.complete` 传输或本地凭据落盘前中断，Server 不会恢复明文设备令牌。面板会使旧 challenge 失效；请生成新配对码重配，不要复用旧指纹或旧 challenge。`pair.start` 和 `pair.authorize` 发出后最多等待 15 秒；超时或收到不匹配 requestId 的回包不会写入设备凭据，超时后同样必须使用新配对码重试。
+
+Host 注入必须包含 `workspaceFiles`：授权上线前会初始化附件读取能力，在 Cordis 中读取未声明注入的服务会直接失败，导致 `pair.authorize` 尚未发往 Server 就终止。
 
 ## 插件包
 

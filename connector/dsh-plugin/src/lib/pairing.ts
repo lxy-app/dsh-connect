@@ -34,6 +34,8 @@ export interface PairingControllerOptions {
   readonly transport: PairingTransport;
   readonly store: PairingStore;
   readonly connectorVersion: string;
+  /** Maximum wait for a Server frame after pair.start or pair.authorize is sent. */
+  readonly responseTimeoutMs?: number;
 }
 
 export interface StartPairingInput {
@@ -48,24 +50,26 @@ interface Deferred<T> {
 }
 
 type PendingPairing =
-  | { readonly kind: 'start'; readonly deferred: Deferred<PublicChallenge> }
-  | { readonly kind: 'authorize'; readonly deferred: Deferred<PairingCompletion> };
+  | { readonly kind: 'start'; readonly requestId: string; readonly deferred: Deferred<PublicChallenge> }
+  | { readonly kind: 'authorize'; readonly requestId: string; readonly deferred: Deferred<PairingCompletion> };
 
 /** Explicit two-step desktop pairing; no Host read occurs in this controller. */
 export class PairingController extends EventEmitter {
   readonly #transport: PairingTransport;
   readonly #store: PairingStore;
   readonly #connectorVersion: string;
+  readonly #responseTimeoutMs: number;
   #state: PairingState = 'disconnected';
   #challenge: PairingChallenge | null = null;
   #pending: PendingPairing | null = null;
   #attempt = 0;
 
-  constructor({ transport, store, connectorVersion }: PairingControllerOptions) {
+  constructor({ transport, store, connectorVersion, responseTimeoutMs = 15_000 }: PairingControllerOptions) {
     super();
     this.#transport = transport;
     this.#store = store;
     this.#connectorVersion = connectorVersion;
+    this.#responseTimeoutMs = responseTimeoutMs;
     transport.on('message', (message: unknown) => void this.#handle(message));
     transport.on('open', () => {
       if (this.#state === 'offline') this.#setState('connected');
@@ -106,7 +110,7 @@ export class PairingController extends EventEmitter {
     const requestId = randomUUID();
     const deferred = makeDeferred<PublicChallenge>();
     this.#attempt += 1;
-    const pending: PendingPairing = { kind: 'start', deferred };
+    const pending: PendingPairing = { kind: 'start', requestId, deferred };
     this.#pending = pending;
     this.#setState('waiting_connector');
     try {
@@ -123,7 +127,7 @@ export class PairingController extends EventEmitter {
       this.#setState('pairing_failed');
       throw error;
     }
-    return deferred.promise;
+    return this.#waitForResponse(pending, deferred.promise);
   }
 
   async authorize({ workspaces, scopes }: WorkspaceGrants): Promise<PairingCompletion> {
@@ -135,14 +139,15 @@ export class PairingController extends EventEmitter {
       throw protocolError('invalid_workspace_grant', 'Select at least one workspace before connecting');
     }
     const deferred = makeDeferred<PairingCompletion>();
+    const requestId = randomUUID();
     this.#attempt += 1;
-    const pending: PendingPairing = { kind: 'authorize', deferred };
+    const pending: PendingPairing = { kind: 'authorize', requestId, deferred };
     this.#pending = pending;
     try {
       this.#transport.send({
         v: 1,
         type: 'pair.authorize',
-        requestId: randomUUID(),
+        requestId,
         pairingToken: this.#challenge.pairingToken,
         workspaces,
         scopes,
@@ -152,7 +157,7 @@ export class PairingController extends EventEmitter {
       this.#setState('pairing_failed');
       throw error;
     }
-    return deferred.promise;
+    return this.#waitForResponse(pending, deferred.promise);
   }
 
   cancel(): void {
@@ -169,7 +174,7 @@ export class PairingController extends EventEmitter {
       if (message.type === 'pair.challenge') {
         const pending = this.#pending;
         const attempt = this.#attempt;
-        if (pending?.kind !== 'start' || this.#state !== 'waiting_connector') return;
+        if (pending?.kind !== 'start' || this.#state !== 'waiting_connector' || message.requestId !== pending.requestId) return;
         const challenge: PairingChallenge = {
           deviceId: message.deviceId as string,
           fingerprint: message.fingerprint as string,
@@ -187,7 +192,7 @@ export class PairingController extends EventEmitter {
       }
       if (message.type === 'pair.complete') {
         const pending = this.#pending;
-        if (pending?.kind !== 'authorize' || !this.#challenge) return;
+        if (pending?.kind !== 'authorize' || !this.#challenge || message.requestId !== pending.requestId) return;
         if (!message.deviceToken || !message.deviceId) {
           throw protocolError('invalid_pairing_response', 'Server did not return a device credential');
         }
@@ -211,6 +216,8 @@ export class PairingController extends EventEmitter {
         return;
       }
       if (message.type === 'pair.error' || (message.type === 'error' && this.#pending)) {
+        const pending = this.#pending;
+        if (!pending || message.requestId !== pending.requestId) return;
         throw remoteError(isRecord(message.error) ? message.error : message);
       }
     } catch (error) {
@@ -218,6 +225,36 @@ export class PairingController extends EventEmitter {
       this.#pending = null;
       this.#setState('pairing_failed');
       this.emit('pairingError', error);
+    }
+  }
+
+  async #waitForResponse<T>(pending: PendingPairing, response: Promise<T>): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        if (this.#pending !== pending) return;
+        // A late pair.complete cannot be trusted after the caller has already
+        // failed this attempt. Invalidate the challenge and require a fresh,
+        // explicit pairing instead of persisting a credential after timeout.
+        this.#attempt += 1;
+        this.#pending = null;
+        this.#challenge = null;
+        void this.#store.set('pendingPairing', null).catch(() => {});
+        this.#setState('pairing_failed');
+        const error = protocolError(
+          'pairing_response_timeout',
+          `The Server did not respond to pair.${pending.kind === 'start' ? 'start' : 'authorize'} in time; start pairing again with a new code`,
+          true,
+        );
+        this.emit('pairingError', error);
+        reject(error);
+      }, this.#responseTimeoutMs);
+      timer.unref();
+    });
+    try {
+      return await Promise.race([response, timeout]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
