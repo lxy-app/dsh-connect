@@ -166,6 +166,22 @@ func (s *Store) BeginAttachmentFetch(ctx context.Context, id string, now time.Ti
 	return updated == 1, nil
 }
 
+// RecoverAttachmentFetches releases rows whose command disappeared with the
+// previous Server process. The next mobile GET may start a fresh fetch instead
+// of waiting forever for a Connector command that no longer exists.
+func (s *Store) RecoverAttachmentFetches(ctx context.Context, now time.Time) error {
+	_, err := s.client.SessionAttachment.Update().
+		Where(sessionattachment.StateEQ(sessionattachment.StateFetching)).
+		SetState(sessionattachment.StateKnown).
+		ClearErrorCode().
+		SetUpdatedAt(now).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("recover attachment fetches: %w", err)
+	}
+	return nil
+}
+
 // CompleteAttachment records a successful upload.
 func (s *Store) CompleteAttachment(ctx context.Context, id, sha256 string, bytes int64, now time.Time) error {
 	updated, err := s.client.SessionAttachment.Update().

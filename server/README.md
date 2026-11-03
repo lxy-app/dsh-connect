@@ -147,7 +147,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 
 - **学习式索引**：Server 在处理 `GET /v1/mobile/sessions/{id}/messages` 时把 Connector 返回的 `attachments` upsert 进 `session_attachments`；未被学习过的 id 一律 `404`，从源头阻断枚举。
 - **反向授权**：下载端点只按行内记录的 device/workspace/session 校验 grant，不信任手机提交的任何归属参数。
-- **状态由 Server 拥有**：Connector 只报 `known`，`fetching/ready/failed/unavailable` 与 `sha256` 由 Server 推进；`ready` 不会因新的 transcript 回落。
+- **状态由 Server 拥有**：Connector 只报 `known`，`fetching/ready/failed/unavailable` 与 `sha256` 由 Server 推进；`ready` 不会因新的 transcript 回落。Server 启动时会把上一进程遗留的 `fetching` 恢复为 `known`，避免永久等待已消失的命令。
 - **字节与元数据分离**：内容寻址写 `DSH_CONNECT_ATTACHMENT_DIR/<sha[0:2]>/<sha>`，DB 只存引用；上传先写临时文件再 rename，避免半成品。
 - **就绪通知**：上传成功后向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅元数据），App 立即重载而不轮询。
 - **失败关闭**：Connector 侧路径必须落在会话工作区内（默认拒绝工作区外交付）、拒绝 final symlink、命中敏感名单直接拒绝、并在读盘前重新 `stat` 比对基线，变化返回 `attachment_changed` 且不发送内容。

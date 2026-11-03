@@ -125,7 +125,7 @@ func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request, deviceID, s
 // mobileStreamEvent keeps large raw tool payloads off the phone socket.
 func mobileStreamEvent(event protocol.Event) bool {
 	switch event.Kind {
-	case "assistant.stream", "session.snapshot", "connector.error", "session.resync_required":
+	case "assistant.stream", "session.snapshot", "connector.error", "session.resync_required", protocol.EventKindAttachmentReady:
 		return true
 	case "session.event":
 		var payload struct {
