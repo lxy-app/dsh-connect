@@ -60,10 +60,11 @@ docker run -d --name dsh-connect --restart unless-stopped \
   -e DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL='owner@example.com' \
   -e DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD='replace-with-a-strong-password' \
   -e DSH_CONNECT_SERVER_URL='https://dsh-connect.example.com' \
+  -v dsh-connect-attachments:/data/attachments \
   lxyapp/dsh-connect:latest
 ```
 
-容器默认监听 `0.0.0.0:8787`，Admin 与 API 均通过该端口访问。使用 `--env-file .env` 时，若文件内仍是开发默认的 `DSH_CONNECT_LISTEN_ADDR=127.0.0.1:8787`，必须改为 `0.0.0.0:8787`。生产环境应在容器前配置 HTTPS 反向代理，并把 `DSH_CONNECT_SERVER_URL` 设置为手机可访问的公网地址。
+容器默认监听 `0.0.0.0:8787`，Admin 与 API 均通过该端口访问。附件字节默认写入 `/data/attachments`，镜像会为非 root 运行用户设置可写权限；生产部署必须像示例一样挂载持久卷，避免重建容器后丢失图片字节。使用 `--env-file .env` 时，若文件内仍是开发默认的 `DSH_CONNECT_LISTEN_ADDR=127.0.0.1:8787`，必须改为 `0.0.0.0:8787`。生产环境应在容器前配置 HTTPS 反向代理，并把 `DSH_CONNECT_SERVER_URL` 设置为手机可访问的公网地址。
 
 也可以用 `docker-compose.server.yml` 部署：它直接读取 `.env`，把监听地址固定覆盖为 `0.0.0.0:8787`，并通过 `host.docker.internal` 支持连接宿主机上的 PostgreSQL 18。宿主端口默认 8787，可用 `DSH_CONNECT_HTTP_PORT` 覆盖。
 

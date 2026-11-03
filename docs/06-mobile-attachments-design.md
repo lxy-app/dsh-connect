@@ -851,7 +851,17 @@ sequenceDiagram
 
 ### 仍需后续验收或实现
 
-- 尚未用真实 DSH 会话执行 `present` / `dsh_im_return_file` smoke，也未做新的 iOS/Android 原生构建与真机图片验收；Host 仿真 E2E 不等于这些门槛已通过。
-- Mobile 的 `>2 MiB` 点击后加载、明确的 202/404/失败重试，以及 Android 捏合缩放仍需补齐；当前全屏 `ScrollView` 缩放主要适用于 iOS。
+- 真实 DSH 会话 + 远端 Server + iPhone 已在 2026-11-03 完成附件图片验收，用户确认图片已显示；Android 真机仍未验收。Host 仿真 E2E 不等于这些门槛已通过。
+- Mobile 的 `>2 MiB` 点击后加载和 Android 捏合缩放仍需补齐；当前全屏 `ScrollView` 缩放主要适用于 iOS。
 - blob TTL 定时回收、LRU 与总容量执行仍未实现；当前只有配置、元数据时间与读取时 `last_used_at` 更新。
 - M2 文件卡、文本预览、下载/保存/分享与完整交付卡，M3 消息附件和手机上行，M4 通知与离线增强均未开始。
+
+### 图片原生加载与重试修复（2026-11-03）
+
+- Grid 与全屏 Viewer 统一使用带 `loading / loaded / error` 状态的 `AttachmentImage`，不再把原生 HTTP/解码错误吞成空白灰块。
+- `known / fetching` 下收到预期 `202` 后按秒有界重试；每次重试使用不含凭据的 `retry=<n>` 新 URL，避免失败 URL 记录阻断真正的新请求，`ready` 后仍以 sha256 同时版本化 URL 与缓存键。
+- 非 pending 状态失败显示原因并支持点击重试；附件认证快照获取失败也会自动重试，不再整页停留于无 source 的空白状态。
+- Mobile ESLint、TypeScript、30 项单元测试及 iOS/Android 生产 JS bundle 导出通过。
+- 已用 iOS Simulator Development Build + 本地临时 HTTP 服务完成原生 smoke：首个请求返回 `202 application/json`，第二次 `?retry=1` 请求返回 `200 image/png`，测试图片真实显示。临时路由与服务已清理。
+- 实际远端验收发现容器默认附件目录不可写且没有持久卷，导致上传快速失败；同时普通 transcript 轮询会把 `failed` 重置为 `known`，形成不断重试的循环。远端已挂载 `/data/attachments` 命名卷、修正应用用户写权限并恢复健康；Store 已保留传输/上传失败状态，移动 GET 作为显式重试边界。
+- 修复后真实手机重新进入会话，两个附件均完成上传并进入 `ready`，字节已写入内容寻址目录，用户确认图片已经显示。Server 全量测试、`go vet` 与附件状态回归测试通过。
