@@ -35,7 +35,9 @@ import {
 import { formatTime } from '@/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
 import { resolvePendingReply } from '@/lib/pending-reply';
+import { shouldCancelVoiceGesture } from '@/lib/voice-gesture';
 import { openSessionStream } from '@/lib/session-stream';
+import { SystemVoiceSessionGuard } from '@/lib/system-voice-session';
 import { openVolcAsrSession, type VolcAsrSession } from '@/lib/volc-asr';
 import { useInteractions } from '@/providers/interactions-provider';
 import { AttachmentGrid } from '@/components/attachment-grid';
@@ -43,6 +45,8 @@ import type { AttachmentAuth } from '@/components/attachment-grid';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useVoice } from '@/providers/voice-provider';
 import type { MobileMessage, MobileSession, MobileTranscript } from '@/types/mobile';
+
+const VOICE_WAVE_BARS = [6, 6, 10, 6, 14, 10, 20, 10, 14, 6, 10, 20, 14, 10, 6, 14, 20, 10, 6, 14, 10, 20, 10, 6, 6] as const;
 
 export function ChatScreen() {
   const theme = useAppTheme();
@@ -86,14 +90,20 @@ export function ChatScreen() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [inputFocused, setInputFocused] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [voicePreparing, setVoicePreparing] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceStopping, setVoiceStopping] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceCancelArmed, setVoiceCancelArmed] = useState(false);
+  const [systemVoiceClosing, setSystemVoiceClosing] = useState(false);
+  const [systemVoiceGuard] = useState(() => new SystemVoiceSessionGuard());
   const voiceTextRef = useRef('');
   const voiceStopRequested = useRef(false);
   const voiceStarting = useRef(false);
+  const voiceTouchStartY = useRef<number | null>(null);
+  const voiceCancelArmedRef = useRef(false);
   const voiceStartGeneration = useRef(0);
   const cloudSessionRef = useRef<VolcAsrSession | null>(null);
   const pendingPcmRef = useRef<Uint8Array | null>(null);
@@ -120,13 +130,20 @@ export function ChatScreen() {
 
   const resetVoice = useCallback(() => {
     voiceStarting.current = false;
+    voiceTouchStartY.current = null;
+    voiceCancelArmedRef.current = false;
+    setVoicePreparing(false);
     setVoiceListening(false);
     setVoiceStopping(false);
+    setVoiceCancelArmed(false);
     setVoiceMode(false);
-    setVoiceTranscript('');
     voiceTextRef.current = '';
     pendingPcmRef.current = null;
   }, []);
+  const markSystemVoiceClosing = useCallback(() => {
+    systemVoiceGuard.beginClosing();
+    setSystemVoiceClosing(true);
+  }, [systemVoiceGuard]);
   const clearVoiceFinishTimer = useCallback(() => {
     if (voiceFinishTimerRef.current !== null) clearTimeout(voiceFinishTimerRef.current);
     voiceFinishTimerRef.current = null;
@@ -180,33 +197,50 @@ export function ChatScreen() {
   }, [audioStream]);
 
   useSpeechRecognitionEvent('start', () => {
-    if (voiceSettings.asrProvider !== 'system') return;
+    if (voiceSettings.asrProvider !== 'system' || systemVoiceGuard.isClosing()) return;
     if (voiceStopRequested.current) {
+      markSystemVoiceClosing();
       ExpoSpeechRecognitionModule.abort();
       resetVoice();
       return;
     }
     voiceStarting.current = false;
+    setVoicePreparing(false);
     setVoiceListening(true);
     setVoiceStopping(false);
   });
   useSpeechRecognitionEvent('result', (event) => {
-    if (voiceSettings.asrProvider !== 'system') return;
+    if (voiceSettings.asrProvider !== 'system' || systemVoiceGuard.isClosing()) return;
     const text = event.results[0]?.transcript?.trim() ?? '';
     if (!text) return;
     voiceTextRef.current = text;
-    setVoiceTranscript(text);
   });
   useSpeechRecognitionEvent('end', () => {
     if (voiceSettings.asrProvider !== 'system') return;
+    if (systemVoiceGuard.consumeTerminalEnd()) {
+      // Native events have no session ID. Consume the cancelled/failed session's
+      // terminal end before allowing another recording to start.
+      setSystemVoiceClosing(false);
+      voiceTextRef.current = '';
+      return;
+    }
     const text = voiceTextRef.current.trim();
     resetVoice();
     if (text) setDraft((current) => `${current.trim() ? `${current.trim()}\n` : ''}${text}`);
   });
   useSpeechRecognitionEvent('error', (event) => {
     if (voiceSettings.asrProvider !== 'system') return;
+    if (event.error === 'aborted') {
+      if (!systemVoiceGuard.isClosing()) {
+        markSystemVoiceClosing();
+        resetVoice();
+      }
+      return;
+    }
+    if (systemVoiceGuard.isClosing()) return;
+    markSystemVoiceClosing();
     resetVoice();
-    if (event.error !== 'aborted') Alert.alert('语音识别未完成', event.message || '请检查麦克风权限和系统语音识别服务后重试。');
+    Alert.alert('语音识别未完成', event.message || '请检查麦克风权限和系统语音识别服务后重试。');
   });
   useEffect(() => () => {
     voiceStartGeneration.current += 1;
@@ -583,6 +617,7 @@ export function ChatScreen() {
                 throw new Error(`当前麦克风输出为 ${audioStream.sampleRate} Hz / ${audioStream.channels} 声道，无法按 16 kHz 单声道识别。`);
               }
               voiceStarting.current = false;
+              setVoicePreparing(false);
               setVoiceListening(true);
               setVoiceStopping(false);
             } catch (cause) {
@@ -597,8 +632,7 @@ export function ChatScreen() {
         onText: (text) => {
           if (generation !== voiceStartGeneration.current) return;
           voiceTextRef.current = text;
-          setVoiceTranscript(text);
-        },
+              },
         onComplete: (text) => {
           if (generation === voiceStartGeneration.current) finishCloudVoice(text);
         },
@@ -611,15 +645,17 @@ export function ChatScreen() {
   };
 
   const startVoice = async () => {
-    if (!voiceHydrated || !voiceSettings.enabled || voiceListening || voiceStarting.current) return;
+    if (!voiceHydrated || !voiceSettings.enabled || voiceListening || voiceStarting.current || !systemVoiceGuard.canStart()) return;
     const generation = ++voiceStartGeneration.current;
     voiceStarting.current = true;
     voiceTextRef.current = '';
+    voiceCancelArmedRef.current = false;
     pendingPcmRef.current = null;
     voiceStopRequested.current = false;
     clearVoiceFinishTimer();
-    setVoiceTranscript('');
+    setVoicePreparing(true);
     setVoiceStopping(false);
+    setVoiceCancelArmed(false);
     setVoiceMode(true);
     try {
       if (voiceSettings.asrProvider === 'volcengine') {
@@ -648,11 +684,17 @@ export function ChatScreen() {
       voiceStartGeneration.current += 1;
       cloudSessionRef.current?.abort();
       cloudSessionRef.current = null;
-      ExpoSpeechRecognitionModule.abort();
+      if (voiceSettings.asrProvider === 'system') {
+        markSystemVoiceClosing();
+        ExpoSpeechRecognitionModule.abort();
+      }
       stopCloudAudio();
       resetVoice();
       return;
     }
+    voiceTouchStartY.current = null;
+    voiceCancelArmedRef.current = false;
+    setVoiceCancelArmed(false);
     setVoiceStopping(true);
     if (voiceSettings.asrProvider === 'volcengine') {
       const session = cloudSessionRef.current;
@@ -674,6 +716,19 @@ export function ChatScreen() {
       return;
     }
     ExpoSpeechRecognitionModule.stop();
+  };
+  const cancelVoice = () => {
+    voiceStopRequested.current = true;
+    voiceStartGeneration.current += 1;
+    clearVoiceFinishTimer();
+    cloudSessionRef.current?.abort();
+    cloudSessionRef.current = null;
+    if (voiceSettings.asrProvider === 'system') {
+      markSystemVoiceClosing();
+      ExpoSpeechRecognitionModule.abort();
+    }
+    stopCloudAudio();
+    resetVoice();
   };
   const openNewSession = (nextDeviceId = deviceId, nextWorkspaceId = workspaceId) => {
     setDrawerOpen(false);
@@ -701,6 +756,15 @@ export function ChatScreen() {
   const changeTab = (next: HomeTab) => {
     if (next !== 'sessions') router.navigate({ pathname: '/', params: { tab: next } });
   };
+  const voiceActive = voiceMode && (voicePreparing || voiceListening || voiceStopping);
+  const showSend = !voiceMode && (inputFocused || draft.trim().length > 0 || sending);
+  const voiceActiveText = voiceCancelArmed
+    ? '松开取消'
+    : voicePreparing
+      ? '正在准备语音识别…'
+      : voiceStopping
+        ? '正在完成语音转写…'
+        : '松手完成，上移取消';
 
   return (
     <KeyboardAvoidingView
@@ -949,41 +1013,83 @@ export function ChatScreen() {
             styles.composer,
             {
               backgroundColor: theme.surface,
-              borderColor: theme.border,
               paddingBottom: 10,
             },
           ]}
         >
-          <View style={styles.composeBox}>
-            {voiceMode ? (
-              <View style={[styles.voiceFeedback, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
-                <Text style={[styles.voiceFeedbackTitle, { color: theme.text }]}>
-                  {voiceListening ? '正在聆听，请开始说话' : voiceStopping ? '正在完成语音转写…' : '准备语音识别'}
-                </Text>
-                <Text style={[styles.voiceTranscript, { color: theme.textSecondary }]}>{voiceTranscript || '松开完成，识别结果会回填到输入框'}</Text>
+          {voiceActive ? (
+            <View pointerEvents="none" style={styles.voiceActivePanel}>
+              <View style={[styles.voiceGlow, styles.voiceGlowOuter, { backgroundColor: voiceCancelArmed ? theme.danger : theme.accent }]} />
+              <View style={[styles.voiceGlow, styles.voiceGlowMiddle, { backgroundColor: voiceCancelArmed ? theme.danger : theme.accent }]} />
+              <View style={[styles.voiceGlow, styles.voiceGlowInner, { backgroundColor: voiceCancelArmed ? theme.danger : theme.accent }]} />
+              <Text accessibilityLiveRegion="polite" style={[styles.voiceActiveText, { color: voiceCancelArmed ? theme.danger : theme.text }]}>
+                {voiceActiveText}
+              </Text>
+              <View style={[styles.voiceWave, { opacity: voiceStopping ? 0.55 : 1 }]}>
+                {VOICE_WAVE_BARS.map((height, index) => (
+                  <View
+                    key={index}
+                    style={[styles.voiceWaveBar, { height, backgroundColor: voiceCancelArmed ? theme.danger : theme.accent }]}
+                  />
+                ))}
               </View>
-            ) : null}
+            </View>
+          ) : null}
+          <View style={[styles.composeBox, { backgroundColor: theme.surfaceMuted }, voiceActive && styles.composeBoxHidden]}>
             <View style={styles.voiceComposerRow}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={voiceMode ? '切换为键盘输入' : '切换为语音输入'}
-                disabled={!voiceHydrated || !voiceSettings.enabled || voiceListening}
+                disabled={!voiceHydrated || !voiceSettings.enabled || voicePreparing || voiceListening || voiceStopping || systemVoiceClosing}
                 onPress={() => setVoiceMode((current) => !current)}
-                style={[styles.voiceSwitch, { backgroundColor: voiceMode ? theme.accentSoft : theme.surfaceMuted }]}
+                style={({ pressed }) => [
+                  styles.voiceSwitch,
+                  { backgroundColor: voiceMode ? theme.accentSoft : 'transparent', opacity: !voiceHydrated || !voiceSettings.enabled ? 0.45 : 1 },
+                  pressed && styles.pressed,
+                ]}
               >
-                <Text style={[styles.voiceSwitchText, { color: theme.accent }]}>{voiceMode ? '⌨' : '◉'}</Text>
+                {voiceMode ? (
+                  <Text style={[styles.voiceSwitchText, { color: theme.accent }]}>⌨</Text>
+                ) : (
+                  <SpeakerIcon color={theme.accent} size={18} />
+                )}
               </Pressable>
               {voiceMode ? (
-                <Pressable
+                <View
+                  accessible
                   accessibilityRole="button"
-                  accessibilityLabel="按住说话"
-                  disabled={!voiceHydrated || !voiceSettings.enabled || voiceStopping}
-                  onPressIn={() => void startVoice()}
-                  onPressOut={stopVoice}
-                  style={({ pressed }) => [styles.holdTalk, { backgroundColor: voiceListening || pressed ? theme.accent : theme.accentSoft }]}
+                  accessibilityLabel="按住说话，松手完成，上移取消"
+                  accessibilityState={{ disabled: !voiceHydrated || !voiceSettings.enabled || voiceStopping || systemVoiceClosing, busy: voicePreparing || voiceStopping }}
+                  onStartShouldSetResponder={() => voiceHydrated && voiceSettings.enabled && !voicePreparing && !voiceListening && !voiceStopping && !voiceStarting.current && systemVoiceGuard.canStart()}
+                  onResponderTerminationRequest={() => false}
+                  onResponderGrant={(event) => {
+                    if (voicePreparing || voiceListening || voiceStopping || voiceStarting.current || !systemVoiceGuard.canStart()) return;
+                    voiceTouchStartY.current = event.nativeEvent.pageY;
+                    void startVoice();
+                  }}
+                  onResponderMove={(event) => {
+                    const startY = voiceTouchStartY.current;
+                    if (startY === null || voiceStopping) return;
+                    const cancelArmed = shouldCancelVoiceGesture(startY, event.nativeEvent.pageY);
+                    if (cancelArmed !== voiceCancelArmedRef.current) {
+                      voiceCancelArmedRef.current = cancelArmed;
+                      setVoiceCancelArmed(cancelArmed);
+                    }
+                  }}
+                  onResponderRelease={() => {
+                    if (voiceTouchStartY.current === null) return;
+                    if (voiceCancelArmedRef.current) cancelVoice();
+                    else stopVoice();
+                  }}
+                  onResponderTerminate={() => {
+                    if (voiceTouchStartY.current !== null) cancelVoice();
+                  }}
+                  style={[styles.holdTalk, { backgroundColor: 'transparent' }]}
                 >
-                  <Text style={[styles.holdTalkText, { color: voiceListening ? theme.onAccent : theme.accent }]}>{voiceListening ? '松开完成' : voiceStopping ? '正在转写…' : '按住说话'}</Text>
-                </Pressable>
+                  <Text style={[styles.holdTalkText, { color: theme.text }]}>
+                    {voicePreparing ? '正在准备…' : voiceStopping ? '正在转写…' : voiceListening ? '松手完成' : '按住说话'}
+                  </Text>
+                </View>
               ) : (
                 <TextInput
                   accessibilityLabel="给 DSH 发送补充指令"
@@ -993,10 +1099,12 @@ export function ChatScreen() {
                   placeholderTextColor={theme.textSecondary}
                   value={draft}
                   onChangeText={setDraft}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
                   style={[styles.input, styles.voiceInput, { color: theme.text }]}
                 />
               )}
-              {!voiceMode ? (
+              {showSend ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="发送"
@@ -1004,16 +1112,27 @@ export function ChatScreen() {
                   onPress={() => void send()}
                   style={({ pressed }) => [styles.send, { backgroundColor: theme.accent, opacity: !draft.trim() || sending ? 0.4 : pressed ? 0.75 : 1 }]}
                 >
-                  {sending ? <ActivityIndicator color={theme.onAccent} size="small" /> : <Text style={[styles.sendText, { color: theme.onAccent }]}>发送</Text>}
+                  {sending ? <ActivityIndicator color={theme.onAccent} size="small" /> : <Text style={[styles.sendText, { color: theme.onAccent }]}>↑</Text>}
                 </Pressable>
-              ) : null}
-            </View>
-            <View style={styles.composeFoot}>
-              <Text style={[styles.mode, { color: theme.textSecondary }]}>
-                {voiceMode ? '按住说话，松开完成转写' : transcript?.active ? '排队发送 · 桌面执行中' : awaitingReply ? '等待桌面响应…' : '排队发送'}
-              </Text>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="更多输入选项"
+                  onPress={() => Alert.alert('更多输入选项', '附件发送尚未开放，当前可使用文字或语音输入。')}
+                  style={({ pressed }) => [styles.voiceSwitch, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.moreOptionsText, { color: theme.textSecondary }]}>＋</Text>
+                </Pressable>
+              )}
             </View>
           </View>
+          {!voiceMode && awaitingReply ? (
+            <View style={styles.composeFoot}>
+              <Text style={[styles.mode, { color: theme.textSecondary }]}>
+                {transcript?.active ? '排队发送 · 桌面执行中' : '等待桌面响应…'}
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : (
         <View
@@ -1031,7 +1150,7 @@ export function ChatScreen() {
           </Text>
         </View>
       )}
-      <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />
+      {voiceActive ? null : <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />}
       <SessionDrawer
         visible={drawerOpen}
         currentSessionId={sessionId}
@@ -1401,43 +1520,49 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   composer: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+    position: 'relative',
     paddingHorizontal: 12,
     paddingTop: 8,
   },
   composeBox: {
-    gap: 6,
+    borderRadius: 27,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  composeBoxHidden: {
+    opacity: 0,
   },
   input: {
-    minHeight: 40,
+    minHeight: 38,
     maxHeight: 120,
     fontSize: Typography.reading,
     lineHeight: 24,
     paddingHorizontal: 4,
-    paddingVertical: 6,
+    paddingVertical: 5,
   },
   composeFoot: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
+    paddingHorizontal: 8,
+    paddingTop: 6,
   },
   mode: {
     fontSize: Typography.caption,
     lineHeight: 18,
   },
   send: {
-    minWidth: 62,
-    minHeight: 34,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
   },
   sendText: {
-    fontSize: Typography.control,
-    lineHeight: 21,
-    fontWeight: '700',
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '600',
   },
   voiceComposerRow: {
     flexDirection: 'row',
@@ -1445,15 +1570,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   voiceSwitch: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
   voiceSwitchText: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  moreOptionsText: {
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: '500',
   },
   voiceInput: {
     flex: 1,
@@ -1468,22 +1598,59 @@ const styles = StyleSheet.create({
   holdTalkText: {
     fontSize: Typography.control,
     lineHeight: 22,
-    fontWeight: '700',
-  },
-  voiceFeedback: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 11,
-    gap: 6,
-  },
-  voiceFeedbackTitle: {
-    fontSize: Typography.body,
-    lineHeight: 20,
     fontWeight: '600',
   },
-  voiceTranscript: {
-    fontSize: Typography.body,
-    lineHeight: 21,
+  voiceActivePanel: {
+    position: 'absolute',
+    zIndex: 2,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 220,
+    alignItems: 'center',
+    paddingTop: 66,
+  },
+  voiceGlow: {
+    position: 'absolute',
+    bottom: -120,
+    width: 260,
+    height: 210,
+    borderRadius: 130,
+    transform: [{ scaleX: 1.45 }],
+  },
+  voiceGlowOuter: {
+    bottom: -100,
+    width: 300,
+    height: 230,
+    opacity: 0.06,
+  },
+  voiceGlowMiddle: {
+    bottom: -110,
+    width: 270,
+    height: 210,
+    opacity: 0.1,
+  },
+  voiceGlowInner: {
+    width: 230,
+    height: 190,
+    opacity: 0.16,
+  },
+  voiceActiveText: {
+    fontSize: Typography.control,
+    lineHeight: 22,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  voiceWave: {
+    height: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 22,
+  },
+  voiceWaveBar: {
+    width: 4,
+    borderRadius: 2,
   },
   readOnly: {
     borderTopWidth: StyleSheet.hairlineWidth,
