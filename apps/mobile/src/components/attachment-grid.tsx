@@ -1,9 +1,8 @@
-import { Image } from 'expo-image';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AttachmentImage } from '@/components/attachment-image';
 import { AttachmentViewer } from '@/components/attachment-viewer';
-import { buildAttachmentUrl } from '@/lib/mobile-api';
 import type { MobileAttachment } from '@/types/mobile';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
@@ -41,22 +40,11 @@ export function AttachmentGrid({
 
   if (attachments.length === 0) return null;
 
-  const sourceOf = (attachment: MobileAttachment) => {
-    if (!auth) return null;
-    const url = buildAttachmentUrl(auth.serverUrl, attachment.attachmentId);
-    return {
-      uri: attachment.sha256 ? `${url}?v=${attachment.sha256.slice(0, 8)}` : url,
-      headers: { Authorization: `Bearer ${auth.accessToken}` },
-      cacheKey: attachment.sha256 ?? attachment.attachmentId,
-    };
-  };
-
   return (
     <View style={styles.container}>
       {images.length > 0 ? (
         <View style={styles.grid}>
           {visible.map((attachment, index) => {
-            const source = sourceOf(attachment);
             const isSingle = images.length === 1;
             return (
               <Pressable
@@ -71,28 +59,13 @@ export function AttachmentGrid({
                   { backgroundColor: theme.surfaceMuted },
                 ]}
               >
-                {source ? (
-                  <Image
-                    source={source}
-                    style={styles.image}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={attachment.attachmentId}
-                    transition={120}
-                  />
-                ) : null}
-                {attachment.state === 'fetching' ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>加载中</Text>
-                  </View>
-                ) : null}
-                {attachment.state === 'failed' || attachment.state === 'unavailable' ? (
-                  <View style={[styles.badge, styles.badgeError]}>
-                    <Text style={styles.badgeText}>
-                      {attachment.errorCode === 'attachment_denied' ? '已在桌面被拒绝' : '不可用'}
-                    </Text>
-                  </View>
-                ) : null}
+                <AttachmentImage
+                  attachment={attachment}
+                  auth={auth}
+                  style={styles.image}
+                  contentFit="cover"
+                  accessibilityLabel={`图片 ${attachment.name}`}
+                />
                 {index === MAX_VISIBLE - 1 && images.length > MAX_VISIBLE ? (
                   <View style={[styles.badge, styles.badgeMore]}>
                     <Text style={styles.badgeText}>+{images.length - MAX_VISIBLE}</Text>
@@ -164,7 +137,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  badgeError: { backgroundColor: 'rgba(160,20,20,0.75)' },
   badgeMore: { left: undefined, right: 6, bottom: 6 },
   badgeText: { color: '#fff', fontSize: 11 },
   fileRow: {

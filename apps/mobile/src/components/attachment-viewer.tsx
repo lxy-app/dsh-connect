@@ -1,5 +1,4 @@
-import { Image } from 'expo-image';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -11,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-import { buildAttachmentUrl } from '@/lib/mobile-api';
+import { AttachmentImage } from '@/components/attachment-image';
 import type { MobileAttachment } from '@/types/mobile';
 
 export type ViewerAuth = { readonly serverUrl: string; readonly accessToken: string };
@@ -35,20 +34,6 @@ export function AttachmentViewer({
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(0, attachments.length - 1)));
   const current = attachments[index];
-
-  const sources = useMemo(
-    () =>
-      attachments.map((attachment) => {
-        if (!auth) return null;
-        const url = buildAttachmentUrl(auth.serverUrl, attachment.attachmentId);
-        return {
-          uri: attachment.sha256 ? `${url}?v=${attachment.sha256.slice(0, 8)}` : url,
-          headers: { Authorization: `Bearer ${auth.accessToken}` },
-          cacheKey: attachment.sha256 ?? attachment.attachmentId,
-        };
-      }),
-    [attachments, auth],
-  );
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent>
@@ -74,18 +59,13 @@ export function AttachmentViewer({
               showsHorizontalScrollIndicator={false}
               showsVerticalScrollIndicator={false}
             >
-              {sources[itemIndex] ? (
-                <Image
-                  source={sources[itemIndex]}
-                  style={{ width, height: height * 0.72 }}
-                  contentFit="contain"
-                  cachePolicy="memory-disk"
-                  recyclingKey={item.attachmentId}
-                  accessibilityLabel={`第 ${itemIndex + 1} 张图片，共 ${attachments.length} 张，${item.name}`}
-                />
-              ) : (
-                <Text style={styles.hint}>正在准备图片…</Text>
-              )}
+              <AttachmentImage
+                attachment={item}
+                auth={auth}
+                style={{ width, height: height * 0.72 }}
+                contentFit="contain"
+                accessibilityLabel={`第 ${itemIndex + 1} 张图片，共 ${attachments.length} 张，${item.name}`}
+              />
             </ScrollView>
           )}
         />
@@ -140,5 +120,4 @@ const styles = StyleSheet.create({
   counter: { color: '#fff', fontSize: 14, fontWeight: '600' },
   footer: { position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center', gap: 4 },
   caption: { color: 'rgba(255,255,255,0.86)', fontSize: 13 },
-  hint: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
 });

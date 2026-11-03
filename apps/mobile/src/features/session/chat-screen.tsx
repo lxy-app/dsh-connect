@@ -456,15 +456,23 @@ export function ChatScreen() {
         : '响应会自动刷新；需要立即确认时可以手动刷新。';
   useEffect(() => {
     let disposed = false;
-    void connection()
-      .then(({ serverUrl, accessToken }) => {
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const resolveAttachmentAuth = async () => {
+      try {
+        const { serverUrl, accessToken } = await connection();
         if (!disposed) setAttachmentAuth({ serverUrl, accessToken });
-      })
-      .catch(() => {
-        if (!disposed) setAttachmentAuth(null);
-      });
+      } catch {
+        if (disposed) return;
+        setAttachmentAuth(null);
+        // A transient refresh/network failure must not leave every image blank
+        // for the whole time this screen stays open.
+        retryTimer = setTimeout(() => void resolveAttachmentAuth(), 1_000);
+      }
+    };
+    void resolveAttachmentAuth();
     return () => {
       disposed = true;
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
     };
   }, [connection, session?.accessToken]);
 
