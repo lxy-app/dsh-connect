@@ -20,7 +20,6 @@ server/internal/store/       PostgreSQL 持久化
 server/ent/schema/           ent schema（手写）
 server/ent/                  ent 生成代码（除 schema 外不要手改）
 docs/                        架构、产品、实施路线与验收说明
-prototype/                   旧实验插件，不是实际 Connector
 dsh-connect-prototype.html   独立模拟交互原型，不连接真实服务
 ```
 

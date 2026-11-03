@@ -294,9 +294,3 @@ AND 桌面包含在策略中
 4. 是否确认“用户策略决定可见与可申请范围，手机 grant 决定实际控制范围”的两层授权模型，并在正式实现时由 Server 全链路强制过滤。
 
 评审确认后再进入真实工程实现，本轮不修改 Mobile、Server 或 Connector 生产代码。
-
-## 11. 旧实验目录说明
-
-代码库中的 [../prototype/](../prototype/) 是早期 Cordis 预览尝试，不是本 HTML 的依赖，也不是实际 DSH Connect Connector。
-
-该实验插件已从 Harness Profile 移除。查看原型只需打开根目录 HTML，不应安装旧预览插件。

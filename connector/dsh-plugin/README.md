@@ -1,6 +1,6 @@
 # DSH Connect Connector（P0）
 
-这是实际的 DeepSeek Harness 桌面 Connector，不是根目录的交互原型，也不是 `prototype/` 中的旧实验插件。
+这是实际的 DeepSeek Harness 桌面 Connector，不是根目录的交互原型。
 
 当前版本锁定 **DSH `0.2.1-rc.5`**。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。
 

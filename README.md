@@ -127,8 +127,7 @@ dsh-connect/
 │   ├── ent/                      # ent schema 与生成的实体代码
 │   └── internal/                 # API、Hub、路由、协议、Store 与 pgtest
 ├── docs/                         # 产品、架构、原型与实施路线
-├── dsh-connect-prototype.html    # 独立高保真交互原型
-└── prototype/                    # 旧实验性预览源码，不是实际 Connector
+└── dsh-connect-prototype.html    # 独立高保真交互原型
 ```
 
 ## 文档索引
@@ -150,8 +149,6 @@ dsh-connect/
 ## 查看交互原型
 
 直接用浏览器打开 [dsh-connect-prototype.html](dsh-connect-prototype.html)。它不需要 Server，不连接真实 DSH，所有设备、会话和审批均为模拟数据。
-
-`prototype/` 是早期 Cordis 预览实验，不参与实际 Connector 运行，不应作为产品插件安装。
 
 ## 许可证
 
