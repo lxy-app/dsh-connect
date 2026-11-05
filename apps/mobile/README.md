@@ -87,7 +87,7 @@ npm install --registry=https://registry.npmjs.org
 
 3. App 调用 `/v1/mobile/pair`，成功后把 Access/Refresh Token 写入 SecureStore。
 
-4. 后续启动会读取本机凭据并调用 `/v1/mobile/me` 验证；Access Token 临近过期时调用 `/v1/mobile/auth/refresh`，服务端会同时轮换两枚 Token。
+4. 后续启动会读取本机凭据并调用 `/v1/mobile/me` 验证；Access Token 临近过期时调用 `/v1/mobile/auth/refresh`，服务端会同时轮换两枚 Token。启动恢复与页面请求共用按设备凭据隔离的单飞刷新任务，轮换结果先写入 SecureStore 再发布给页面，避免一次性 Refresh Token 被并发消费；网络错误或超时会保留本机凭据供稍后重试。
 
 5. “断开连接”会删除本机凭据，并尽力调用 `/v1/mobile/auth/logout` 吊销服务端手机。管理员也可在 `/v1/admin/mobile-devices/{id}/revoke` 强制吊销。
 

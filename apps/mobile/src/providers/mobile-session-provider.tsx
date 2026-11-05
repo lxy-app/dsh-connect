@@ -13,6 +13,11 @@ import {
   refreshMobileSession,
 } from '@/lib/mobile-api';
 import {
+  createMobileSessionRefresher,
+  isSameMobileCredential,
+  isSameMobileDevice,
+} from '@/lib/mobile-session-refresh';
+import {
   deleteStoredMobileSession,
   loadMobileSession,
   saveMobileSession,
@@ -61,11 +66,20 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
   const [lastSession, setLastSession] = useState<MobileSession | null>(null);
   const operationGeneration = useRef(0);
   const sessionRef = useRef<StoredMobileSession | null>(null);
-  const refreshInFlight = useRef<Promise<string> | null>(null);
-
-  useEffect(() => {
-    sessionRef.current = state.session;
-  }, [state.session]);
+  const refresherRef = useRef<ReturnType<typeof createMobileSessionRefresher> | null>(null);
+  const refreshSession = useCallback((current: StoredMobileSession) => {
+    if (!refresherRef.current) {
+      refresherRef.current = createMobileSessionRefresher({
+        rotate: (session) => refreshMobileSession(session.serverUrl, session.refreshToken),
+        isCurrent: (session) => {
+          const latest = sessionRef.current;
+          return latest !== null && isSameMobileCredential(latest, session);
+        },
+        persist,
+      });
+    }
+    return refresherRef.current(current);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -73,18 +87,24 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
 
     const setIfActive = (next: MobileSessionState) => {
       if (active && operationGeneration.current === hydrationGeneration) {
+        sessionRef.current = next.session;
         setState(next);
       }
     };
 
     const refresh = async (stored: StoredMobileSession) => {
       try {
-        const response = await refreshMobileSession(stored.serverUrl, stored.refreshToken);
-        const updated = mergeSessionResponse(stored, response);
-        const notice = await persist(updated);
+        const { session: updated, notice } = await refreshSession(stored);
+        const latest = sessionRef.current;
+        if (latest && !isSameMobileCredential(latest, stored)) return;
         setIfActive({ status: 'paired', session: updated, notice });
       } catch (error) {
         if (isUnauthorizedError(error)) {
+          const current = sessionRef.current;
+          if (!active || operationGeneration.current !== hydrationGeneration ||
+            (current !== null && !isSameMobileCredential(current, stored))) {
+            return;
+          }
           try {
             await deleteStoredMobileSession();
           } catch {
@@ -123,6 +143,11 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (Date.parse(stored.refreshTokenExpiresAt) <= Date.now()) {
+        const current = sessionRef.current;
+        if (!active || operationGeneration.current !== hydrationGeneration ||
+          (current !== null && !isSameMobileCredential(current, stored))) {
+          return;
+        }
         try {
           await deleteStoredMobileSession();
         } catch {
@@ -170,7 +195,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshSession]);
 
   const pair = useCallback(
     async ({ serverUrl, code }: PairInput) => {
@@ -186,8 +211,8 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
       });
       const stored = storedFromPairing(normalizedServerUrl, response, device.name);
       operationGeneration.current += 1;
-      const notice = await persist(stored);
       sessionRef.current = stored;
+      const notice = await persist(stored);
       setState({ status: 'paired', session: stored, notice });
 
       if (previous) {
@@ -215,75 +240,82 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
   }, []);
   const rememberSession = useCallback((next: MobileSession) => setLastSession(next), []);
 
-  const refreshAccessToken = useCallback(async (): Promise<string> => {
-    if (refreshInFlight.current) return refreshInFlight.current;
-    const current = sessionRef.current ?? state.session;
-    if (!current) throw new MobileApiError('unauthorized', '尚未配对这台手机。');
-    const task = (async () => {
-      const response = await refreshMobileSession(current.serverUrl, current.refreshToken);
-      const updated = mergeSessionResponse(current, response);
-      const notice = await persist(updated);
-      sessionRef.current = updated;
-      setState({ status: 'paired', session: updated, notice });
-      return updated.accessToken;
-    })();
-    refreshInFlight.current = task;
-    try {
-      return await task;
-    } finally {
-      refreshInFlight.current = null;
+  const refreshSessionForRequest = useCallback(async (
+    expected: StoredMobileSession,
+  ): Promise<StoredMobileSession> => {
+    const before = sessionRef.current ?? state.session;
+    if (!before || !isSameMobileDevice(before, expected)) {
+      throw new MobileApiError('unauthorized', '本机配对已变化，请重试。');
     }
-  }, [state.session]);
+    // Another request already rotated this credential while the old access
+    // token was in flight. Reuse its result instead of replaying the old RT.
+    if (!isSameMobileCredential(before, expected)) return before;
 
-  const clearInvalidSession = useCallback(async (): Promise<void> => {
+    const { session: updated, notice } = await refreshSession(expected);
+    const latest = sessionRef.current ?? state.session;
+    if (!latest || !isSameMobileDevice(latest, expected)) {
+      throw new MobileApiError('unauthorized', '本机配对已变化，请重试。');
+    }
+    if (!isSameMobileCredential(latest, expected)) return latest;
+    sessionRef.current = updated;
+    setState({ status: 'paired', session: updated, notice });
+    return updated;
+  }, [refreshSession, state.session]);
+
+  const clearInvalidSession = useCallback(async (invalidated: StoredMobileSession): Promise<void> => {
+    const current = sessionRef.current ?? state.session;
+    // A delayed 401 must not delete a newer rotation or a newly paired device.
+    if (!current || !isSameMobileCredential(current, invalidated)) return;
     try {
       await deleteStoredMobileSession();
     } catch {
       // The invalid credential is unusable even if stale data remains.
     }
+    const latest = sessionRef.current ?? state.session;
+    if (!latest || !isSameMobileCredential(latest, invalidated)) return;
     sessionRef.current = null;
     setState({
       status: 'unpaired',
       session: null,
       notice: '配对凭据已失效，请重新配对。',
     });
-  }, []);
+  }, [state.session]);
 
   const authorized = useCallback(
     async <T,>(operation: AuthorizedOperation<T>): Promise<T> => {
       const current = sessionRef.current ?? state.session;
       if (!current) throw new MobileApiError('unauthorized', '尚未配对这台手机。');
+      let credential = current;
       try {
-        let token = current.accessToken;
-        if (Date.parse(current.accessTokenExpiresAt) <= Date.now() + 30_000) {
-          token = await refreshAccessToken();
+        if (Date.parse(credential.accessTokenExpiresAt) <= Date.now() + 30_000) {
+          credential = await refreshSessionForRequest(credential);
         }
         try {
-          return await operation(current.serverUrl, token);
+          return await operation(credential.serverUrl, credential.accessToken);
         } catch (error) {
           if (!isUnauthorizedError(error)) throw error;
-          token = await refreshAccessToken();
-          return await operation(current.serverUrl, token);
+          credential = await refreshSessionForRequest(credential);
+          return await operation(credential.serverUrl, credential.accessToken);
         }
       } catch (error) {
-        if (isUnauthorizedError(error)) await clearInvalidSession();
+        if (isUnauthorizedError(error)) await clearInvalidSession(credential);
         throw error;
       }
     },
-    [clearInvalidSession, refreshAccessToken, state.session],
+    [clearInvalidSession, refreshSessionForRequest, state.session],
   );
 
   const connection = useCallback(
     async (): Promise<AuthorizedConnection> => {
       const current = sessionRef.current ?? state.session;
       if (!current) throw new MobileApiError('unauthorized', '尚未配对这台手机。');
-      let token = current.accessToken;
-      if (Date.parse(current.accessTokenExpiresAt) <= Date.now() + 30_000) {
-        token = await refreshAccessToken();
+      let credential = current;
+      if (Date.parse(credential.accessTokenExpiresAt) <= Date.now() + 30_000) {
+        credential = await refreshSessionForRequest(credential);
       }
-      return { serverUrl: current.serverUrl, accessToken: token };
+      return { serverUrl: credential.serverUrl, accessToken: credential.accessToken };
     },
-    [refreshAccessToken, state.session],
+    [refreshSessionForRequest, state.session],
   );
 
   return (
@@ -317,7 +349,7 @@ async function persist(session: StoredMobileSession): Promise<string | null> {
     await saveMobileSession(session);
     return null;
   } catch {
-    return '配对成功，但无法写入系统安全存储；关闭 App 后需要重新配对。';
+    return '无法写入系统安全存储；关闭 App 后可能需要重新配对。';
   }
 }
 
@@ -331,21 +363,6 @@ function storedFromPairing(
     serverUrl,
     mobileDeviceId: response.mobileDeviceId,
     deviceName,
-    user: response.user,
-    accessToken: response.accessToken,
-    accessTokenExpiresAt: response.accessTokenExpiresAt,
-    refreshToken: response.refreshToken,
-    refreshTokenExpiresAt: response.refreshTokenExpiresAt,
-  };
-}
-
-function mergeSessionResponse(
-  stored: StoredMobileSession,
-  response: MobileSessionResponse,
-): StoredMobileSession {
-  return {
-    ...stored,
-    mobileDeviceId: response.mobileDeviceId,
     user: response.user,
     accessToken: response.accessToken,
     accessTokenExpiresAt: response.accessTokenExpiresAt,
