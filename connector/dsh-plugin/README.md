@@ -22,7 +22,7 @@
 - 未确认桌面授权前不接受会话命令。
 - 工作区不默认全选；面板默认只选择 `read`，`prompt/cancel` 需显式开启。
 - 创建会话也要求 `prompt` scope。
-- 不支持任意 `cwd`、任意 Shell 或远程关闭审批。附件只接受会话中明确声明的交付文件：手机仅持有不透明 id，Connector 校验工作区边界、敏感名单、符号链接与声明基线后通过 Host `workspaceFiles` 读取，不提供任意路径读盘。
+- 不支持任意 `cwd`、任意 Shell 或远程关闭审批。附件只接受会话中明确声明的交付文件：手机仅持有不透明 id，Connector 校验工作区边界、敏感名单、符号链接与声明基线后通过 Host `workspaceFiles` 读取，不提供任意路径读盘。正文 Markdown 图片只在目标路径与同轮声明精确匹配时改写为 `dsh-attachment://<id>`；普通链接、同名文件和歧义重复声明不做猜测，也不修改 DSH Session Log。
 - 远程审批/提问使用 `prepend` 注册 `approval/request` 与 `user-questions/request` answerer，并先向 Server 查询 `interaction.audience`：只有“有 `approve` 的手机正在轮询”时，手机才接管这次请求。
 - 手机接管时先不启动桌面审批链，手机独占一个 grace 窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 6 秒）；窗口内作答则桌面完全不会弹卡。窗口结束则**先撤回手机副本**，再调用 `next()` 交给桌面原生审批链，因此两端不会同时出现两张卡，也不会留下已失效的卡片。
 - 没有手机在轮询时直接走桌面原生链，手机不会收到无法处理的副本。

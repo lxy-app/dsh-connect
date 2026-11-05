@@ -865,3 +865,18 @@ sequenceDiagram
 - 已用 iOS Simulator Development Build + 本地临时 HTTP 服务完成原生 smoke：首个请求返回 `202 application/json`，第二次 `?retry=1` 请求返回 `200 image/png`，测试图片真实显示。临时路由与服务已清理。
 - 实际远端验收发现容器默认附件目录不可写且没有持久卷，导致上传快速失败；同时普通 transcript 轮询会把 `failed` 重置为 `known`，形成不断重试的循环。远端已挂载 `/data/attachments` 命名卷、修正应用用户写权限并恢复健康；Store 已保留传输/上传失败状态，移动 GET 作为显式重试边界。
 - 修复后真实手机重新进入会话，两个附件均完成上传并进入 `ready`，字节已写入内容寻址目录，用户确认图片已经显示。Server 全量测试、`go vet` 与附件状态回归测试通过。
+
+## 19. 正文图片与附件懒加载（2026-11-05）
+
+### 展示与加载边界
+
+- DSH 的 `![alt](desktop-path)` 不再在 Mobile 降级为无法打开的本地链接。Connector 仅在同轮附件路径精确匹配时，把 Mobile 投影中的目标改写为 `dsh-attachment://<attachmentId>`；原 Session Log、普通链接与歧义重复声明保持不变。
+- 独立成段且能匹配当前消息图片附件的 Markdown 图片，在正文内使用 `contain` 展示；声明未携带宽高时，从原生 `onLoad` 读取真实尺寸并更新占位比例，不再固定为 16:10 或裁剪主体。
+- 消息下方附件区统一为文件卡，默认不挂载图片加载器、不请求字节。正文图片与附件卡共享 MessageRow 的查看器；只有打开图片查看器才加载对应原图。
+- `known` 附件不再单独触发会话实时等待；只有实际进入 `fetching` 的附件参与等待。普通网页链接和非图片附件行为不变。
+
+### 验证
+
+- Connector typecheck/build 与 97 项测试通过，覆盖精确路径、带空格 angle destination、普通链接、同名与歧义声明，以及 transcript 中的 Markdown 投影。
+- Mobile ESLint、TypeScript、37 项测试与 iOS/Android 生产 bundle 导出通过，覆盖图片 AST、普通链接兼容、纯文本/TTS 投影和不透明 URI 校验。
+- iOS Simulator 临时原生页使用两个独立附件完成 smoke：初始页面只请求正文引用的第一张图片，第二张附件卡没有请求；打开第二张附件后才产生其 GET，并在全屏查看器正确显示。临时路由与测试服务已清理。真实 DSH 会话的本次新交互与 Android 真机仍需另行验收。
