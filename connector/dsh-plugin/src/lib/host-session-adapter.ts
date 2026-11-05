@@ -11,6 +11,7 @@ import type {
 import type { ConnectorScope, Logger, TransportEnvelope, UnknownRecord } from '../types.js';
 import { errorCode, errorMessage, isRecord } from '../types.js';
 import { AttachmentIndex } from './attachment-index.js';
+import { rewriteAttachmentImageLinks } from './attachment-markdown.js';
 import { extractAttachmentCandidates } from './attachment-extract.js';
 import type { AttachmentCandidate } from './attachment-extract.js';
 import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
@@ -716,6 +717,20 @@ export class HostSessionAdapter {
         });
       }
       this.#mountAttachment(messages, messageTurns, candidate, attachment);
+    }
+
+    // DSH writes delivered images as Markdown image links to desktop paths.
+    // Resolve only exact declarations from the same turn into opaque mobile
+    // references; never use a filename-only match or mutate the session log.
+    for (const message of messages) {
+      if (message.role !== 'assistant' || !message.text.includes('![')) continue;
+      const turn = messageTurns.get(message) ?? 0;
+      if (turn <= 0) continue;
+      const rewritten = rewriteAttachmentImageLinks(
+        message.text,
+        candidates.filter((candidate) => candidate.turn === turn),
+      );
+      if (rewritten !== message.text) Object.assign(message, { text: rewritten });
     }
   }
 

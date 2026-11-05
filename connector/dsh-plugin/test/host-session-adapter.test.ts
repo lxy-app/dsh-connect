@@ -404,7 +404,7 @@ test('transcript mounts a present delivery on the final assistant message of the
   const records = [
     { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 1 } } },
     { type: 'event' as const, event: { type: 'deliverables/presented', seq: 2, time: 2_000, data: { turn: 1, files: [{ path: '/work/a/diagram.png' }] } } },
-    { type: 'event' as const, event: { type: 'assistant/message', seq: 3, time: 3_000, data: { message: { id: 'a1', content: [{ type: 'text', text: '图片已生成' }] } } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 3, time: 3_000, data: { message: { id: 'a1', content: [{ type: 'text', text: '![架构图](/work/a/diagram.png)' }] } } } },
     { type: 'event' as const, event: { type: 'turn/end', seq: 4, time: 4_000, data: {} } },
   ];
   const { adapter } = setup({
@@ -420,7 +420,9 @@ test('transcript mounts a present delivery on the final assistant message of the
   assert.equal(result.messages.length, 1);
   assert.equal(result.messages[0]?.id, 'a1');
   assert.equal(result.messages[0]?.delivery, undefined);
+  const attachmentId = result.messages[0]?.attachments?.[0]?.attachmentId;
   assert.equal(result.messages[0]?.attachments?.[0]?.name, 'diagram.png');
+  assert.equal(result.messages[0]?.text, `![架构图](dsh-attachment://${attachmentId})`);
   assert.equal(JSON.stringify(result).includes('/work/a'), false);
 });
 
