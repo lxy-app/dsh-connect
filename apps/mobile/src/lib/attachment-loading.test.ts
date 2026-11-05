@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   ATTACHMENT_AUTO_RETRY_LIMIT,
+  attachmentIdFromHref,
   attachmentImageSource,
   shouldAutoRetryAttachment,
 } from './attachment-loading';
@@ -61,4 +62,14 @@ test('only pending attachment image failures retry automatically', () => {
     shouldAutoRetryAttachment('fetching', 'still pending', ATTACHMENT_AUTO_RETRY_LIMIT),
     false,
   );
+});
+
+test('only exact opaque attachment hrefs resolve to image attachments', () => {
+  assert.equal(
+    attachmentIdFromHref('dsh-attachment://att_b7Qk2m9xT4pL0rVc8sN1'),
+    'att_b7Qk2m9xT4pL0rVc8sN1',
+  );
+  assert.equal(attachmentIdFromHref('https://example.com/att_b7Qk2m9xT4pL0rVc8sN1'), undefined);
+  assert.equal(attachmentIdFromHref('dsh-attachment:///att_b7Qk2m9xT4pL0rVc8sN1'), undefined);
+  assert.equal(attachmentIdFromHref('dsh-attachment://unknown'), undefined);
 });

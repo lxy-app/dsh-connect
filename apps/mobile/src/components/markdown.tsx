@@ -1,8 +1,11 @@
-import { useMemo, type ReactNode } from 'react';
-import { Alert, Linking, Platform, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AttachmentImage } from '@/components/attachment-image';
 import { Typography, type AppTheme } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { attachmentIdFromHref, type AttachmentImageAuth } from '@/lib/attachment-loading';
+import type { MobileAttachment } from '@/types/mobile';
 import {
   parseInline,
   parseMarkdown,
@@ -17,7 +20,12 @@ const MONOSPACE_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
 type RenderContext = {
   theme: AppTheme;
   color: string;
+  attachments: readonly MobileAttachment[];
+  attachmentAuth: AttachmentImageAuth | null;
+  onOpenAttachment?: (attachmentId: string) => void;
 };
+
+const EMPTY_ATTACHMENTS: readonly MobileAttachment[] = [];
 
 const HEADING_STYLES = [
   { fontSize: 22, lineHeight: 30 },
@@ -34,10 +42,25 @@ const HEADING_STYLES = [
  * The parser output is memoized per text/theme so streaming one message does
  * not re-tokenize every other message in the transcript on each delta.
  */
-export function MarkdownText({ text, streaming = false }: { text: string; streaming?: boolean }) {
+export function MarkdownText({
+  text,
+  streaming = false,
+  attachments = EMPTY_ATTACHMENTS,
+  attachmentAuth = null,
+  onOpenAttachment,
+}: {
+  text: string;
+  streaming?: boolean;
+  attachments?: readonly MobileAttachment[];
+  attachmentAuth?: AttachmentImageAuth | null;
+  onOpenAttachment?: (attachmentId: string) => void;
+}) {
   const theme = useAppTheme();
   const source = streaming ? `${text} ▍` : text;
-  const context = useMemo<RenderContext>(() => ({ theme, color: theme.text }), [theme]);
+  const context = useMemo<RenderContext>(
+    () => ({ theme, color: theme.text, attachments, attachmentAuth, onOpenAttachment }),
+    [theme, attachments, attachmentAuth, onOpenAttachment],
+  );
   const blocks = useMemo(() => parseMarkdown(source), [source]);
   const content = useMemo(
     () => blocks.map((block, index) => renderBlock(block, `block-${index}`, context, 0)),
@@ -69,7 +92,7 @@ function renderBlock(
             renderBlock(
               child,
               `${key}-quote-${index}`,
-              { theme: context.theme, color: context.theme.textSecondary },
+              { ...context, theme: context.theme, color: context.theme.textSecondary },
               depth + 1,
             ),
           )}
@@ -84,6 +107,21 @@ function renderBlock(
 
 function renderParagraph(text: string, key: string, context: RenderContext): ReactNode {
   const nodes = parseInline(text);
+  const image = standaloneImage(nodes);
+  const attachmentId = image ? attachmentIdFromHref(image.href) : undefined;
+  const attachment = attachmentId
+    ? context.attachments.find((item) => item.attachmentId === attachmentId && item.kind === 'image')
+    : undefined;
+  if (attachment && context.onOpenAttachment) {
+    return (
+      <InlineAttachmentImage
+        key={`${key}-${attachment.attachmentId}`}
+        attachment={attachment}
+        auth={context.attachmentAuth}
+        onOpen={() => context.onOpenAttachment?.(attachment.attachmentId)}
+      />
+    );
+  }
   return (
     <Text
       key={key}
@@ -92,6 +130,50 @@ function renderParagraph(text: string, key: string, context: RenderContext): Rea
     >
       {renderInline(nodes, key, context)}
     </Text>
+  );
+}
+
+function standaloneImage(nodes: MarkdownInline[]): Extract<MarkdownInline, { type: 'image' }> | null {
+  const meaningful = nodes.filter((node) => node.type !== 'text' || node.text.trim().length > 0);
+  return meaningful.length === 1 && meaningful[0]?.type === 'image' ? meaningful[0] : null;
+}
+
+function InlineAttachmentImage({
+  attachment,
+  auth,
+  onOpen,
+}: {
+  attachment: MobileAttachment;
+  auth: AttachmentImageAuth | null;
+  onOpen: () => void;
+}) {
+  const theme = useAppTheme();
+  const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
+  const dimensions = attachment.width && attachment.height
+    ? { width: attachment.width, height: attachment.height }
+    : loadedDimensions;
+  const aspectRatio = dimensions && dimensions.width > 0 && dimensions.height > 0
+    ? dimensions.width / dimensions.height
+    : 4 / 3;
+  return (
+    <Pressable
+      accessibilityRole="imagebutton"
+      accessibilityLabel={`打开图片 ${attachment.name}`}
+      onPress={onOpen}
+      style={({ pressed }) => [pressed && styles.pressed]}
+    >
+      <AttachmentImage
+        attachment={attachment}
+        auth={auth}
+        style={[
+          styles.inlineImage,
+          { aspectRatio, backgroundColor: theme.surfaceMuted },
+        ]}
+        contentFit="contain"
+        accessibilityLabel={`正文图片 ${attachment.name}`}
+        onLoad={setLoadedDimensions}
+      />
+    </Pressable>
   );
 }
 
@@ -297,18 +379,44 @@ function renderInline(
             {renderInline(node.children, key, context)}
           </Text>
         );
+      case 'image':
+        return (
+          <Text
+            key={key}
+            accessibilityRole="link"
+            onPress={() => openImage(node, context)}
+            style={[styles.link, { color: context.theme.accent }]}
+          >
+            {node.alt ? `🖼 ${node.alt}` : '🖼 图片'}
+          </Text>
+        );
     }
   });
 }
 
 function containsLink(nodes: MarkdownInline[]): boolean {
   return nodes.some((node) => {
-    if (node.type === 'link') return true;
+    if (node.type === 'link' || node.type === 'image') return true;
     if (node.type === 'strong' || node.type === 'em' || node.type === 'del') {
       return containsLink(node.children);
     }
     return false;
   });
+}
+
+function openImage(
+  node: Extract<MarkdownInline, { type: 'image' }>,
+  context: RenderContext,
+): void {
+  const attachmentId = attachmentIdFromHref(node.href);
+  const attachment = attachmentId
+    ? context.attachments.find((item) => item.attachmentId === attachmentId && item.kind === 'image')
+    : undefined;
+  if (attachment && context.onOpenAttachment) {
+    context.onOpenAttachment(attachment.attachmentId);
+    return;
+  }
+  openLink(node.href);
 }
 
 function openLink(href: string): void {
@@ -327,6 +435,15 @@ function openLink(href: string): void {
 const styles = StyleSheet.create({
   root: {
     gap: 8,
+  },
+  inlineImage: {
+    width: '100%',
+    maxHeight: 520,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  pressed: {
+    opacity: 0.85,
   },
   paragraph: {
     fontSize: Typography.reading,

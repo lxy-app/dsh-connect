@@ -6,6 +6,14 @@ import type { MobileAttachment } from '@/types/mobile';
 export type AttachmentImageAuth = { readonly serverUrl: string; readonly accessToken: string };
 
 export const ATTACHMENT_AUTO_RETRY_LIMIT = 60;
+export const ATTACHMENT_URI_PREFIX = 'dsh-attachment://';
+
+/** Resolves only the exact opaque URI form emitted by the Connector. */
+export function attachmentIdFromHref(href: string): string | undefined {
+  if (!href.startsWith(ATTACHMENT_URI_PREFIX)) return undefined;
+  const attachmentId = href.slice(ATTACHMENT_URI_PREFIX.length);
+  return /^att_[A-Za-z0-9_-]{8,64}$/.test(attachmentId) ? attachmentId : undefined;
+}
 
 /** Builds the authenticated native image source without exposing a desktop path. */
 export function attachmentImageSource(

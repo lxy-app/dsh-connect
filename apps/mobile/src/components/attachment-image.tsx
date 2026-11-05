@@ -26,6 +26,7 @@ type AttachmentImageProps = {
   readonly style: StyleProp<ViewStyle>;
   readonly contentFit: 'cover' | 'contain';
   readonly accessibilityLabel: string;
+  readonly onLoad?: (dimensions: { readonly width: number; readonly height: number }) => void;
 };
 
 /**
@@ -53,6 +54,7 @@ function RemoteAttachmentImage({
   style,
   contentFit,
   accessibilityLabel,
+  onLoad,
 }: AttachmentImageProps & { readonly auth: AttachmentImageAuth }) {
   const theme = useAppTheme();
   const [loadState, setLoadState] = useState<
@@ -101,7 +103,12 @@ function RemoteAttachmentImage({
         accessibilityLabel={accessibilityLabel}
         transition={120}
         onLoadStart={() => setLoadState({ key: loadKey, status: 'loading' })}
-        onLoad={() => setLoadState({ key: loadKey, status: 'loaded' })}
+        onLoad={(event) => {
+          setLoadState({ key: loadKey, status: 'loaded' });
+          if (event.source.width > 0 && event.source.height > 0) {
+            onLoad?.({ width: event.source.width, height: event.source.height });
+          }
+        }}
         onError={(event) => setLoadState({ key: loadKey, status: 'error', message: event.error })}
       />
       {error && !autoRetry ? (

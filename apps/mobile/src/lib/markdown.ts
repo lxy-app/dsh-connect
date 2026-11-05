@@ -19,7 +19,8 @@ export type MarkdownInline =
   | { type: 'strong'; children: MarkdownInline[] }
   | { type: 'em'; children: MarkdownInline[] }
   | { type: 'del'; children: MarkdownInline[] }
-  | { type: 'link'; href: string; children: MarkdownInline[] };
+  | { type: 'link'; href: string; children: MarkdownInline[] }
+  | { type: 'image'; href: string; alt: string };
 
 export type MarkdownListItem = {
   blocks: MarkdownBlock[];
@@ -41,7 +42,7 @@ type ListMarker = { indent: number; marker: string; contentIndent: number; conte
 type Fence = { char: '`' | '~'; length: number; language?: string };
 
 type LinkMatch = {
-  node: Extract<MarkdownInline, { type: 'link' }>;
+  node: MarkdownInline;
   next: number;
 };
 
@@ -558,11 +559,11 @@ function matchLinkLike(
   if (!href) return null;
 
   const label = source.slice(open + 1, closeBracket);
-  const children: MarkdownInline[] = image
-    ? [{ type: 'text', text: label ? `🖼 ${label}` : '🖼 图片' }]
-    : parseInlineNodes(label, depth + 1);
+  const node: MarkdownInline = image
+    ? { type: 'image', href, alt: label }
+    : { type: 'link', href, children: parseInlineNodes(label, depth + 1) };
 
-  return { node: { type: 'link', href, children }, next: closeParen + 1 };
+  return { node, next: closeParen + 1 };
 }
 
 function findClosingBracket(source: string, open: number): number {
@@ -776,6 +777,8 @@ function inlineToPlainText(nodes: MarkdownInline[]): string {
       case 'del':
       case 'link':
         return inlineToPlainText(node.children);
+      case 'image':
+        return node.alt ? `🖼 ${node.alt}` : '🖼 图片';
     }
   }).join('');
 }

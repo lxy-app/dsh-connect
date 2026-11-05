@@ -41,6 +41,7 @@ import { SystemVoiceSessionGuard } from '@/lib/system-voice-session';
 import { openVolcAsrSession, type VolcAsrSession } from '@/lib/volc-asr';
 import { useInteractions } from '@/providers/interactions-provider';
 import { AttachmentGrid } from '@/components/attachment-grid';
+import { AttachmentViewer } from '@/components/attachment-viewer';
 import type { AttachmentAuth } from '@/components/attachment-grid';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useVoice } from '@/providers/voice-provider';
@@ -317,7 +318,7 @@ export function ChatScreen() {
 
   const awaitingReply = sending || pendingReply !== null || transcript?.active === true;
   const waitingForAttachments = transcript?.messages.some((message) =>
-    message.attachments?.some((attachment) => attachment.state === 'known' || attachment.state === 'fetching'),
+    message.attachments?.some((attachment) => attachment.state === 'fetching'),
   ) === true;
   const shouldStream = Boolean(
     session && (sending || pendingReply !== null || transcript?.active === true || waitingForAttachments),
@@ -1193,6 +1194,15 @@ function MessageRow({
     [message.text, user],
   );
   const renderedAsMarkdown = !user && (!collapsible || expanded);
+  const imageAttachments = useMemo(
+    () => (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
+    [message.attachments],
+  );
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const openAttachment = useCallback((attachmentId: string) => {
+    const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
+    if (index >= 0) setViewerIndex(index);
+  }, [imageAttachments]);
 
   return (
     <View style={[styles.messageRow, user && styles.messageRowUser]}>
@@ -1206,7 +1216,13 @@ function MessageRow({
         ]}
       >
         {renderedAsMarkdown ? (
-          <MarkdownText streaming={streaming} text={message.text} />
+          <MarkdownText
+            streaming={streaming}
+            text={message.text}
+            attachments={message.attachments ?? []}
+            attachmentAuth={attachmentAuth}
+            onOpenAttachment={openAttachment}
+          />
         ) : (
           <Text
             numberOfLines={collapsible && !expanded ? 14 : undefined}
@@ -1217,7 +1233,18 @@ function MessageRow({
             {streaming ? ' ▍' : ''}
           </Text>
         )}
-        <AttachmentGrid attachments={message.attachments ?? []} auth={attachmentAuth} />
+        <AttachmentGrid
+          attachments={message.attachments ?? []}
+          onOpen={(attachment) => openAttachment(attachment.attachmentId)}
+        />
+        {viewerIndex !== null ? (
+          <AttachmentViewer
+            attachments={imageAttachments}
+            auth={attachmentAuth}
+            initialIndex={viewerIndex}
+            onClose={() => setViewerIndex(null)}
+          />
+        ) : null}
         {collapsible ? (
           <Pressable
             accessibilityRole="button"
