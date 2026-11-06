@@ -8,6 +8,7 @@
     "forbidden",
     "invalid_request",
     "not_found",
+    "conflict",
     "payload_too_large",
     "pairing_code_invalid",
     "pairing_code_used",
@@ -20,10 +21,12 @@
     "command_failed",
     "request_in_flight",
     "idempotency_conflict",
+    "model_unavailable",
+    "session_migration_required",
     "method_not_supported",
     "slow_consumer",
     "follow_superseded",
     "internal_error"
   ],
-  "description": "Connector-specific extension error codes are allowed and are relayed unchanged. retryable indicates a transient failure; create and prompt retries must retain the original requestId and identical input."
+  "description": "Connector-specific extension error codes are allowed and are relayed unchanged. retryable indicates a transient failure; create, prompt and model-selection retries must retain the original requestId and identical input."
 }

@@ -27,7 +27,7 @@
           "properties": {
             "submitted": {
               "type": "boolean",
-              "description": "false only when Server proved a create or prompt command was not submitted to Connector; absence or true does not prove submission."
+              "description": "false only when Server proved a create, prompt or model-selection command was not submitted to Connector; absence or true does not prove submission."
             }
           },
           "additionalProperties": true
@@ -165,6 +165,31 @@
         "text": {
           "type": "string",
           "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "ModelSelection": {
+      "type": "object",
+      "required": [
+        "provider",
+        "model"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reasoningEffort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
         }
       },
       "additionalProperties": false

@@ -821,6 +821,301 @@
       },
       "additionalProperties": false
     },
+    "MobileModelReasoningEffort": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModelReasoning": {
+      "type": "object",
+      "required": [
+        "efforts"
+      ],
+      "properties": {
+        "efforts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileModelReasoningEffort"
+          }
+        },
+        "defaultEffort": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModelBadge": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "tone": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModel": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "reasoning": {
+          "$ref": "#/$defs/MobileModelReasoning"
+        },
+        "badge": {
+          "$ref": "#/$defs/MobileModelBadge"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModelProviderGroup": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "models"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileModel"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModelCatalogFailure": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "message"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModelCatalogResponse": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "deviceId",
+        "workspaceId",
+        "default",
+        "lastUsed",
+        "next",
+        "effective",
+        "routableProviders",
+        "groups",
+        "failures",
+        "projectionKind"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "default": {
+          "$ref": "common.schema.json#/$defs/ModelSelection"
+        },
+        "lastUsed": {
+          "anyOf": [
+            {
+              "$ref": "common.schema.json#/$defs/ModelSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "common.schema.json#/$defs/ModelSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective": {
+          "$ref": "common.schema.json#/$defs/ModelSelection"
+        },
+        "routableProviders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileModelProviderGroup"
+          }
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MobileModelCatalogFailure"
+          }
+        },
+        "projectionKind": {
+          "type": "string",
+          "enum": [
+            "sequenced",
+            "migration-required"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModelSelectRequest": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "deviceId",
+        "workspaceId",
+        "provider",
+        "model"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reasoningEffort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120000
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileModelSelectResponse": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "requestId",
+        "selected"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selected": {
+          "$ref": "common.schema.json#/$defs/ModelSelection"
+        }
+      },
+      "additionalProperties": false
+    },
     "MobileSessionCreateRequest": {
       "type": "object",
       "required": [

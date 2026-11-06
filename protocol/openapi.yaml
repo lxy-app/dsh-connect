@@ -543,6 +543,72 @@ paths:
         "503": {$ref: "#/components/responses/DeviceOffline"}
         "504": {$ref: "#/components/responses/CommandTimeout"}
         "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/sessions/{sessionId}/model:
+    get:
+      tags: [mobileAccess]
+      operationId: getMobileSessionModel
+      summary: Read the current session model and available model catalog
+      description: |
+        Requires an active `read` grant. The Connector combines the Host model
+        catalog with the Session's `modelSelection` projection without activating
+        a cold Agent. `effective` is the recorded `next` selection or the deployment
+        default. `projectionKind=migration-required` marks cached, potentially stale
+        projection hints and must not be treated as an exact current selection.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+        - {$ref: "#/components/parameters/DeviceIdQuery"}
+        - {$ref: "#/components/parameters/WorkspaceIdQuery"}
+      responses:
+        "200":
+          description: Display-safe model catalog and current Session selection.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileModelCatalogResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    post:
+      tags: [mobileAccess]
+      operationId: selectMobileSessionModel
+      summary: Select a Session-local model without changing the desktop default
+      description: |
+        Requires an active `prompt` grant. The Connector validates the exact
+        provider/model and reasoning effort, then calls the public Host
+        `agent.model.select` API directly. It never calls the default-persisting
+        `sessionController.selectModel` wrapper and never restores the default
+        through a read-modify-write sequence. `requestId` is a durable idempotency
+        key; retries must retain the same key and identical input.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileModelSelectRequest}
+      responses:
+        "200":
+          description: Recorded Session selection, or the persisted first outcome for a retry.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileModelSelectResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: requestId was reused with different input, the model is unavailable, the Session writer is busy, or migration is required.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+        "500": {$ref: "#/components/responses/InternalError"}
   /v1/mobile/sessions/{sessionId}/prompt:
     post:
       tags: [mobileAccess]

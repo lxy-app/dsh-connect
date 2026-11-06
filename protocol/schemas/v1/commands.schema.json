@@ -33,6 +33,8 @@
             "session.page",
             "session.transcript",
             "session.prompt",
+            "session.model.catalog",
+            "session.model.select",
             "session.follow",
             "session.unfollow",
             "session.cancel",
@@ -168,6 +170,59 @@
         },
         "clientTimeZone": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionModelCatalogParams": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "workspaceId"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionModelSelectParams": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "workspaceId",
+        "provider",
+        "model"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reasoningEffort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
         }
       },
       "additionalProperties": false

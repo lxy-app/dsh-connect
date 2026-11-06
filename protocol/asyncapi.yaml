@@ -31,7 +31,8 @@ channels:
     publish:
       description: |
         Frames produced by Server and sent to Connector, including follow/unfollow
-        commands carrying a followId and one-shot `interaction.respond` decisions.
+        commands carrying a followId, read-only `session.model.catalog`, durable
+        idempotent `session.model.select`, and one-shot `interaction.respond` decisions.
       message:
         oneOf:
           - $ref: schemas/v1/pairing.schema.json#/$defs/PairChallenge
@@ -59,7 +60,7 @@ channels:
       use the short-lived `accessToken` query parameter) and an active read grant for
       the workspace. The Server starts a compact session.follow and relays only
       display-safe frames: `assistant.stream` deltas, compact `session.snapshot`,
-      user/assistant/turn events and connector errors. Raw tool payloads are filtered
+      user/assistant/turn/model-selection events and connector errors. Raw tool payloads are filtered
       at the Server. Native clients use the transcript HTTP endpoint as fallback.
     parameters:
       deviceId:
