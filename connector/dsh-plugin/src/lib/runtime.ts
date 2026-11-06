@@ -285,6 +285,7 @@ export class ConnectorRuntime extends EventEmitter {
     const attachments = this.#attachmentWiring();
     this.#host = new HostSessionAdapter({
       controller: this.#ctx.sessionController,
+      llm: this.#ctx.llm,
       workspaceRegistry: this.#ctx.workspaceRegistry,
       policy: this.#policy,
       deviceId,

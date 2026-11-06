@@ -76,6 +76,61 @@ export function pageInput(params: PageInputParams): SessionPageRequest {
   return input;
 }
 
+export interface SessionModelCatalogInputParams {
+  readonly sessionId: unknown;
+  readonly workspaceId: unknown;
+}
+
+export interface SessionModelSelectInputParams extends SessionModelCatalogInputParams {
+  readonly provider: unknown;
+  readonly model: unknown;
+  readonly reasoningEffort?: unknown;
+}
+
+export function modelCatalogInput(params: SessionModelCatalogInputParams): {
+  readonly sessionId: string;
+  readonly workspaceId: string;
+} {
+  assertAllowedKeys(params, ['sessionId', 'workspaceId']);
+  return {
+    sessionId: sessionAddress(params.sessionId).sessionId,
+    workspaceId: requiredText(params.workspaceId, 'workspaceId', 128),
+  };
+}
+
+export function modelSelectInput(params: SessionModelSelectInputParams): {
+  readonly sessionId: string;
+  readonly workspaceId: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly reasoningEffort?: string;
+} {
+  assertAllowedKeys(params, ['sessionId', 'workspaceId', 'provider', 'model', 'reasoningEffort']);
+  return {
+    sessionId: sessionAddress(params.sessionId).sessionId,
+    workspaceId: requiredText(params.workspaceId, 'workspaceId', 128),
+    provider: requiredText(params.provider, 'provider', 128),
+    model: requiredText(params.model, 'model', 256),
+    ...params.reasoningEffort === undefined
+      ? {}
+      : { reasoningEffort: requiredText(params.reasoningEffort, 'reasoningEffort', 64) },
+  };
+}
+
+function assertAllowedKeys(value: unknown, allowed: readonly string[]): void {
+  if (!isRecord(value)) throw protocolError('invalid_request', 'command params must be an object');
+  const accepted = new Set(allowed);
+  const unknown = Object.keys(value).find((key) => !accepted.has(key));
+  if (unknown !== undefined) throw protocolError('invalid_request', `Unsupported parameter: ${unknown}`);
+}
+
+function requiredText(value: unknown, name: string, maxLength: number): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > maxLength) {
+    throw protocolError('invalid_request', `${name} must be a non-empty string of at most ${maxLength} characters`);
+  }
+  return value;
+}
+
 function nonNegativeInteger(value: unknown, name: string, minimum = 0): number {
   const number = Number(value);
   if (!Number.isSafeInteger(number) || number < minimum) {

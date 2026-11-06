@@ -127,3 +127,66 @@ export interface ConnectorDecisionInput {
   readonly workspaces?: readonly string[];
   readonly scopes?: readonly ConnectorScope[];
 }
+
+/** Stable v1 model-selection DTOs. Host objects never cross this boundary. */
+export interface SessionModelSelection {
+  readonly provider: string;
+  readonly model: string;
+  readonly reasoningEffort?: string;
+}
+
+export interface SessionModelReasoningEffort {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+}
+
+export interface SessionModelReasoning {
+  readonly efforts: readonly SessionModelReasoningEffort[];
+  readonly defaultEffort?: string;
+}
+
+export interface SessionModelBadge {
+  readonly text: string | Readonly<Record<string, string>>;
+  readonly tone?: string;
+}
+
+export interface SessionModel {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly reasoning?: SessionModelReasoning;
+  readonly badge?: SessionModelBadge;
+}
+
+export interface SessionModelProviderGroup {
+  readonly id: string;
+  readonly name: string;
+  readonly models: readonly SessionModel[];
+}
+
+export interface SessionModelCatalogFailure {
+  readonly id: string;
+  readonly name: string;
+  readonly message: string;
+}
+
+export interface SessionModelCatalogResult {
+  readonly sessionId: string;
+  readonly deviceId: string;
+  readonly workspaceId: string;
+  readonly default: SessionModelSelection;
+  readonly lastUsed: SessionModelSelection | null;
+  readonly next: SessionModelSelection | null;
+  readonly effective: SessionModelSelection;
+  readonly routableProviders: readonly string[];
+  readonly groups: readonly SessionModelProviderGroup[];
+  readonly failures: readonly SessionModelCatalogFailure[];
+  readonly projectionKind: 'sequenced' | 'migration-required';
+}
+
+export interface SessionModelSelectResult {
+  readonly sessionId: string;
+  readonly requestId: string;
+  readonly selected: SessionModelSelection;
+}

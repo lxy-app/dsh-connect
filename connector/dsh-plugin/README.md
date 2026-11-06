@@ -2,7 +2,7 @@
 
 这是实际的 DeepSeek Harness 桌面 Connector，不是根目录的交互原型。
 
-当前版本锁定 **DSH `0.2.2-rc.1`**。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。本次适配使用新的 `SessionController.events()` 历史接口，并按 `approval/request` / `user-questions/request` 的 `agent.id` 解析会话；审批的本地化 `displayReason` 在 Connector 内投影为协议 v1 的有界文本。
+当前版本锁定 **DSH `0.2.2-rc.1`**。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。本次适配使用新的 `SessionController.events()` 历史接口，并按 `approval/request` / `user-questions/request` 的 `agent.id` 解析会话；审批的本地化 `displayReason` 在 Connector 内投影为协议 v1 的有界文本。模型选择使用公开的 `resolveAgent + llm + agent.model.select` 会话级路径，不依赖上游尚未提供的 `persistDefault` 参数。
 
 ## 已实现
 
@@ -12,7 +12,8 @@
 - 单条主动出站 Connector WSS，心跳、指数退避、设备令牌重连和固定背压上限。
 - `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 默认只保留 user/assistant 对话文本，工具调用/结果以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页先解析当前 Session 的 projection watermark 再传 `throughSeq`（DSH 对 `throughSeq=-1` 实际返回空页），超出体积预算时优先保留最新消息。
 - 使用 `workspaceRegistry.sessionIds` 校验真实 session → workspace 归属，默认拒绝；归属变化会撤销旧权限和 active follow。
-- prompt 全链路 `requestId` 去重，超时后不盲目重新提交。
+- prompt 与模型选择全链路 `requestId` 去重，超时后不盲目重新提交。
+- `session.model.catalog` 组合 `modelCatalog + projections`，只读目录不唤醒冷 Agent；`session.model.select` 重新校验 provider/model/reasoningEffort 后直接调用公开 `agent.model.select`，prompt 与切换按 sessionId 串行，迁移未完成时失败关闭。
 - follow opening snapshot、持久事件去重/空洞检测、assistant stream 独立坐标；移动端 follow 使用 `compact` 省略大快照，assistant stream 归一化为 `start/delta/end` 文本增量；最后一个 App 事件连接关闭后显式 unfollow。
 - 插件卸载/断连时取消 Host 调用和旧 follow；恢复以 DSH snapshot 为准。
 - 通过同一条已认证出站 WSS 发送 `request` 信封（`mobile.access.list` / `mobile.access.decide`），桌面面板据此读取和决定手机授权；手机访问范围不写进本地凭据。
@@ -30,6 +31,7 @@
 - 只有同时具备 `approve` scope 且会话所属工作区已授权时才转发；Server 侧还要求手机 grant 含 `approve`，形成双重校验。撤回、离线、无答案都不会伪造批准。
 - 手机是否“在场”由 Server 的轮询时间戳判断（10 秒窗口）；App 在前台每 2 秒轮询一次并在回到前台时立即刷新。
 - Server/Connector 不直接读写 DSH Session Log 文件。
+- 模型切换不调用会保存部署默认值的 `sessionController.selectModel`，不调用 `agentDefaultModel.saveSelection`，也不通过读改写恢复默认值；只追加当前 Session 的 `model/selection` 事件。
 - 设备令牌不会通过状态 RPC 返回。P0 本地状态文件权限为 `0600`；生产版本仍应接入系统 Keychain/Keystore 或 DSH secret store。
 
 默认 Connector 状态文件：
@@ -130,7 +132,7 @@ npm run test:e2e
 ```
 
 - `npm test`：执行严格类型检查和 `tsc` 构建，再运行配对、权限、输入、游标、传输、Host DTO 和插件入口 TypeScript 单元测试。
-- `npm run test:e2e`：执行类型检查后，构建并启动真实 Go Server，使用真实 Connector 协议/适配代码和可控 Host 仿真完成全闭环；它会自动清理临时 Server 和状态。
+- `npm run test:e2e`：执行类型检查后，构建并启动真实 Go Server，使用真实 Connector 协议/适配代码和可控 Host 仿真完成全闭环，包括模型目录、Session-only 切换、`model/selection` 事件与幂等重放；它会自动清理临时 Server 和状态。
 
 E2E 是协议与跨语言集成验证，**不是实际 DSH 生命周期或真实 Agent 执行验收**。实际 DSH smoke path 应为：
 
@@ -143,6 +145,6 @@ create → follow snapshot → prompt(queue,稳定 requestId)
 ## P0 尚未包含
 
 - APNs/FCM 推送；移动端当前通过轮询读取 transcript 与待处理审批。
-- M2 文件保存/分享、M3 消息附件与手机上行、模型/Preset 完整选择和多实例 Server。
+- M2 文件保存/分享、M3 消息附件与手机上行、Agent Preset 完整选择和多实例 Server。
 - 大于 64 KiB 的单帧工具输出分块；超限会明确报错并依靠 snapshot/page 恢复，不会静默丢弃。
 - 系统安全存储中的设备密钥，以及 Connector 请求结果的持久化缓存。

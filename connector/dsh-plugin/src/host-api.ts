@@ -37,7 +37,7 @@ export interface SessionWireHeader {
 
 export interface SessionProjectionBaseline {
   readonly asOfSeq: number;
-  readonly values: Readonly<Record<string, unknown>>;
+  readonly values: SessionProjectionValues;
 }
 
 export interface SessionSummary {
@@ -106,6 +106,97 @@ export interface SessionPromptRequest {
   readonly clientTimeZone?: string;
 }
 
+export interface ModelSelection {
+  readonly provider: string;
+  readonly model: string;
+  readonly reasoningEffort?: string;
+}
+
+export interface ModelReasoningEffort {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+}
+
+export interface ModelReasoning {
+  readonly efforts: readonly ModelReasoningEffort[];
+  readonly defaultEffort?: string;
+}
+
+export interface ModelBadge {
+  readonly text: string | Readonly<Record<string, string>>;
+  readonly tone?: string;
+}
+
+export interface ModelCatalogModel {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly reasoning?: ModelReasoning;
+  readonly badge?: ModelBadge;
+}
+
+export interface ModelProviderGroup {
+  readonly id: string;
+  readonly name: string;
+  readonly models: readonly ModelCatalogModel[];
+}
+
+export interface ModelCatalogFailure {
+  readonly id: string;
+  readonly name: string;
+  readonly message: string;
+}
+
+export interface ModelCatalog {
+  readonly default: ModelSelection;
+  readonly routableProviders: readonly string[];
+  readonly groups: readonly ModelProviderGroup[];
+  readonly failures: readonly ModelCatalogFailure[];
+}
+
+export interface ModelSelectionProjection {
+  readonly lastUsed: ModelSelection | null;
+  readonly next: ModelSelection | null;
+}
+
+export type SessionProjectionValues = Readonly<Record<string, unknown>> & {
+  readonly modelSelection?: ModelSelectionProjection;
+};
+
+export type SessionProjectionsValue =
+  | (SessionProjectionBaseline & { readonly kind: 'sequenced' })
+  | { readonly kind: 'migration-required'; readonly values: SessionProjectionValues }
+  | null;
+
+export interface HostAgentModel {
+  select(selection: ModelSelection): void;
+}
+
+export interface HostAgent {
+  readonly id: string;
+  readonly model: HostAgentModel;
+}
+
+export type SessionAgentResult =
+  | { readonly agent: HostAgent }
+  | { readonly error: { readonly code: string; readonly message: string } };
+
+export interface LlmProviderInfo {
+  readonly id: string;
+}
+
+export interface LlmModelInfo {
+  readonly provider: string;
+  readonly id: string;
+}
+
+export interface LlmRuntime {
+  listProviders(): readonly LlmProviderInfo[];
+  listModels(provider: string): Promise<readonly LlmModelInfo[]>;
+  resolveCallConfig(selection: ModelSelection, signal?: AbortSignal): Promise<unknown>;
+}
+
 export interface SessionFollowRequest {
   readonly address: SessionAddress;
   readonly assistantStream?: true;
@@ -118,6 +209,9 @@ export interface SessionController {
   create(request: SessionCreateRequest): Promise<SessionCreateValue>;
   events(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage>;
   prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<{ readonly accepted: boolean }>;
+  modelCatalog(): Promise<ModelCatalog>;
+  projections(request: { readonly sessionId: string }, signal: AbortSignal): Promise<SessionProjectionsValue>;
+  resolveAgent(sessionId: string): Promise<SessionAgentResult>;
   cancel(request: { readonly sessionId: string }): { readonly accepted: boolean };
   follow(request: SessionFollowRequest, signal: AbortSignal): AsyncIterable<SessionFollowFrame>;
 }
@@ -190,6 +284,7 @@ export interface WorkspaceFilesService {
 
 export interface HostContext {
   readonly sessionController: SessionController;
+  readonly llm: LlmRuntime;
   readonly workspaceRegistry: WorkspaceRegistry;
   readonly connection: HostConnection;
   readonly webServer: HostWebServer;
@@ -205,7 +300,7 @@ export interface HostContext {
   on?(name: string, listener: (...args: never[]) => unknown, options?: { readonly prepend?: boolean }): () => void;
 }
 
-export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'workspaceRegistry' | 'on' | 'workspaceFiles'>;
+export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'llm' | 'workspaceRegistry' | 'on' | 'workspaceFiles'>;
 
 /** Minimal agent identity carried by DSH interaction requests. */
 export interface InteractionAgent {

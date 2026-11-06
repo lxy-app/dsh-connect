@@ -21,6 +21,11 @@ function fakeSessionController(): SessionController {
     async create() { return { sessionId: 'unused' }; },
     async events() { return { records: [], hasMore: false }; },
     async prompt() { return { accepted: true }; },
+    async modelCatalog() {
+      return { default: { provider: 'test', model: 'test' }, routableProviders: [], groups: [], failures: [] };
+    },
+    async projections() { return { kind: 'sequenced' as const, asOfSeq: 0, values: {} }; },
+    async resolveAgent(sessionId) { return { agent: { id: sessionId, model: { select() {} } } }; },
     cancel() { return { accepted: true }; },
     async *follow(): AsyncGenerator<SessionFollowFrame, void, unknown> {},
   };
@@ -38,6 +43,7 @@ test('Host plugin loads without a Server and exposes only non-secret status', as
   const disposers: EffectRegister[] = [];
   const ctx: HostContext = {
     sessionController: fakeSessionController(),
+    llm: { listProviders: () => [], async listModels() { return []; }, async resolveCallConfig() { return {}; } },
     workspaceRegistry: {
       list: () => [{ id: 'ws-1', path: '/work/a', title: 'A', sessionIds: [], createdAt: 'now', updatedAt: 'now' }],
     },
@@ -54,7 +60,7 @@ test('Host plugin loads without a Server and exposes only non-secret status', as
     logger: { warn() {} },
   };
   assert.equal(name, 'dsh-connect-connector');
-  assert.deepEqual(inject, ['sessionController', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles']);
+  assert.deepEqual(inject, ['sessionController', 'llm', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles']);
   assert.doesNotThrow(() => apply(ctx));
   const api = services.get('dshConnectConnector');
   assert.ok(api && typeof api === 'object');
@@ -79,6 +85,7 @@ test('corrupt persisted state fails closed without blocking recovery APIs', asyn
   const services = new Map<string, PluginService>();
   const ctx: HostContext = {
     sessionController: fakeSessionController(),
+    llm: { listProviders: () => [], async listModels() { return []; }, async resolveCallConfig() { return {}; } },
     workspaceRegistry: { list: () => [] },
     connection: { admit: () => ({ peer: { principal: { kind: 'owner' } } }) },
     webServer: {

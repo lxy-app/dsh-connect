@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  LlmRuntime,
+  ModelSelection,
   SessionController,
   SessionFollowFrame,
   SessionSummary,
@@ -8,7 +10,15 @@ import type {
   TurnWindow,
   WorkspaceRegistry,
 } from '../host-api.js';
-import type { ConnectorScope, Logger, TransportEnvelope, UnknownRecord } from '../types.js';
+import type {
+  ConnectorScope,
+  Logger,
+  SessionModelCatalogResult,
+  SessionModelSelectResult,
+  SessionModelSelection,
+  TransportEnvelope,
+  UnknownRecord,
+} from '../types.js';
 import { errorCode, errorMessage, isRecord } from '../types.js';
 import { AttachmentIndex } from './attachment-index.js';
 import { rewriteAttachmentImageLinks } from './attachment-markdown.js';
@@ -18,8 +28,13 @@ import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
 import type { AttachmentByteReader, AttachmentUploader } from './attachment-fetch.js';
 import { evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE } from './attachment-policy.js';
 import { CursorJournal } from './cursor-journal.js';
-import { pageInput, promptInput, sessionAddress } from './input-validation.js';
-import type { PageInputParams, PromptInputParams } from './input-validation.js';
+import { modelCatalogInput, modelSelectInput, pageInput, promptInput, sessionAddress } from './input-validation.js';
+import type {
+  PageInputParams,
+  PromptInputParams,
+  SessionModelCatalogInputParams,
+  SessionModelSelectInputParams,
+} from './input-validation.js';
 import { protocolError } from './request-cache.js';
 import type { WorkspacePolicy } from './workspace-policy.js';
 
@@ -83,6 +98,9 @@ export interface SessionPromptParams extends PromptInputParams {
   readonly workspaceId?: string;
 }
 
+export type SessionModelCatalogParams = SessionModelCatalogInputParams;
+export type SessionModelSelectParams = SessionModelSelectInputParams;
+
 export interface SessionAttachmentFetchParams {
   readonly sessionId: unknown;
   readonly workspaceId?: string;
@@ -124,6 +142,7 @@ export interface SessionSummaryView {
 
 export interface HostSessionAdapterOptions {
   readonly controller: SessionController;
+  readonly llm: LlmRuntime;
   readonly workspaceRegistry: WorkspaceRegistry;
   readonly policy: WorkspacePolicy;
   readonly deviceId: string;
@@ -159,6 +178,7 @@ interface ExternalSessionEvent {
 /** DSH 0.2.x Host adapter. All version-specific Session calls stay in this file. */
 export class HostSessionAdapter {
   readonly #controller: SessionController;
+  readonly #llm: LlmRuntime;
   readonly #workspaceRegistry: WorkspaceRegistry;
   readonly #policy: WorkspacePolicy;
   readonly #deviceId: string;
@@ -171,9 +191,11 @@ export class HostSessionAdapter {
   #sessions = new Map<string, string>();
   readonly #watermarks = new Map<string, number>();
   readonly #follows = new Map<string, FollowSubscription>();
+  readonly #sessionOperations = new Map<string, Promise<void>>();
 
   constructor({
     controller,
+    llm,
     workspaceRegistry,
     policy,
     deviceId,
@@ -183,6 +205,7 @@ export class HostSessionAdapter {
     attachments,
   }: HostSessionAdapterOptions) {
     this.#controller = controller;
+    this.#llm = llm;
     this.#workspaceRegistry = workspaceRegistry;
     this.#policy = policy;
     this.#deviceId = deviceId;
@@ -358,8 +381,98 @@ export class HostSessionAdapter {
   ): Promise<TransportEnvelope> {
     const sessionId = sessionAddress(params.sessionId).sessionId;
     await this.#authorizeSession(sessionId, 'prompt', params.workspaceId);
-    const result = await this.#controller.prompt(promptInput(params, requestId), signal);
-    return { ...result, sessionId, requestId, status: 'accepted' };
+    return this.#serializeSession(sessionId, async () => {
+      await this.#authorizeSession(sessionId, 'prompt', params.workspaceId);
+      signal.throwIfAborted();
+      const result = await this.#controller.prompt(promptInput(params, requestId), signal);
+      return { ...result, sessionId, requestId, status: 'accepted' };
+    });
+  }
+
+  async 'model.catalog'(
+    params: SessionModelCatalogParams,
+    { signal }: { readonly signal: AbortSignal },
+  ): Promise<SessionModelCatalogResult> {
+    const input = modelCatalogInput(params);
+    const workspaceId = await this.#authorizeSession(input.sessionId, 'read', input.workspaceId);
+    const [catalog, projections] = await Promise.all([
+      this.#controller.modelCatalog(),
+      this.#controller.projections({ sessionId: input.sessionId }, signal),
+    ]);
+    if (projections === null) throw protocolError('not_found', `Session "${input.sessionId}" was not found`);
+    const lastUsed = projections.values.modelSelection?.lastUsed ?? null;
+    const next = projections.values.modelSelection?.next ?? null;
+    return {
+      sessionId: input.sessionId,
+      deviceId: this.#deviceId,
+      workspaceId,
+      default: projectModelSelection(catalog.default),
+      lastUsed: lastUsed === null ? null : projectModelSelection(lastUsed),
+      next: next === null ? null : projectModelSelection(next),
+      effective: projectModelSelection(next ?? catalog.default),
+      routableProviders: [...catalog.routableProviders],
+      groups: catalog.groups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        models: group.models.map((model) => ({
+          id: model.id,
+          name: model.name,
+          ...model.description === undefined ? {} : { description: model.description },
+          ...model.reasoning === undefined ? {} : {
+            reasoning: {
+              efforts: model.reasoning.efforts.map((effort) => ({ ...effort })),
+              ...model.reasoning.defaultEffort === undefined
+                ? {}
+                : { defaultEffort: model.reasoning.defaultEffort },
+            },
+          },
+          ...model.badge === undefined ? {} : {
+            badge: {
+              text: typeof model.badge.text === 'string' ? model.badge.text : { ...model.badge.text },
+              ...model.badge.tone === undefined ? {} : { tone: model.badge.tone },
+            },
+          },
+        })),
+      })),
+      failures: catalog.failures.map((failure) => ({
+        id: failure.id,
+        name: failure.name,
+        message: truncate(failure.message || 'Provider models unavailable', 500),
+      })),
+      projectionKind: projections.kind,
+    };
+  }
+
+  async 'model.select'(
+    params: SessionModelSelectParams,
+    { signal, requestId }: { readonly signal: AbortSignal; readonly requestId: string },
+  ): Promise<SessionModelSelectResult> {
+    const input = modelSelectInput(params);
+    const selection: ModelSelection = {
+      provider: input.provider,
+      model: input.model,
+      ...input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort },
+    };
+    await this.#authorizeSession(input.sessionId, 'prompt', input.workspaceId);
+    return this.#serializeSession(input.sessionId, async () => {
+      await this.#authorizeSession(input.sessionId, 'prompt', input.workspaceId);
+      signal.throwIfAborted();
+      const projections = await this.#controller.projections({ sessionId: input.sessionId }, signal);
+      if (projections === null) throw protocolError('not_found', `Session "${input.sessionId}" was not found`);
+      if (projections.kind === 'migration-required') {
+        throw protocolError('session_migration_required', 'Open this Session on the desktop to complete migration before selecting a model');
+      }
+      const resolved = await this.#controller.resolveAgent(input.sessionId);
+      if ('error' in resolved) throwSessionAgentError(resolved.error);
+      await this.#requireModel(selection, signal);
+      signal.throwIfAborted();
+      resolved.agent.model.select(selection);
+      return {
+        sessionId: input.sessionId,
+        requestId,
+        selected: projectModelSelection(selection),
+      };
+    });
   }
 
   async cancel(params: SessionCancelParams, _context?: { readonly signal?: AbortSignal }): Promise<TransportEnvelope> {
@@ -810,6 +923,38 @@ export class HostSessionAdapter {
     };
   }
 
+  async #requireModel(selection: ModelSelection, signal: AbortSignal): Promise<void> {
+    try {
+      if (!this.#llm.listProviders().some((provider) => provider.id === selection.provider)) {
+        throw protocolError('model_unavailable', `Provider "${selection.provider}" is not registered`);
+      }
+      const models = await this.#llm.listModels(selection.provider);
+      if (!models.some((model) => model.id === selection.model)) {
+        throw protocolError('model_unavailable', `Model "${selection.provider}/${selection.model}" is not in the available catalog`);
+      }
+      await this.#llm.resolveCallConfig(selection, signal);
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      if (errorCode(error) === 'model_unavailable') throw error;
+      throw protocolError(
+        'model_unavailable',
+        truncate(`Selected model is unavailable: ${errorMessage(error)}`, 500),
+      );
+    }
+  }
+
+  async #serializeSession<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.#sessionOperations.get(sessionId) ?? Promise.resolve();
+    const run = previous.then(operation);
+    const settled = run.then(() => undefined, () => undefined);
+    this.#sessionOperations.set(sessionId, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.#sessionOperations.get(sessionId) === settled) this.#sessionOperations.delete(sessionId);
+    }
+  }
+
   #requireScope(scope: ConnectorScope): void {
     if (!this.#policy.hasScope(scope)) {
       throw protocolError('permission_denied', `Connector scope ${scope} is not granted`);
@@ -829,6 +974,22 @@ export class HostSessionAdapter {
     }
     return workspaceId;
   }
+}
+
+function projectModelSelection(selection: ModelSelection): SessionModelSelection {
+  return {
+    provider: selection.provider,
+    model: selection.model,
+    ...selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort },
+  };
+}
+
+function throwSessionAgentError(error: { readonly code: string; readonly message: string }): never {
+  if (error.code === 'session/not-found') throw protocolError('not_found', error.message);
+  if (error.code === 'session/writer-held' || error.code === 'session/agent-busy') {
+    throw protocolError('conflict', error.message);
+  }
+  throw error;
 }
 
 // Mobile transcript payloads must stay well under the 64 KiB transport limit.

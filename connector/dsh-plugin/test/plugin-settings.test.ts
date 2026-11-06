@@ -15,6 +15,11 @@ function fakeSessionController(): SessionController {
     async create() { return { sessionId: 'unused' }; },
     async events() { return { records: [], hasMore: false }; },
     async prompt() { return { accepted: true }; },
+    async modelCatalog() {
+      return { default: { provider: 'test', model: 'test' }, routableProviders: [], groups: [], failures: [] };
+    },
+    async projections() { return { kind: 'sequenced' as const, asOfSeq: 0, values: {} }; },
+    async resolveAgent(sessionId) { return { agent: { id: sessionId, model: { select() {} } } }; },
     cancel() { return { accepted: true }; },
     async *follow(): AsyncGenerator<SessionFollowFrame, void, unknown> {},
   };
@@ -45,6 +50,7 @@ async function setup(t: TestContext, initialState?: Record<string, unknown>, env
   const disposers: EffectRegister[] = [];
   const ctx: HostContext = {
     sessionController: fakeSessionController(),
+    llm: { listProviders: () => [], async listModels() { return []; }, async resolveCallConfig() { return {}; } },
     workspaceRegistry: { list: () => [] },
     connection: { admit: () => ({ peer: { principal: { kind: 'owner' } } }) },
     webServer: { register: () => () => {} },

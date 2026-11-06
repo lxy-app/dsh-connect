@@ -57,6 +57,34 @@ test('the same prompt requestId reaches Host exactly once', async () => {
   assert.ok(transport.sent.every((message) => message.result?.accepted));
 });
 
+test('model commands route to Host and selection retries keep one stable outcome', async () => {
+  const transport = new FakeTransport();
+  let catalogCalls = 0;
+  let selectCalls = 0;
+  const handler = new CommandHandler({
+    transport,
+    host: {
+      async 'model.catalog'() { catalogCalls += 1; return { effective: { provider: 'deepseek', model: 'chat' } }; },
+      async 'model.select'(params) {
+        selectCalls += 1;
+        return { selected: { provider: params.provider, model: params.model, reasoningEffort: params.reasoningEffort } };
+      },
+    },
+  });
+  await handler.handle({ v: 1, type: 'command', requestId: 'catalog-1', method: 'session.model.catalog' });
+  const command = {
+    v: 1 as const,
+    type: 'command' as const,
+    requestId: 'model-command-1',
+    method: 'session.model.select',
+    params: { sessionId: 's1', workspaceId: 'ws-1', provider: 'deepseek', model: 'reasoner', reasoningEffort: 'high' },
+  };
+  await Promise.all([handler.handle(command), handler.handle(command)]);
+  assert.equal(catalogCalls, 1);
+  assert.equal(selectCalls, 1);
+  assert.equal(transport.sent[2]?.result !== undefined, true);
+});
+
 test('the same requestId with different params returns idempotency_conflict', async () => {
   const transport = new FakeTransport();
   let calls = 0;

@@ -5,6 +5,8 @@ import type {
   SessionCreateParams,
   SessionFollowParams,
   SessionListParams,
+  SessionModelCatalogParams,
+  SessionModelSelectParams,
   SessionPageParams,
   SessionPromptParams,
   SessionAttachmentFetchParams,
@@ -20,6 +22,8 @@ const METHODS = new Set([
   'session.page',
   'session.transcript',
   'session.prompt',
+  'session.model.catalog',
+  'session.model.select',
   'session.follow',
   'session.unfollow',
   'session.cancel',
@@ -27,7 +31,7 @@ const METHODS = new Set([
   'interaction.respond',
 ]);
 
-type SessionMethod = 'list' | 'create' | 'page' | 'transcript' | 'prompt' | 'follow' | 'unfollow' | 'cancel' | 'attachment.fetch';
+type SessionMethod = 'list' | 'create' | 'page' | 'transcript' | 'prompt' | 'model.catalog' | 'model.select' | 'follow' | 'unfollow' | 'cancel' | 'attachment.fetch';
 type CommandMethod = SessionMethod | 'interaction.respond';
 
 export interface CommandContext {
@@ -45,6 +49,8 @@ export interface CommandHost {
   page?(params: SessionPageParams, context: CommandContext): ReturnType<HostMethod>;
   transcript?(params: SessionTranscriptParams, context: CommandContext): ReturnType<HostMethod>;
   prompt?(params: SessionPromptParams, context: CommandContext): ReturnType<HostMethod>;
+  'model.catalog'?(params: SessionModelCatalogParams, context: CommandContext): ReturnType<HostMethod>;
+  'model.select'?(params: SessionModelSelectParams, context: CommandContext): ReturnType<HostMethod>;
   follow?(params: SessionFollowParams, context: CommandContext): ReturnType<HostMethod>;
   unfollow?(params: SessionUnfollowParams, context: CommandContext): ReturnType<HostMethod>;
   cancel?(params: SessionCancelParams, context: CommandContext): ReturnType<HostMethod>;
@@ -150,6 +156,12 @@ export class CommandHandler {
           return await this.#requireMethod('transcript', command.method).call(this.#host, params as SessionTranscriptParams, context);
         case 'prompt':
           return await this.#requireMethod('prompt', command.method).call(this.#host, params as SessionPromptParams, context);
+        case 'model.catalog':
+          return await this.#requireMethod('model.catalog', command.method)
+            .call(this.#host, params as SessionModelCatalogParams, context);
+        case 'model.select':
+          return await this.#requireMethod('model.select', command.method)
+            .call(this.#host, params as SessionModelSelectParams, context);
         case 'follow':
           return await this.#requireMethod('follow', command.method).call(this.#host, params as SessionFollowParams, context);
         case 'unfollow':

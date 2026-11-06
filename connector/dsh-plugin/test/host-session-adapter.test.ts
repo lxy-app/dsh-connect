@@ -4,6 +4,7 @@ import { HostSessionAdapter } from '../src/lib/host-session-adapter.js';
 import type { AttachmentWiring } from '../src/lib/host-session-adapter.js';
 import { WorkspacePolicy } from '../src/lib/workspace-policy.js';
 import type {
+  LlmRuntime,
   SessionController,
   SessionCreateRequest,
   SessionFollowRequest,
@@ -44,6 +45,7 @@ type EmittedEvent = Record<string, unknown>;
 
 interface SetupOverrides {
   readonly controller?: Partial<SessionController>;
+  readonly llm?: LlmRuntime;
   readonly attachments?: AttachmentWiring;
 }
 
@@ -69,6 +71,11 @@ function setup(overrides: SetupOverrides = {}) {
       return { records: [{ type: 'event', event: { type: 'turn/end', seq: 1, time: 1_000, data: {} } }], hasMore: false };
     },
     async prompt(request, signal) { calls.push(['prompt', request, signal]); return { accepted: true }; },
+    async modelCatalog() {
+      return { default: { provider: 'deepseek', model: 'deepseek-chat' }, routableProviders: [], groups: [], failures: [] };
+    },
+    async projections() { return { kind: 'sequenced' as const, asOfSeq: 1, values: {} }; },
+    async resolveAgent(sessionId) { return { agent: { id: sessionId, model: { select() {} } } }; },
     cancel(request) { calls.push(['cancel', request]); return { accepted: true }; },
     follow(request, signal) {
       calls.push(['follow', request, signal]);
@@ -96,8 +103,13 @@ function setup(overrides: SetupOverrides = {}) {
     workspaces: [{ id: 'ws-a', name: 'A', path: '/work/a' }],
     scopes: ['read', 'prompt', 'cancel'],
   });
+  const llm: LlmRuntime = overrides.llm ?? {
+    listProviders: () => [{ id: 'deepseek' }],
+    async listModels(provider) { return [{ provider, id: 'deepseek-chat' }]; },
+    async resolveCallConfig(selection) { return selection; },
+  };
   const adapter = new HostSessionAdapter({
-    controller, workspaceRegistry, policy, deviceId: 'dev-1', emit: (event) => emitted.push(event),
+    controller, llm, workspaceRegistry, policy, deviceId: 'dev-1', emit: (event) => emitted.push(event),
     logger: { warn() {} },
     ...(overrides.attachments ? { attachments: overrides.attachments } : {}),
   });
