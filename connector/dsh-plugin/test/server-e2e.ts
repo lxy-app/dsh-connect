@@ -12,6 +12,7 @@ import WebSocket from 'ws';
 import type { RawData } from 'ws';
 import type {
   HostWorkspace,
+  ModelSelection,
   RuntimeHostContext,
   SessionCreateRequest,
   SessionFollowFrame,
@@ -35,6 +36,8 @@ const promptRequestId = `prompt-e2e-${Date.now()}-${process.pid}`;
 const createRequestId = `create-e2e-${Date.now()}-${process.pid}`;
 const mobilePromptRequestId = `mobile-prompt-e2e-${Date.now()}-${process.pid}`;
 const mobileCreateRequestId = `mobile-create-e2e-${Date.now()}-${process.pid}`;
+const mobileModelRequestId = `mobile-model-e2e-${Date.now()}-${process.pid}`;
+const existingSessionId = `existing-session-${Date.now()}-${process.pid}`;
 const binary = join(temp, process.platform === 'win32' ? 'server.exe' : 'server');
 let server: ChildProcess | null = null;
 let runtime: ConnectorRuntime | null = null;
@@ -126,7 +129,7 @@ async function main(): Promise<void> {
     assert.match(pairingLogs, /connector pair\.authorize completed/);
     assert.equal(pairingLogs.includes(pairing.code), false, 'server logs must not contain the pairing code');
     assert.ok(listed, 'session.list must complete after pairing');
-    assert.equal(listed.sessions[0]?.sessionId, 'existing-session');
+    assert.equal(listed.sessions[0]?.sessionId, existingSessionId);
     const devices = await request<DevicesResponse>('/v1/devices');
     assert.equal(devices.devices.find((device) => device.deviceId === deviceId)?.status, 'online');
     const createBody = { requestId: createRequestId, deviceId, workspaceId: 'ws-1' };
@@ -227,7 +230,7 @@ async function main(): Promise<void> {
     const mobileSessions = await mobileRequest<{ readonly sessions: readonly { readonly sessionId: string }[] }>(
       '/v1/mobile/sessions', phone.accessToken,
     );
-    assert.ok(mobileSessions.sessions.some((session) => session.sessionId === 'existing-session'));
+    assert.ok(mobileSessions.sessions.some((session) => session.sessionId === existingSessionId));
     assert.ok(mobileSessions.sessions.some((session) => session.sessionId === mobileCreated.sessionId));
     const mobileTranscript = await mobileRequest<{
       readonly messages: readonly {
@@ -236,7 +239,7 @@ async function main(): Promise<void> {
       }[];
       readonly turnEndSeq?: number;
     }>(
-      `/v1/mobile/sessions/existing-session/messages?deviceId=${deviceId}&workspaceId=ws-1`, phone.accessToken,
+      `/v1/mobile/sessions/${existingSessionId}/messages?deviceId=${deviceId}&workspaceId=ws-1`, phone.accessToken,
     );
     assert.deepEqual(mobileTranscript.messages.map((message) => message.role), ['user', 'assistant']);
     assert.equal(mobileTranscript.turnEndSeq, 5);
@@ -246,10 +249,48 @@ async function main(): Promise<void> {
     assert.ok(declared, 'present file must be projected into the mobile transcript');
 
     const mobileEvents = new EventClient(
-      `${serverUrl.replace('http:', 'ws:')}/v1/mobile/events/ws?deviceId=${deviceId}&workspaceId=ws-1&sessionId=existing-session`,
+      `${serverUrl.replace('http:', 'ws:')}/v1/mobile/events/ws?deviceId=${deviceId}&workspaceId=ws-1&sessionId=${existingSessionId}`,
       phone.accessToken,
     );
     await mobileEvents.open();
+
+    const modelUrl = `/v1/mobile/sessions/${existingSessionId}/model?deviceId=${deviceId}&workspaceId=ws-1`;
+    type ModelCatalogResponse = {
+      readonly default: ModelSelection;
+      readonly effective: ModelSelection;
+      readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
+    };
+    const initialCatalog = await mobileRequest<ModelCatalogResponse>(modelUrl, phone.accessToken);
+    assert.deepEqual(initialCatalog.default, host.defaultModel);
+    assert.deepEqual(initialCatalog.effective, host.defaultModel);
+    assert.equal(initialCatalog.groups[0]?.models.length, 2);
+    assert.equal(host.modelSelectCalls, 0, 'read-only catalog must not resolve or mutate an Agent');
+    const modelBody = {
+      requestId: mobileModelRequestId,
+      deviceId,
+      workspaceId: 'ws-1',
+      provider: 'deepseek',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'high',
+    };
+    const selected = await mobileRequest<{ readonly requestId: string; readonly selected: ModelSelection }>(
+      `/v1/mobile/sessions/${existingSessionId}/model`, phone.accessToken, { method: 'POST', body: modelBody },
+    );
+    assert.equal(selected.requestId, mobileModelRequestId);
+    assert.deepEqual(selected.selected, { provider: 'deepseek', model: 'deepseek-reasoner', reasoningEffort: 'high' });
+    assert.deepEqual(host.currentModel(), selected.selected);
+    assert.equal(host.modelSelectCalls, 1);
+    await mobileEvents.waitFor((message) => message.kind === 'session.event'
+      && isRecord(message.data) && message.data.type === 'model/selection');
+    const modelReplay = await mobileRequest<{ readonly requestId: string; readonly selected: ModelSelection }>(
+      `/v1/mobile/sessions/${existingSessionId}/model`, phone.accessToken, { method: 'POST', body: modelBody },
+    );
+    assert.deepEqual(modelReplay, selected);
+    assert.equal(host.modelSelectCalls, 1, 'model requestId replay must not reach Host twice');
+    const correctedCatalog = await mobileRequest<ModelCatalogResponse>(modelUrl, phone.accessToken);
+    assert.deepEqual(correctedCatalog.effective, selected.selected);
+    assert.deepEqual(correctedCatalog.default, host.defaultModel, 'Session selection must not change the deployment default');
+
     let downloaded: Uint8Array | undefined;
     for (let attempt = 0; attempt < 100 && !downloaded; attempt += 1) {
       const response = await fetch(`${serverUrl}/v1/mobile/attachments/${declared.attachmentId}`, {
@@ -266,7 +307,7 @@ async function main(): Promise<void> {
     if (!downloaded) {
       const debugTranscript = await mobileRequest<{
         readonly messages: readonly { readonly attachments?: readonly unknown[] }[];
-      }>(`/v1/mobile/sessions/existing-session/messages?deviceId=${deviceId}&workspaceId=ws-1`, phone.accessToken);
+      }>(`/v1/mobile/sessions/${existingSessionId}/messages?deviceId=${deviceId}&workspaceId=ws-1`, phone.accessToken);
       serverLog.push(`attachment did not become ready; reads=${host.attachmentReads}; state=${JSON.stringify(debugTranscript.messages[1]?.attachments)}\n`);
     }
     assert.deepEqual(downloaded, attachmentBytes, 'mobile must receive the exact Host-read bytes');
@@ -301,7 +342,8 @@ async function main(): Promise<void> {
         'immediate command after pair.complete',
         'durable events and assistant stream',
         'Host unfollow after App disconnect',
-        'create + prompt idempotency',
+        'create + prompt + model selection idempotency',
+        'mobile model catalog + Session-only selection + model/selection event',
         'device token reconnect',
         'mobile access request + desktop approval',
         'mobile workspaces/sessions/create/transcript/prompt',
@@ -392,28 +434,51 @@ interface HostFixture {
   createCalls: number;
   promptCalls: number;
   attachmentReads: number;
+  modelSelectCalls: number;
+  readonly defaultModel: ModelSelection;
+  currentModel(): ModelSelection;
   followAborted(sessionId: string): boolean;
   readonly ctx: RuntimeHostContext;
 }
 
 function createHost(workspaceRoot: string, attachmentPath: string, attachmentBytes: Uint8Array): HostFixture {
   const workspaces: HostWorkspace[] = [{
-    id: 'ws-1', path: workspaceRoot, title: 'E2E Workspace', sessionIds: ['existing-session'],
+    id: 'ws-1', path: workspaceRoot, title: 'E2E Workspace', sessionIds: [existingSessionId],
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
   }];
   const follows = new Map<string, FollowQueue>();
+  const defaultModel: ModelSelection = { provider: 'deepseek', model: 'deepseek-chat' };
+  let selectedModel = defaultModel;
   const host: HostFixture = {
     createCalls: 0,
     promptCalls: 0,
     attachmentReads: 0,
+    modelSelectCalls: 0,
+    defaultModel,
+    currentModel: () => selectedModel,
     followAborted: (sessionId) => follows.get(sessionId)?.signal.aborted ?? false,
     ctx: {
+      llm: {
+        listProviders: () => [{ id: 'deepseek' }],
+        async listModels(provider) {
+          return [
+            { provider, id: 'deepseek-chat' },
+            { provider, id: 'deepseek-reasoner' },
+          ];
+        },
+        async resolveCallConfig(selection) {
+          if (selection.reasoningEffort !== undefined && selection.model !== 'deepseek-reasoner') {
+            throw new Error('reasoning effort is unsupported');
+          }
+          return selection;
+        },
+      },
       workspaceRegistry: { list: () => workspaces },
       workspaceFiles: {
         async readBytes(scope, path, options, signal) {
           host.attachmentReads += 1;
           try {
-            assert.deepEqual(scope, { sessionId: 'existing-session', workspaceRoot });
+            assert.deepEqual(scope, { sessionId: existingSessionId, workspaceRoot });
             assert.equal(path, await realpath(attachmentPath));
             assert.equal(signal.aborted, false);
             // Match DSH 0.2.2-rc.1: one ranged window is 2 MiB, while a complete file
@@ -475,6 +540,54 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
             follow.push({ type: 'event', event: { type: 'turn/end', seq: 3, time: 3_000, data: { reason: 'completed' } } });
           }
           return { accepted: true };
+        },
+        async modelCatalog() {
+          return {
+            default: defaultModel,
+            routableProviders: ['deepseek'],
+            groups: [{
+              id: 'deepseek',
+              name: 'DeepSeek',
+              models: [
+                { id: 'deepseek-chat', name: 'DeepSeek Chat' },
+                {
+                  id: 'deepseek-reasoner',
+                  name: 'DeepSeek Reasoner',
+                  reasoning: { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' },
+                },
+              ],
+            }],
+            failures: [],
+          };
+        },
+        async projections() {
+          return {
+            kind: 'sequenced' as const,
+            asOfSeq: 1,
+            values: {
+              modelSelection: {
+                lastUsed: null,
+                next: selectedModel === defaultModel ? null : selectedModel,
+              },
+            },
+          };
+        },
+        async resolveAgent(sessionId) {
+          return {
+            agent: {
+              id: sessionId,
+              model: {
+                select(selection: ModelSelection) {
+                  host.modelSelectCalls += 1;
+                  selectedModel = selection;
+                  follows.get(sessionId)?.push({
+                    type: 'event',
+                    event: { type: 'model/selection', seq: 2, time: 4_000, data: selection },
+                  });
+                },
+              },
+            },
+          };
         },
         cancel() { return { accepted: true }; },
         follow(request: SessionFollowRequest, signal: AbortSignal) {
