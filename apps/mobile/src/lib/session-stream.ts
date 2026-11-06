@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import { normalizeServerUrl } from '@/lib/mobile-api';
+import { isModelSelectionEvent } from '@/lib/session-model';
 
 export type SessionStreamHandlers = {
   onOpen: () => void;
@@ -9,6 +10,7 @@ export type SessionStreamHandlers = {
   onDelta: (text: string) => void;
   onEnd: () => void;
   onRefresh: () => void;
+  onModelRefresh: () => void;
   onError: (message: string) => void;
 };
 
@@ -154,9 +156,11 @@ export function openSessionStream(
     }
     if (kind === 'session.resync_required') {
       handlers.onRefresh();
+      handlers.onModelRefresh();
       return;
     }
     if (kind === 'session.event') {
+      if (isModelSelectionEvent(data)) handlers.onModelRefresh();
       const eventType = data.type;
       if (eventType === 'assistant/message' || eventType === 'user/message' || eventType === 'turn/end') {
         refreshSoon();

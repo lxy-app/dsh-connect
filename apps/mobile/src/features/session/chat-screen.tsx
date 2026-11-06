@@ -18,6 +18,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { InteractionCard } from '@/features/interactions/interaction-card';
+import { ModelSheet } from '@/features/session/model-sheet';
+import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
+import { SessionModelProvider, useSessionModel } from '@/features/session/session-model-provider';
 import { SessionDrawer } from '@/features/navigation/session-drawer';
 import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { MarkdownText } from '@/components/markdown';
@@ -35,6 +38,7 @@ import {
 import { formatTime } from '@/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
 import { resolvePendingReply } from '@/lib/pending-reply';
+import { modelLabel } from '@/lib/session-model';
 import { shouldCancelVoiceGesture } from '@/lib/voice-gesture';
 import { openSessionStream } from '@/lib/session-stream';
 import { SystemVoiceSessionGuard } from '@/lib/system-voice-session';
@@ -50,6 +54,19 @@ import type { MobileMessage, MobileSession, MobileTranscript } from '@/types/mob
 const VOICE_WAVE_BARS = [6, 6, 10, 6, 14, 10, 20, 10, 14, 6, 10, 20, 14, 10, 6, 14, 20, 10, 6, 14, 10, 20, 10, 6, 6] as const;
 
 export function ChatScreen() {
+  const params = useLocalSearchParams<{ sessionId: string; deviceId: string; workspaceId: string }>();
+  const sessionId = single(params.sessionId);
+  const deviceId = single(params.deviceId);
+  const workspaceId = single(params.workspaceId);
+  const identity = `${deviceId}:${workspaceId}:${sessionId}`;
+  return (
+    <SessionModelProvider key={identity} deviceId={deviceId} workspaceId={workspaceId} sessionId={sessionId}>
+      <ChatScreenContent />
+    </SessionModelProvider>
+  );
+}
+
+function ChatScreenContent() {
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -93,6 +110,17 @@ export function ChatScreen() {
   const [draft, setDraft] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  const {
+    data: modelCatalog,
+    loading: modelLoading,
+    refreshing: modelRefreshing,
+    error: modelError,
+    pending: modelPending,
+    refresh: refreshModel,
+    selectModel,
+  } = useSessionModel();
   const [voiceMode, setVoiceMode] = useState(false);
   const [voicePreparing, setVoicePreparing] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -255,6 +283,14 @@ export function ChatScreen() {
 
   const canPrompt = scopes.includes('prompt');
   const canCancel = scopes.includes('cancel');
+  const openModelSheet = useCallback(() => {
+    setModelSheetOpen(true);
+    void refreshModel();
+  }, [refreshModel]);
+  const openMoreOptions = useCallback(() => {
+    setMoreOptionsOpen(true);
+    void refreshModel();
+  }, [refreshModel]);
   const sessionInteractions = interactions.filter((item) => item.sessionId === sessionId);
 
   const loadLatest = useCallback(
@@ -389,6 +425,9 @@ export function ChatScreen() {
             onRefresh: () => {
               void loadLatest('silent');
             },
+            onModelRefresh: () => {
+              void refreshModel(true);
+            },
             onError: () => undefined,
           },
         );
@@ -408,6 +447,7 @@ export function ChatScreen() {
     connection,
     deviceId,
     loadLatest,
+    refreshModel,
     session?.accessToken,
     sessionId,
     shouldStream,
@@ -525,7 +565,7 @@ export function ChatScreen() {
 
   const send = async () => {
     const text = draft.trim();
-    if (!text || sending || !canPrompt) return;
+    if (!text || sending || !canPrompt || modelPending) return;
     const requestId = createRequestId('mpr');
     const afterSeq = (transcript?.messages ?? []).reduce(
       (highest, message) => Math.max(highest, message.seq),
@@ -1116,9 +1156,9 @@ export function ChatScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="发送"
-                  disabled={!draft.trim() || sending}
+                  disabled={!draft.trim() || sending || modelPending !== null}
                   onPress={() => void send()}
-                  style={({ pressed }) => [styles.send, { backgroundColor: theme.accent, opacity: !draft.trim() || sending ? 0.4 : pressed ? 0.75 : 1 }]}
+                  style={({ pressed }) => [styles.send, { backgroundColor: theme.accent, opacity: !draft.trim() || sending || modelPending !== null ? 0.4 : pressed ? 0.75 : 1 }]}
                 >
                   {sending ? <ActivityIndicator color={theme.onAccent} size="small" /> : <Text style={[styles.sendText, { color: theme.onAccent }]}>↑</Text>}
                 </Pressable>
@@ -1126,7 +1166,7 @@ export function ChatScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="更多输入选项"
-                  onPress={() => Alert.alert('更多输入选项', '附件发送尚未开放，当前可使用文字或语音输入。')}
+                  onPress={openMoreOptions}
                   style={({ pressed }) => [styles.voiceSwitch, pressed && styles.pressed]}
                 >
                   <Text style={[styles.moreOptionsText, { color: theme.textSecondary }]}>＋</Text>
@@ -1156,9 +1196,41 @@ export function ChatScreen() {
           <Text style={[styles.readOnlyText, { color: theme.textSecondary }]}>
             当前授权只允许查看。若需要发送指令或停止执行，请让桌面在 DSH Connect 面板中补充对应动作。
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="查看会话模型"
+            onPress={openModelSheet}
+            style={({ pressed }) => [styles.readOnlyModelAction, { backgroundColor: theme.surfaceMuted }, pressed && styles.pressed]}
+          >
+            <Text style={[styles.readOnlyModelActionText, { color: theme.accent }]}>
+              {modelCatalog ? `会话模型 · ${modelLabel(modelCatalog, modelCatalog.effective)}` : '查看会话模型'}
+            </Text>
+          </Pressable>
         </View>
       )}
       {voiceActive ? null : <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />}
+      <MoreOptionsSheet
+        visible={moreOptionsOpen}
+        catalog={modelCatalog}
+        refreshing={modelRefreshing}
+        onClose={() => setMoreOptionsOpen(false)}
+        onOpenModel={() => {
+          setMoreOptionsOpen(false);
+          openModelSheet();
+        }}
+      />
+      <ModelSheet
+        visible={modelSheetOpen}
+        catalog={modelCatalog}
+        loading={modelLoading}
+        refreshing={modelRefreshing}
+        error={modelError}
+        pending={modelPending}
+        canSelect={canPrompt}
+        onClose={() => setModelSheetOpen(false)}
+        onRefresh={refreshModel}
+        onSelect={(selection) => { void selectModel(selection); }}
+      />
       <SessionDrawer
         visible={drawerOpen}
         currentSessionId={sessionId}
@@ -1688,6 +1760,18 @@ const styles = StyleSheet.create({
     fontSize: Typography.secondary,
     lineHeight: 20,
     textAlign: 'center',
+  },
+  readOnlyModelAction: {
+    alignSelf: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    marginTop: 10,
+  },
+  readOnlyModelActionText: {
+    fontSize: Typography.body,
+    lineHeight: 20,
+    fontWeight: '600',
   },
   pressed: {
     opacity: 0.6,

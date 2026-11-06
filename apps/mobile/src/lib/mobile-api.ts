@@ -8,10 +8,20 @@ import type {
   MobileInteractionQuestion,
   MobileMeResponse,
   MobileMessage,
+  MobileModelBadge,
+  MobileModelCatalogFailure,
+  MobileModelCatalogModel,
+  MobileModelProviderGroup,
+  MobileModelReasoning,
+  MobileModelReasoningEffort,
+  MobileModelSelection,
+  MobileModelSelectInput,
+  MobileModelSelectResult,
   MobilePlatform,
   MobileSession,
   MobileSessionCreateResult,
   MobileSessionList,
+  MobileSessionModelCatalog,
   MobileSessionResponse,
   MobileTranscript,
   MobileUser,
@@ -112,6 +122,10 @@ export function describeMobileApiError(error: unknown): string {
       return '桌面离线，暂时无法执行此操作。请确认 DSH 和 Connector 在线。';
     case 'command_timeout':
       return '桌面响应超时，请稍后重试。';
+    case 'model_unavailable':
+      return '所选模型或推理强度当前不可用，请刷新目录后重新选择。';
+    case 'session_migration_required':
+      return '这个会话需要先在桌面 DSH 中打开并完成迁移，之后才能切换模型。';
     case 'conflict':
       return '状态已变化，请刷新后重试。';
     case 'idempotency_conflict':
@@ -305,6 +319,46 @@ export async function getMobileTranscript(
     { method: 'GET', accessToken },
   );
   return parseTranscript(payload);
+}
+
+export async function getMobileSessionModel(
+  serverUrl: string,
+  accessToken: string,
+  sessionId: string,
+  input: { deviceId: string; workspaceId: string },
+): Promise<MobileSessionModelCatalog> {
+  const query = new URLSearchParams({ deviceId: input.deviceId, workspaceId: input.workspaceId });
+  const payload = await requestJSON(
+    serverUrl,
+    `/v1/mobile/sessions/${encodeURIComponent(sessionId)}/model?${query.toString()}`,
+    { method: 'GET', accessToken },
+  );
+  return parseMobileSessionModelCatalog(payload);
+}
+
+export async function selectMobileSessionModel(
+  serverUrl: string,
+  accessToken: string,
+  sessionId: string,
+  input: MobileModelSelectInput,
+): Promise<MobileModelSelectResult> {
+  const payload = await requestJSON(
+    serverUrl,
+    `/v1/mobile/sessions/${encodeURIComponent(sessionId)}/model`,
+    {
+      method: 'POST',
+      accessToken,
+      body: {
+        requestId: input.requestId,
+        deviceId: input.deviceId,
+        workspaceId: input.workspaceId,
+        provider: input.provider,
+        model: input.model,
+        ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
+      },
+    },
+  );
+  return parseMobileModelSelectResult(payload);
 }
 
 export async function promptMobileSession(
@@ -619,6 +673,104 @@ function parseSessionCreate(value: unknown): MobileSessionCreateResult {
     sessionId: requiredString(value.sessionId),
     workspaceId: requiredString(value.workspaceId),
     ...(typeof value.agentPreset === 'string' && value.agentPreset ? { agentPreset: value.agentPreset } : {}),
+  };
+}
+
+function parseMobileSessionModelCatalog(value: unknown): MobileSessionModelCatalog {
+  if (!isRecord(value) || !Array.isArray(value.groups) || !Array.isArray(value.failures)) {
+    throw invalidResponse();
+  }
+  if (value.projectionKind !== 'sequenced' && value.projectionKind !== 'migration-required') {
+    throw invalidResponse();
+  }
+  return {
+    sessionId: requiredString(value.sessionId),
+    deviceId: requiredString(value.deviceId),
+    workspaceId: requiredString(value.workspaceId),
+    default: parseModelSelection(value.default),
+    lastUsed: parseNullableModelSelection(value.lastUsed),
+    next: parseNullableModelSelection(value.next),
+    effective: parseModelSelection(value.effective),
+    routableProviders: parseStringArray(value.routableProviders),
+    groups: value.groups.map(parseMobileModelProviderGroup),
+    failures: value.failures.map(parseMobileModelCatalogFailure),
+    projectionKind: value.projectionKind,
+  };
+}
+
+function parseModelSelection(value: unknown): MobileModelSelection {
+  if (!isRecord(value)) throw invalidResponse();
+  return {
+    provider: requiredString(value.provider),
+    model: requiredString(value.model),
+    ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: requiredString(value.reasoningEffort) }),
+  };
+}
+
+function parseNullableModelSelection(value: unknown): MobileModelSelection | null {
+  return value === null ? null : parseModelSelection(value);
+}
+
+function parseMobileModelProviderGroup(value: unknown): MobileModelProviderGroup {
+  if (!isRecord(value) || !Array.isArray(value.models)) throw invalidResponse();
+  return {
+    id: requiredString(value.id),
+    name: requiredString(value.name),
+    models: value.models.map(parseMobileModel),
+  };
+}
+
+function parseMobileModel(value: unknown): MobileModelCatalogModel {
+  if (!isRecord(value)) throw invalidResponse();
+  return {
+    id: requiredString(value.id),
+    name: requiredString(value.name),
+    ...(typeof value.description === 'string' ? { description: value.description } : {}),
+    ...(value.reasoning === undefined ? {} : { reasoning: parseMobileModelReasoning(value.reasoning) }),
+    ...(value.badge === undefined ? {} : { badge: parseMobileModelBadge(value.badge) }),
+  };
+}
+
+function parseMobileModelReasoning(value: unknown): MobileModelReasoning {
+  if (!isRecord(value) || !Array.isArray(value.efforts)) throw invalidResponse();
+  return {
+    efforts: value.efforts.map((entry): MobileModelReasoningEffort => {
+      if (!isRecord(entry)) throw invalidResponse();
+      return {
+        id: requiredString(entry.id),
+        name: requiredString(entry.name),
+        ...(typeof entry.description === 'string' ? { description: entry.description } : {}),
+      };
+    }),
+    ...(value.defaultEffort === undefined ? {} : { defaultEffort: requiredString(value.defaultEffort) }),
+  };
+}
+
+function parseMobileModelBadge(value: unknown): MobileModelBadge {
+  if (!isRecord(value)) throw invalidResponse();
+  const localized = isRecord(value.text) && Object.values(value.text).every((entry) => typeof entry === 'string');
+  if (typeof value.text !== 'string' && !localized) throw invalidResponse();
+  return {
+    text: value.text as string | Record<string, string>,
+    ...(value.tone === undefined ? {} : { tone: requiredString(value.tone) }),
+  };
+}
+
+function parseMobileModelCatalogFailure(value: unknown): MobileModelCatalogFailure {
+  if (!isRecord(value)) throw invalidResponse();
+  return {
+    id: requiredString(value.id),
+    name: requiredString(value.name),
+    message: requiredString(value.message),
+  };
+}
+
+function parseMobileModelSelectResult(value: unknown): MobileModelSelectResult {
+  if (!isRecord(value)) throw invalidResponse();
+  return {
+    sessionId: requiredString(value.sessionId),
+    requestId: requiredString(value.requestId),
+    selected: parseModelSelection(value.selected),
   };
 }
 

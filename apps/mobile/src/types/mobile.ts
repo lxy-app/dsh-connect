@@ -167,6 +167,77 @@ export type MobileTranscript = {
   truncated?: boolean;
 };
 
+export type MobileModelSelection = {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+};
+
+export type MobileModelReasoningEffort = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+export type MobileModelReasoning = {
+  efforts: MobileModelReasoningEffort[];
+  defaultEffort?: string;
+};
+
+export type MobileModelBadge = {
+  text: string | Record<string, string>;
+  tone?: string;
+};
+
+export type MobileModelCatalogModel = {
+  id: string;
+  name: string;
+  description?: string;
+  reasoning?: MobileModelReasoning;
+  badge?: MobileModelBadge;
+};
+
+export type MobileModelProviderGroup = {
+  id: string;
+  name: string;
+  models: MobileModelCatalogModel[];
+};
+
+export type MobileModelCatalogFailure = {
+  id: string;
+  name: string;
+  message: string;
+};
+
+export type MobileSessionModelCatalog = {
+  sessionId: string;
+  deviceId: string;
+  workspaceId: string;
+  default: MobileModelSelection;
+  lastUsed: MobileModelSelection | null;
+  next: MobileModelSelection | null;
+  effective: MobileModelSelection;
+  routableProviders: string[];
+  groups: MobileModelProviderGroup[];
+  failures: MobileModelCatalogFailure[];
+  projectionKind: 'sequenced' | 'migration-required';
+};
+
+export type MobileModelSelectInput = {
+  requestId: string;
+  deviceId: string;
+  workspaceId: string;
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+};
+
+export type MobileModelSelectResult = {
+  sessionId: string;
+  requestId: string;
+  selected: MobileModelSelection;
+};
+
 export type MobileSessionPromptInput = {
   requestId: string;
   deviceId: string;

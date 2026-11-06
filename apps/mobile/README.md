@@ -18,6 +18,7 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 - assistant 回复按 Markdown 渲染：标题、列表、粗体/斜体/删除线、行内代码、代码块、引用、表格、任务列表、链接和交付图片；流式增量也按 Markdown 实时呈现。普通链接只允许 http(s)/mailto 并由系统浏览器打开，交付图片使用内部不透明附件引用并在正文中等比显示。长消息折叠时显示纯文本摘要，展开后恢复完整排版。
 - 在 `prompt` 授权下发送排队提示词，在 `cancel` 授权下停止当前 Turn；按住说话支持火山 Agent Plan Seed ASR 2.0 双向/单向 WebSocket 转写与系统 ASR，回复朗读和自动播报支持 Agent Plan Seed TTS 2.0 与系统 TTS。Agent Plan 密钥只通过 Keychain / Keystore 加密保存，云端错误会明确提示，不用格式检查或系统语音冒充云端调用成功。
 - 会话输入区使用单胶囊容器：空闲时显示语音入口与更多选项，聚焦或有草稿时显示圆形发送按钮；录音时收起输入框和底部导航，仅保留光晕、波形与手势提示。向上滑动可取消本次识别；正常松开后仍按既有链路等待最终转写并回填输入框，由用户确认后发送。
+- 会话模型通过 `/v1/mobile/sessions/{id}/model` 读取目录与当前选择；只读授权可直接查看，`prompt` 授权可从「＋ → 选择模型」切换模型和推理强度。切换只修改当前 Session，不改桌面默认；每个意图使用稳定 requestId，结果不确定时只允许同参数重试，切换待确认期间禁止发送。目录在进入会话和打开面板时主动刷新，活跃 WSS 的 `model/selection` 作为补充；迁移未完成时只读并提示先在桌面完成迁移。
 - 在 `approve` 授权下接收桌面转发的一次性审批与提问：首页横幅与“待处理”页展示，会话内也会固定显示待答卡片；审批只能 `allow-once` 或 `reject`，提问支持选项与自定义文本。
 - 会话中由 `present` 或 `dsh_im_return_file` 明确交付的图片随 transcript 展示：正文 Markdown 图片使用真实宽高比和 `contain` 完整显示，点击可进入全屏分页与应用内缩放；消息下方的附件区默认只展示文件卡，不渲染图片也不请求字节，点击卡片后才加载原图。附件字节使用带 Bearer Token 的独立 HTTPS 端点，不向手机暴露桌面路径，`attachment.ready` 到达后自动刷新。图片准备期间的 `202` 响应会有界自动重试，加载失败会显示原因并支持点击重试；认证快照获取失败也会自动恢复。非图片文件目前只展示信息，下载/保存/分享属于 M2。
 - 支持撤销本机授权、断开本机并尽力吊销 Server 端手机凭据。
@@ -99,7 +100,7 @@ npm install --registry=https://registry.npmjs.org
 2. 选择工作区与动作后提交 `/v1/mobile/access/requests`，状态为 `pending`。
 3. 打开桌面 DSH → DSH Connect 面板 → **手机访问授权**，核对手机名与请求范围，选择允许的工作区/动作后确认；也可以拒绝。
 4. 回到 App 下拉刷新，`active` grant 的工作区会出现在 **工作区**，会话会出现在 **会话**。
-5. 会话详情展示 user/assistant/tool 消息；`read`、`prompt`、`cancel` 分别控制查看、发送和停止。没有对应 scope 时输入框会变为只读提示。
+5. 会话详情展示 user/assistant/tool 消息；`read`、`prompt`、`cancel` 分别控制查看、发送和停止。没有对应 scope 时输入框会变为只读提示，但仍可查看会话模型；只有 `prompt` 可以切换模型。
 6. **我的 → 断开连接** 或设备页的撤销会立即回收授权；桌面端撤销同样即时生效。
 
 授权校验是双重的：Server 校验 grant（手机、桌面、工作区、scope），Connector 再校验会话真实所属工作区。App 不缓存会话正文，每次向桌面拉取。
@@ -180,7 +181,7 @@ EAS 构建需要登录、初始化远程项目并配置相应签名/推送凭据
 ```sh
 npm run lint          # ESLint
 npm run typecheck     # TypeScript strict
-npm test              # ASR/TTS 协议单元测试
+npm test              # ASR/TTS、Mobile API 与模型选择纯函数单元测试
 npm run check         # lint + typecheck
 npx expo-doctor       # SDK 依赖与配置诊断
 npm run build:bundles # 生成 iOS / Android 生产 JS bundle
