@@ -64,7 +64,7 @@ function bounded(value: unknown, limit: number): string | undefined {
 }
 
 function sessionOf(agent: InteractionAgent | undefined): string | undefined {
-  const id = agent?.session?.id;
+  const id = agent?.id;
   return typeof id === 'string' && id.length > 0 ? id : undefined;
 }
 
@@ -176,7 +176,10 @@ export class InteractionBridge {
         workspaceId: target.workspaceId,
         title: toolName ?? '工具审批',
         toolName,
-        reason: bounded(request.displayReason ?? request.reason, MAX_DETAIL),
+        // Protocol v1 carries one bounded string; DSH 0.2.2 requires `en` in
+        // its localized presentation object, so use it without leaking the
+        // Host DTO into the wire protocol.
+        reason: bounded(request.displayReason?.en ?? request.reason, MAX_DETAIL),
         callId: bounded(request.callId, 256),
       },
       next,

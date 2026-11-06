@@ -2,7 +2,7 @@
 
 这是实际的 DeepSeek Harness 桌面 Connector，不是根目录的交互原型。
 
-当前版本锁定 **DSH `0.2.1-rc.5`**。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。
+当前版本锁定 **DSH `0.2.2-rc.1`**。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。本次适配使用新的 `SessionController.events()` 历史接口，并按 `approval/request` / `user-questions/request` 的 `agent.id` 解析会话；审批的本地化 `displayReason` 在 Connector 内投影为协议 v1 的有界文本。
 
 ## 已实现
 
@@ -69,7 +69,7 @@ APP='/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness'
 CLI='/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'
 
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop add \
-  '/absolute/path/to/lxyapp-dsh-connect-0.1.2.tgz'
+  '/absolute/path/to/lxyapp-dsh-connect-0.1.4.tgz'
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop why \
   '@lxyapp/dsh-connect'
 ```
@@ -120,7 +120,7 @@ npm --prefix connector/dsh-plugin run debug -- cancel --device dev_xxx --session
 
 `accepted` 仅表示 DSH 准入，完成必须等待对应 turn 的持久 `turn/end`。重复逻辑请求应复用相同 `--request-id`。
 
-DSH `0.2.1-rc.5` 的 Host follow 不接受 resume cursor。外部 cursor 只记录客户端已确认水位，Connector 始终获取最新 opening snapshot（`recovery:'latest_snapshot'`），再按 `(sessionId,seq)` 去重或用 page 修复空洞；不会伪称 Host 从旧 cursor 回放。
+DSH `0.2.2-rc.1` 的 Host follow 不接受 resume cursor。外部 cursor 只记录客户端已确认水位，Connector 始终获取最新 opening snapshot（`recovery:'latest_snapshot'`），再按 `(sessionId,seq)` 去重或用 page 修复空洞；不会伪称 Host 从旧 cursor 回放。
 
 ## 测试
 

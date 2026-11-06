@@ -416,7 +416,7 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
             assert.deepEqual(scope, { sessionId: 'existing-session', workspaceRoot });
             assert.equal(path, await realpath(attachmentPath));
             assert.equal(signal.aborted, false);
-            // Match DSH rc.5: one ranged window is 2 MiB, while a complete file
+            // Match DSH 0.2.2-rc.1: one ranged window is 2 MiB, while a complete file
             // may be 32 MiB. This catches an invalid 20 MiB window request.
             if (options.range && (options.range.length ?? 2_097_152) > 2_097_152) {
               throw Object.assign(new Error('window too large'), { code: 'workspace-file/too-large' });
@@ -431,7 +431,7 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
           }
         },
         async stat(_scope, path) {
-          return { path, bytes: attachmentBytes.byteLength };
+          return { absolutePath: path, version: '1', bytes: attachmentBytes.byteLength };
         },
       },
       sessionController: {
@@ -452,7 +452,7 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
           (workspace.sessionIds as string[]).push(sessionId);
           return { sessionId };
         },
-        async page(_request: SessionPageRequest) {
+        async events(_request: SessionPageRequest) {
           return {
             records: [
               { type: 'event' as const, event: { type: 'user/message', seq: 1, time: 1_000, data: { id: 'e2e-user', role: 'user', content: [{ type: 'text', text: 'existing question' }] } } },

@@ -234,7 +234,7 @@ export class HostSessionAdapter {
     const sessionId = sessionAddress(params.sessionId).sessionId;
     await this.#authorizeSession(sessionId, 'read', params.workspaceId);
     const context = await this.#latestPageContext(sessionId, signal);
-    const result = await this.#controller.page({
+    const result = await this.#controller.events({
       ...pageInput(params),
       throughSeq: context.throughSeq,
     }, signal);
@@ -261,7 +261,7 @@ export class HostSessionAdapter {
     const sessionId = sessionAddress(params.sessionId).sessionId;
     const workspaceId = await this.#authorizeSession(sessionId, 'read', params.workspaceId);
     const context = await this.#latestPageContext(sessionId, signal);
-    const result = await this.#controller.page({
+    const result = await this.#controller.events({
       ...pageInput(params),
       throughSeq: context.throughSeq,
     }, signal);

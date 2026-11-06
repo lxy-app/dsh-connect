@@ -35,7 +35,7 @@ type PromptCall = ['prompt', SessionPromptRequest, AbortSignal];
 type ControllerCall =
   | ['list', SessionListRequest, AbortSignal]
   | ['create', SessionCreateRequest]
-  | ['page', SessionPageRequest, AbortSignal]
+  | ['events', SessionPageRequest, AbortSignal]
   | PromptCall
   | ['cancel', { readonly sessionId: string }]
   | ['follow', SessionFollowRequest, AbortSignal];
@@ -64,8 +64,8 @@ function setup(overrides: SetupOverrides = {}) {
   const controller: SessionController = {
     async list(request, signal) { calls.push(['list', request, signal]); return { items: summaries }; },
     async create(request) { calls.push(['create', request]); return { sessionId: 's3' }; },
-    async page(request, signal) {
-      calls.push(['page', request, signal]);
+    async events(request, signal) {
+      calls.push(['events', request, signal]);
       return { records: [{ type: 'event', event: { type: 'turn/end', seq: 1, time: 1_000, data: {} } }], hasMore: false };
     },
     async prompt(request, signal) { calls.push(['prompt', request, signal]); return { accepted: true }; },
@@ -268,7 +268,7 @@ test('transcript keeps conversation text and omits reasoning, tool calls and res
           }],
         };
       },
-      async page(request) {
+      async events(request) {
         throughSeqs.push(request.throughSeq);
         return { records, hasMore: true };
       },
@@ -324,7 +324,7 @@ test('transcript omits injected time, runtime and skill context', async () => {
   ];
   const { adapter } = setup({
     controller: {
-      async page() { return { records, hasMore: false }; },
+      async events() { return { records, hasMore: false }; },
     },
   });
   const result = await adapter.transcript(
@@ -338,7 +338,7 @@ test('transcript pages at the current DSH watermark instead of the legacy -1 sen
   const throughSeqs: number[] = [];
   const { adapter } = setup({
     controller: {
-      async page(request) {
+      async events(request) {
         throughSeqs.push(request.throughSeq);
         return { records: [], hasMore: false };
       },
@@ -355,7 +355,7 @@ test('page resolves the latest DSH watermark before applying the exclusive curso
   const requests: SessionPageRequest[] = [];
   const { adapter } = setup({
     controller: {
-      async page(request) {
+      async events(request) {
         requests.push(request);
         return { records: [], hasMore: true };
       },
@@ -374,7 +374,7 @@ test('page resolves the latest DSH watermark before applying the exclusive curso
 test('transcript reports running state from the session list when the page has no turn marker', async () => {
   const { adapter } = setup({
     controller: {
-      async page() {
+      async events() {
         return {
           records: [{
             type: 'event' as const,
@@ -409,7 +409,7 @@ test('transcript mounts a present delivery on the final assistant message of the
   ];
   const { adapter } = setup({
     attachments: unusedAttachmentWiring,
-    controller: { async page() { return { records, hasMore: false }; } },
+    controller: { async events() { return { records, hasMore: false }; } },
   });
 
   const result = await adapter.transcript(
@@ -437,7 +437,7 @@ test('transcript never mounts an empty turn delivery on the previous turn', asyn
   ];
   const { adapter } = setup({
     attachments: unusedAttachmentWiring,
-    controller: { async page() { return { records, hasMore: false }; } },
+    controller: { async events() { return { records, hasMore: false }; } },
   });
 
   const result = await adapter.transcript(

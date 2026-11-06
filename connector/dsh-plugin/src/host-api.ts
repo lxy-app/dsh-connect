@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Logger, UnknownRecord } from './types.js';
 
-/** The DSH 0.2.1-rc.5 Host surface consumed by this connector. */
+/** The DSH 0.2.2-rc.1 Host surface consumed by this connector. */
 export interface SessionAddress {
   readonly kind: 'session';
   readonly sessionId: string;
@@ -116,7 +116,7 @@ export interface SessionFollowRequest {
 export interface SessionController {
   list(request: SessionListRequest, signal: AbortSignal): Promise<{ readonly items: readonly SessionSummary[] }>;
   create(request: SessionCreateRequest): Promise<SessionCreateValue>;
-  page(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage>;
+  events(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage>;
   prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<{ readonly accepted: boolean }>;
   cancel(request: { readonly sessionId: string }): { readonly accepted: boolean };
   follow(request: SessionFollowRequest, signal: AbortSignal): AsyncIterable<SessionFollowFrame>;
@@ -171,7 +171,7 @@ export interface WorkspaceFileBytes {
   readonly data: Uint8Array;
   readonly offset: number;
   readonly eof: boolean;
-  readonly bytes: number;
+  readonly bytes?: number;
 }
 
 export interface WorkspaceFilesService {
@@ -181,7 +181,11 @@ export interface WorkspaceFilesService {
     options: { readonly range?: { readonly offset?: number; readonly length?: number } },
     signal: AbortSignal,
   ): Promise<WorkspaceFileBytes>;
-  stat(scope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<{ readonly path: string; readonly bytes: number }>;
+  stat(
+    scope: WorkspaceFileScope,
+    path: string,
+    signal: AbortSignal,
+  ): Promise<{ readonly absolutePath: string; readonly version: string; readonly bytes?: number }>;
 }
 
 export interface HostContext {
@@ -205,11 +209,16 @@ export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'worksp
 
 /** Minimal agent identity carried by DSH interaction requests. */
 export interface InteractionAgent {
-  readonly session: { readonly id: string };
+  readonly id: string;
 }
 
 /** DSH `approval/request` outcome vocabulary. Only `allowed-once` grants. */
 export type ApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable';
+
+export interface LocalizedText {
+  readonly en: string;
+  readonly [locale: string]: string;
+}
 
 /** The approval request fields the Connector may read (no Host objects escape). */
 export interface ApprovalRequest {
@@ -217,7 +226,7 @@ export interface ApprovalRequest {
   readonly toolName: string;
   readonly callId?: string;
   readonly reason?: string;
-  readonly displayReason?: string;
+  readonly displayReason?: LocalizedText;
   readonly signal?: AbortSignal;
 }
 

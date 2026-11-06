@@ -31,7 +31,7 @@ prototype/                   独立 HTML 交互原型（产品 + 官网），不
 - `entgo.io/ent` 当前指向含 Go 1.27 代码生成修复的 master 伪版本；升级与退场条件见 `server/README.md` 的 ent schema 小节，改动 `ent/schema/` 前先确认生成器版本与 go.mod 一致。
 - 使用 **Node.js 24**；Connector 的 `engines.node` 明确要求 `>=24`。
 - 本地集成测试和数据库需要 Docker；数据库为 **PostgreSQL 18**。
-- Connector 精确适配 **DSH `0.2.1-rc.5`**。升级 DSH 后必须核对 Host 方法签名、事件 DTO、插件生命周期和真实 Agent 闭环，不能只改版本号。
+- Connector 精确适配 **DSH `0.2.2-rc.1`**。升级 DSH 后必须核对 Host 方法签名、事件 DTO、插件生命周期和真实 Agent 闭环，不能只改版本号。
 - 各 npm 工程有独立 `package-lock.json`。在对应目录使用 `npm ci` 或 `npm install`，不要假设根目录能执行 npm 脚本。
 - 新增或升级 Expo 原生模块时，在 `apps/mobile/` 使用 `npx expo install <package>`，不要直接用普通 `npm install <package>` 选择版本。
 - `.env`、令牌、设备凭据和签名材料均属于本地秘密；不要读取后展示、写入日志或提交。配置模板见 `.env.example`。

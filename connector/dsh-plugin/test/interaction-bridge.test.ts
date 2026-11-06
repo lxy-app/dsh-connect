@@ -94,10 +94,11 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function approvalRequest(signal?: AbortSignal) {
   return {
-    agent: { session: { id: 'sess-1' } },
+    agent: { id: 'sess-1' },
     toolName: 'bash',
     callId: 'call-1',
     reason: 'restart Chrome',
+    displayReason: { en: 'Restart Chrome', zh: '重启 Chrome' },
     ...(signal ? { signal } : {}),
   };
 }
@@ -118,7 +119,7 @@ test('a watching phone answers without starting the desktop prompt', async () =>
   const requestData = request.data;
   assert.equal(requestData.kind, 'approval');
   assert.equal(requestData.title, 'bash');
-  assert.equal(requestData.reason, 'restart Chrome');
+  assert.equal(requestData.reason, 'Restart Chrome');
   assert.equal(requestData.workspaceId, 'ws-1');
   assert.equal(requestData.workspaceName, 'Project A');
 
@@ -178,7 +179,7 @@ test('scopes without approve leave the desktop chain untouched', async () => {
 test('questions relay options and reject unknown selections', async () => {
   const { bridge, cordis, transport } = build();
   const result = cordis.fire('user-questions/request', {
-    agent: { session: { id: 'sess-1' } },
+    agent: { id: 'sess-1' },
     questions: [{
       id: 'q1',
       question: 'Restart Chrome?',
@@ -270,7 +271,7 @@ test('a session outside every workspace reports the declined relay', async () =>
   const { cordis } = build(['read', 'approve'], { logs });
   await cordis.fire(
     'approval/request',
-    { agent: { session: { id: 'sess-elsewhere' } }, toolName: 'bash' },
+    { agent: { id: 'sess-elsewhere' }, toolName: 'bash' },
     () => Promise.resolve('rejected'),
   );
   assert.equal(logs.length, 1);
@@ -302,7 +303,7 @@ test('a workspace the desktop has not granted reports the declined relay', async
   bridge.attach();
   await cordis.fire(
     'approval/request',
-    { agent: { session: { id: 'sess-2' } }, toolName: 'bash' },
+    { agent: { id: 'sess-2' }, toolName: 'bash' },
     () => Promise.resolve('rejected'),
   );
   assert.equal(logs.length, 1);

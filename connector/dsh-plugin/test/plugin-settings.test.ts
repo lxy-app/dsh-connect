@@ -13,7 +13,7 @@ function fakeSessionController(): SessionController {
   return {
     async list() { return { items: [] }; },
     async create() { return { sessionId: 'unused' }; },
-    async page() { return { records: [], hasMore: false }; },
+    async events() { return { records: [], hasMore: false }; },
     async prompt() { return { accepted: true }; },
     cancel() { return { accepted: true }; },
     async *follow(): AsyncGenerator<SessionFollowFrame, void, unknown> {},
