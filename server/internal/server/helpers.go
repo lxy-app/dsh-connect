@@ -119,7 +119,7 @@ func httpStatus(code string) int {
 		return http.StatusNotFound
 	case protocol.CodePayloadTooLarge:
 		return http.StatusRequestEntityTooLarge
-	case protocol.CodePairingCodeUsed, protocol.CodePairingCodeExpired, protocol.CodePairingChallengeExpired, protocol.CodePairingAlreadyCompleted, protocol.CodeRequestInFlight, protocol.CodeIdempotencyConflict, protocol.CodeConflict:
+	case protocol.CodePairingCodeUsed, protocol.CodePairingCodeExpired, protocol.CodePairingChallengeExpired, protocol.CodePairingAlreadyCompleted, protocol.CodeRequestInFlight, protocol.CodeIdempotencyConflict, protocol.CodeConflict, protocol.CodeModelUnavailable, protocol.CodeSessionMigrationRequired:
 		return http.StatusConflict
 	case protocol.CodeDeviceOffline:
 		return http.StatusServiceUnavailable

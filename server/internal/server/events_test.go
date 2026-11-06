@@ -22,7 +22,7 @@ func TestMobileStreamEventFiltersRawToolPayloads(t *testing.T) {
 			t.Fatalf("kind %q should be allowed on the mobile socket", kind)
 		}
 	}
-	for _, dataType := range []string{"user/message", "assistant/message", "turn/start", "turn/end"} {
+	for _, dataType := range []string{"user/message", "assistant/message", "turn/start", "turn/end", "model/selection"} {
 		if !mobileStreamEvent(event("session.event", dataType)) {
 			t.Fatalf("session event %q should be allowed", dataType)
 		}

@@ -2,7 +2,7 @@
 
 单实例 Go 中继 Server。它只通过 Connector 调用 `session.*` 方法并中继事件，**不读取 DSH 文件、不直接调用 DSH Service，也不保存会话正文**。
 
-持久层为 **PostgreSQL 18 + ent ORM**：配对码、设备凭据 hash、create/prompt 幂等结果、审计、管理账号与浏览器会话、手机设备与移动令牌、手机访问授权。所有密钥只以 SHA-256 存储。
+持久层为 **PostgreSQL 18 + ent ORM**：配对码、设备凭据 hash、create/prompt/model.select 幂等结果、审计、管理账号与浏览器会话、手机设备与移动令牌、手机访问授权。所有密钥只以 SHA-256 存储。
 
 ## 运行
 
@@ -95,7 +95,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 
 Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start received/waiting_desktop_authorization`、`pair.authorize received/completed` 及错误码日志。日志只包含 requestId、deviceId、数量与错误等白名单字段，不记录配对码、token/hash、Authorization、原始帧或工作区路径。配对数据库操作受 `CommandTimeout`（默认 15 秒）约束，内部错误返回 `internal_error`，不会误报为配对码无效。
 
-`session.create` 与 `session.prompt` 的 `requestId` 都是持久幂等键，由 PostgreSQL 唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。两类命令必须使用不同 requestId。
+`session.create`、`session.prompt` 与 `session.model.select` 的 `requestId` 都是持久幂等键，由 PostgreSQL 唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。不同命令必须使用不同 requestId；模型选择的 sessionId/workspaceId/provider/model/reasoningEffort 都进入请求哈希。
 
 ## 手机配对 API
 
@@ -115,7 +115,9 @@ Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start r
 | GET | `/v1/mobile/sessions` | 聚合授权桌面会话；离线桌面返回 warning |
 | POST | `/v1/mobile/sessions` | 创建会话，需 `prompt`，沿用独立 requestId 幂等 |
 | GET | `/v1/mobile/sessions/{id}/messages` | 稳定 transcript，需 `read`；WSS 断开时的兜底 |
-| GET | `/v1/mobile/events/ws` | 需 `read` grant；compact follow 并只推送 assistant 增量/对话事件 |
+| GET | `/v1/mobile/sessions/{id}/model` | 当前会话模型与可用目录，需 `read`；不激活冷 Agent |
+| POST | `/v1/mobile/sessions/{id}/model` | 只切换当前会话模型，需 `prompt`，沿用独立 requestId 持久幂等 |
+| GET | `/v1/mobile/events/ws` | 需 `read` grant；compact follow 并只推送 assistant 增量/对话/模型选择事件 |
 | POST | `/v1/mobile/sessions/{id}/prompt` | 发送提示词，需 `prompt`，沿用 requestId 幂等 |
 | POST | `/v1/mobile/sessions/{id}/cancel` | 取消当前 Turn，需 `cancel` |
 | GET | `/v1/mobile/interactions` | 本机可回答的待处理审批/提问，需 `approve`；按设备/会话过滤 |
@@ -131,7 +133,7 @@ Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start r
 - 手机配对不代表获得桌面权限。`GET /v1/mobile/access` 先展示桌面已开放范围；手机只能申请其子集，grant 默认 `pending`。
 - 只有桌面 Connector 通过已认证 WSS 的 `mobile.access.list` / `mobile.access.decide` 才能批准、拒绝或撤销 grant。Server 不代替桌面做授权决定。
 - `pair.updateGrants` 允许桌面 Connector 在面板显式确认后更新自己的 workspace/scope（例如追加 `approve`），无需重新配对；Server 校验动作词汇并写审计 `pair.grants.update`，手机 grant 仍需单独申请和桌面确认。
-- 会话列表、create、transcript、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验工作区授权、会话真实归属或审批答案，形成双重 fail-closed。
+- 会话列表、create、transcript、模型读取/选择、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验工作区授权、会话真实归属或审批答案，形成双重 fail-closed。
 - 待处理审批只存在内存中，Server 重启或 Connector 断连即清空；同一 interaction 在 Server 内用 CAS 预留，避免两台手机重复消费。
 - 手机 logout、管理员吊销手机、桌面吊销都会撤销相关 grant。
 - **移动 Access Token 不能访问 `/v1/devices`、`/v1/sessions` 或 `/v1/events/ws` 等调试接口。** 移动端仅使用受 grant 约束的 `/v1/mobile/*` API；`/v1/mobile/events/ws` 先校验 grant，再以 compact follow 推送 assistant 增量，原始工具 payload 由 Server 过滤。
@@ -164,7 +166,7 @@ M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/�
 |---|---|
 | `pairing_codes` | 一次性配对码 hash 与消费状态 |
 | `devices` | 设备身份、授权工作区/scope、令牌 hash、在线状态 |
-| `idempotency_records` | `session.create` / `session.prompt` 持久幂等结果 |
+| `idempotency_records` | `session.create` / `session.prompt` / `session.model.select` 持久幂等结果 |
 | `audit_entries` | 只追加审计，按 `occurred_at`/`device_id`/`action` 建索引 |
 | `users` | 管理账号（owner/admin/member/auditor） |
 | `admin_sessions` | 浏览器登录会话 token hash |
@@ -204,7 +206,7 @@ go test ./...        # 或用 make test-server
 - 复用已有实例：设置 `DSH_CONNECT_TEST_DATABASE_URL`。
 - CI 中要求必须跑数据库测试：设置 `DSH_CONNECT_REQUIRE_PG=1`，缺少 Docker 时失败而非跳过。
 
-集成测试覆盖：配对码一次性消费与过期、显式桌面授权、设备令牌重连、工作区越权拒绝、七类会话命令、create/prompt 并发与持久幂等、持久事件与临时流、慢消费者、离线快速失败、数据库重开后的持久性、**明文令牌不落库**，以及管理 API 的登录、角色隔离、最后 Owner 保护、设备吊销断连与审计记录。手机链路额外覆盖配对码单次消费与过期、令牌轮换、手机登出、管理员吊销、用户删除清理、移动角色隔离，以及访问申请、桌面批准/拒绝/撤销、工作区过滤、移动创建与 prompt 幂等、transcript 和跨手机越权撤销。
+集成测试覆盖：配对码一次性消费与过期、显式桌面授权、设备令牌重连、工作区越权拒绝、七类会话命令、create/prompt 并发与持久幂等、持久事件与临时流、慢消费者、离线快速失败、数据库重开后的持久性、**明文令牌不落库**，以及管理 API 的登录、角色隔离、最后 Owner 保护、设备吊销断连与审计记录。手机链路额外覆盖配对码单次消费与过期、令牌轮换、手机登出、管理员吊销、用户删除清理、移动角色隔离，以及访问申请、桌面批准/拒绝/撤销、工作区过滤、移动创建与 prompt 幂等、模型目录与会话级选择、模型选择持久重放、Server 重启恢复、撤销后失败关闭、transcript 和跨手机越权撤销。
 
 ## 退出
 

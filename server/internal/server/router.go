@@ -47,7 +47,7 @@ func (r *Router) Execute(ctx context.Context, method, deviceID, requestID string
 		return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "timeoutMs must be between 1 and 120000", false))
 	}
 	requestHash := hashRequest(method, deviceID, raw)
-	if method != protocol.MethodSessionCreate && method != protocol.MethodSessionPrompt {
+	if !isDurableIdempotentMethod(method) {
 		return r.executeDirect(ctx, method, deviceID, requestID, raw, timeout)
 	}
 
@@ -172,11 +172,20 @@ func (r *Router) executeDirect(ctx context.Context, method, deviceID, requestID 
 	return response, commandError
 }
 
+func isDurableIdempotentMethod(method string) bool {
+	switch method {
+	case protocol.MethodSessionCreate, protocol.MethodSessionPrompt, protocol.MethodSessionModelSelect:
+		return true
+	default:
+		return false
+	}
+}
+
 func requiredScope(method string) (string, bool) {
 	switch method {
-	case protocol.MethodSessionList, protocol.MethodSessionPage, protocol.MethodSessionTranscript, protocol.MethodSessionFollow, protocol.MethodSessionUnfollow, protocol.MethodSessionAttachmentFetch:
+	case protocol.MethodSessionList, protocol.MethodSessionPage, protocol.MethodSessionTranscript, protocol.MethodSessionFollow, protocol.MethodSessionUnfollow, protocol.MethodSessionAttachmentFetch, protocol.MethodSessionModelCatalog:
 		return "read", true
-	case protocol.MethodSessionCreate, protocol.MethodSessionPrompt:
+	case protocol.MethodSessionCreate, protocol.MethodSessionPrompt, protocol.MethodSessionModelSelect:
 		return "prompt", true
 	case protocol.MethodSessionCancel:
 		return "cancel", true

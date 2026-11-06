@@ -24,6 +24,8 @@ func (s *Server) mobileAccessRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionList))
 	mux.HandleFunc("POST /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionCreate))
 	mux.HandleFunc("GET /v1/mobile/sessions/{sessionId}/messages", s.mobileAuth(s.handleMobileSessionMessages))
+	mux.HandleFunc("GET /v1/mobile/sessions/{sessionId}/model", s.mobileAuth(s.handleMobileSessionModel))
+	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/model", s.mobileAuth(s.handleMobileSessionModelSelect))
 	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/prompt", s.mobileAuth(s.handleMobileSessionPrompt))
 	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/cancel", s.mobileAuth(s.handleMobileSessionCancel))
 }
@@ -473,6 +475,134 @@ func (s *Server) handleMobileSessionMessages(w http.ResponseWriter, r *http.Requ
 		TurnEndSeq:  transcript.TurnEndSeq,
 		Truncated:   transcript.Truncated,
 	})
+}
+
+// handleMobileSessionModel returns the current Session selection and the
+// display-safe catalog without activating a cold Agent on the desktop.
+func (s *Server) handleMobileSessionModel(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.PathValue("sessionId")
+	deviceID := r.URL.Query().Get("deviceId")
+	workspaceID := r.URL.Query().Get("workspaceId")
+	if !validID(sessionID) || !validID(deviceID) || !validID(workspaceID) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "sessionId, deviceId and workspaceId are required", false))
+		return
+	}
+	if _, commandError := s.authorizeMobileSession(r, deviceID, workspaceID, sessionID, "read"); commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	requestID, err := randomToken("req_")
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not generate requestId", true))
+		return
+	}
+	params := map[string]string{"sessionId": sessionID, "workspaceId": workspaceID}
+	result, commandError := s.router.Execute(r.Context(), protocol.MethodSessionModelCatalog, deviceID, requestID, params, s.config.CommandTimeout)
+	if commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	var catalog protocol.MobileModelCatalogResponse
+	if err := json.Unmarshal(result, &catalog); err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "desktop returned an invalid model catalog", false))
+		return
+	}
+	normalizeMobileModelCatalog(&catalog)
+	if catalog.SessionID != sessionID || catalog.DeviceID != deviceID || catalog.WorkspaceID != workspaceID ||
+		(catalog.ProjectionKind != "sequenced" && catalog.ProjectionKind != "migration-required") ||
+		!validModelSelection(catalog.Default) || !validModelSelection(catalog.Effective) ||
+		(catalog.LastUsed != nil && !validModelSelection(*catalog.LastUsed)) ||
+		(catalog.Next != nil && !validModelSelection(*catalog.Next)) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "desktop returned an inconsistent model catalog", false))
+		return
+	}
+	writeJSON(w, http.StatusOK, catalog)
+}
+
+func (s *Server) handleMobileSessionModelSelect(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.PathValue("sessionId")
+	var request protocol.MobileModelSelectRequest
+	if commandError := decodeJSON(w, r, s.config.MaxPayloadBytes, &request); commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	if !validID(request.RequestID) || !validID(request.DeviceID) || !validID(request.WorkspaceID) || !validID(sessionID) ||
+		!validText(request.Provider, 128) || !validText(request.Model, 256) ||
+		(request.ReasoningEffort != nil && !validText(*request.ReasoningEffort, 64)) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "requestId, deviceId, workspaceId, sessionId, provider, model and reasoningEffort are invalid", false))
+		return
+	}
+	actor, commandError := s.authorizeMobileSession(r, request.DeviceID, request.WorkspaceID, sessionID, "prompt")
+	if commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	params := map[string]any{
+		"sessionId":   sessionID,
+		"workspaceId": request.WorkspaceID,
+		"provider":    request.Provider,
+		"model":       request.Model,
+	}
+	if request.ReasoningEffort != nil {
+		params["reasoningEffort"] = *request.ReasoningEffort
+	}
+	result, commandError := s.router.Execute(
+		r.Context(), protocol.MethodSessionModelSelect, request.DeviceID, request.RequestID, params,
+		time.Duration(request.TimeoutMS)*time.Millisecond,
+	)
+	var selected protocol.MobileModelSelectResponse
+	if commandError == nil {
+		expected := protocol.ModelSelection{Provider: request.Provider, Model: request.Model, ReasoningEffort: request.ReasoningEffort}
+		if err := json.Unmarshal(result, &selected); err != nil || selected.SessionID != sessionID || selected.RequestID != request.RequestID ||
+			!validModelSelection(selected.Selected) || !sameModelSelection(selected.Selected, expected) {
+			commandError = errorPtr(protocol.NewError(protocol.CodeInternalError, "desktop returned an invalid model selection result", false))
+		}
+	}
+	s.auditMobileSession(actor, r, "mobile.session.model.select", request.DeviceID, sessionID, commandError)
+	if commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	writeJSON(w, http.StatusOK, selected)
+}
+
+func normalizeMobileModelCatalog(catalog *protocol.MobileModelCatalogResponse) {
+	if catalog.RoutableProviders == nil {
+		catalog.RoutableProviders = []string{}
+	}
+	if catalog.Groups == nil {
+		catalog.Groups = []protocol.MobileModelProviderGroup{}
+	}
+	if catalog.Failures == nil {
+		catalog.Failures = []protocol.MobileModelCatalogFailure{}
+	}
+	for groupIndex := range catalog.Groups {
+		group := &catalog.Groups[groupIndex]
+		if group.Models == nil {
+			group.Models = []protocol.MobileModel{}
+		}
+		for modelIndex := range group.Models {
+			reasoning := group.Models[modelIndex].Reasoning
+			if reasoning != nil && reasoning.Efforts == nil {
+				reasoning.Efforts = []protocol.MobileModelReasoningEffort{}
+			}
+		}
+	}
+}
+
+func validModelSelection(selection protocol.ModelSelection) bool {
+	return validText(selection.Provider, 128) && validText(selection.Model, 256) &&
+		(selection.ReasoningEffort == nil || validText(*selection.ReasoningEffort, 64))
+}
+
+func sameModelSelection(left, right protocol.ModelSelection) bool {
+	if left.Provider != right.Provider || left.Model != right.Model {
+		return false
+	}
+	if left.ReasoningEffort == nil || right.ReasoningEffort == nil {
+		return left.ReasoningEffort == nil && right.ReasoningEffort == nil
+	}
+	return *left.ReasoningEffort == *right.ReasoningEffort
 }
 
 func (s *Server) handleMobileSessionPrompt(w http.ResponseWriter, r *http.Request) {

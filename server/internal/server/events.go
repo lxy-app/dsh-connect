@@ -135,7 +135,7 @@ func mobileStreamEvent(event protocol.Event) bool {
 			return false
 		}
 		switch payload.Type {
-		case "user/message", "assistant/message", "turn/start", "turn/end":
+		case "user/message", "assistant/message", "turn/start", "turn/end", "model/selection":
 			return true
 		}
 	}

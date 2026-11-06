@@ -26,14 +26,16 @@ const (
 )
 
 const (
-	MethodSessionList       = "session.list"
-	MethodSessionCreate     = "session.create"
-	MethodSessionPage       = "session.page"
-	MethodSessionTranscript = "session.transcript"
-	MethodSessionPrompt     = "session.prompt"
-	MethodSessionFollow     = "session.follow"
-	MethodSessionUnfollow   = "session.unfollow"
-	MethodSessionCancel     = "session.cancel"
+	MethodSessionList         = "session.list"
+	MethodSessionCreate       = "session.create"
+	MethodSessionPage         = "session.page"
+	MethodSessionTranscript   = "session.transcript"
+	MethodSessionPrompt       = "session.prompt"
+	MethodSessionModelCatalog = "session.model.catalog"
+	MethodSessionModelSelect  = "session.model.select"
+	MethodSessionFollow       = "session.follow"
+	MethodSessionUnfollow     = "session.unfollow"
+	MethodSessionCancel       = "session.cancel"
 	// MethodSessionAttachmentFetch asks the Connector to re-read one declared
 	// file and upload its bytes to the Server attachment store. Bytes never
 	// travel back through this command.
@@ -470,6 +472,82 @@ type MobileTranscriptResponse struct {
 	Active      bool            `json:"active"`
 	TurnEndSeq  uint64          `json:"turnEndSeq,omitempty"`
 	Truncated   bool            `json:"truncated,omitempty"`
+}
+
+// ModelSelection is the stable Session model route. A nil reasoningEffort means
+// the adapter default (Auto); an explicitly empty value is invalid on input.
+type ModelSelection struct {
+	Provider        string  `json:"provider"`
+	Model           string  `json:"model"`
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+}
+
+type MobileModelReasoningEffort struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+type MobileModelReasoning struct {
+	Efforts       []MobileModelReasoningEffort `json:"efforts"`
+	DefaultEffort string                       `json:"defaultEffort,omitempty"`
+}
+
+type MobileModelBadge struct {
+	// Text is either a string or a locale-to-string object supplied by the Host's
+	// display-safe model catalog. It never contains provider configuration.
+	Text any    `json:"text"`
+	Tone string `json:"tone,omitempty"`
+}
+
+type MobileModel struct {
+	ID          string                `json:"id"`
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Reasoning   *MobileModelReasoning `json:"reasoning,omitempty"`
+	Badge       *MobileModelBadge     `json:"badge,omitempty"`
+}
+
+type MobileModelProviderGroup struct {
+	ID     string        `json:"id"`
+	Name   string        `json:"name"`
+	Models []MobileModel `json:"models"`
+}
+
+type MobileModelCatalogFailure struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Message string `json:"message"`
+}
+
+type MobileModelCatalogResponse struct {
+	SessionID         string                      `json:"sessionId"`
+	DeviceID          string                      `json:"deviceId"`
+	WorkspaceID       string                      `json:"workspaceId"`
+	Default           ModelSelection              `json:"default"`
+	LastUsed          *ModelSelection             `json:"lastUsed"`
+	Next              *ModelSelection             `json:"next"`
+	Effective         ModelSelection              `json:"effective"`
+	RoutableProviders []string                    `json:"routableProviders"`
+	Groups            []MobileModelProviderGroup  `json:"groups"`
+	Failures          []MobileModelCatalogFailure `json:"failures"`
+	ProjectionKind    string                      `json:"projectionKind"`
+}
+
+type MobileModelSelectRequest struct {
+	RequestID       string  `json:"requestId"`
+	DeviceID        string  `json:"deviceId"`
+	WorkspaceID     string  `json:"workspaceId"`
+	Provider        string  `json:"provider"`
+	Model           string  `json:"model"`
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+	TimeoutMS       int     `json:"timeoutMs,omitempty"`
+}
+
+type MobileModelSelectResponse struct {
+	SessionID string         `json:"sessionId"`
+	RequestID string         `json:"requestId"`
+	Selected  ModelSelection `json:"selected"`
 }
 
 type MobileSessionCreateRequest struct {
