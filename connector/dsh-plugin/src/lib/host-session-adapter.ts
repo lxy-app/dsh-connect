@@ -67,6 +67,12 @@ export interface TranscriptMessage {
   readonly toolName?: string;
   readonly toolCallId?: string;
   readonly isError?: boolean;
+  /** Display-safe one-line description of a tool step; never a raw path. */
+  readonly summary?: string;
+  readonly status?: 'ok' | 'error';
+  readonly durationMs?: number;
+  /** DSH turn ordinal so the App can fold one turn into one card. */
+  readonly turn?: number;
   readonly attachments?: readonly TranscriptAttachment[];
   readonly delivery?: boolean;
   readonly occurredAt: string;
@@ -290,6 +296,8 @@ export class HostSessionAdapter {
     }, signal);
     const messages: TranscriptMessage[] = [];
     const messageTurns = new WeakMap<TranscriptMessage, number>();
+    const workspaceRoot = this.#workspaceRoot(workspaceId);
+    const calls = new Map<string, { readonly name: string; readonly summary: string; readonly turn: number; readonly startedAt: number }>();
     let active = false;
     let turnEndSeq = 0;
     let truncated = false;
@@ -312,9 +320,48 @@ export class HostSessionAdapter {
         if (Number.isSafeInteger(seq) && seq > turnEndSeq) turnEndSeq = seq;
         continue;
       }
-      // Mobile chat is conversation-only. Raw tool calls, tool results and
-      // their arguments stay on the desktop; they are often huge JSON blobs
-      // and make the transcript unreadable on a phone.
+      // Tool calls collapse into one-line steps: the phone shows what ran and
+      // whether it succeeded, while arguments and outputs stay on the desktop.
+      if (event.type === 'tool/call') {
+        const data = isRecord(event.data) ? event.data : {};
+        const callId = typeof data.callId === 'string' ? data.callId : '';
+        if (!callId) continue;
+        calls.set(callId, {
+          name: typeof data.name === 'string' && data.name ? data.name : 'tool',
+          summary: summarizeToolArguments(data.arguments, workspaceRoot),
+          turn: currentTurn,
+          startedAt: event.time,
+        });
+        continue;
+      }
+      if (event.type === 'tool/result') {
+        const data = isRecord(event.data) ? event.data : {};
+        const payload = isRecord(data.message) ? data.message : data;
+        const callId = typeof payload.toolCallId === 'string' ? payload.toolCallId : '';
+        if (!callId) continue;
+        const call = calls.get(callId);
+        calls.delete(callId);
+        if (!call) continue;
+        const elapsed = Number.isFinite(call.startedAt) ? event.time - call.startedAt : 0;
+        const message: TranscriptMessage = {
+          id: `tool-${callId}`,
+          seq,
+          role: 'tool',
+          text: '',
+          toolName: call.name,
+          toolCallId: callId,
+          summary: call.summary,
+          status: payload.isError === true ? 'error' : 'ok',
+          ...(Number.isFinite(elapsed) && elapsed > 0 ? { durationMs: Math.min(elapsed, MAX_TOOL_DURATION_MS) } : {}),
+          ...(call.turn > 0 ? { turn: call.turn } : {}),
+          occurredAt: new Date(event.time).toISOString(),
+        };
+        messages.push(message);
+        messageTurns.set(message, call.turn);
+        continue;
+      }
+      // Reasoning blocks stay on the desktop: only user-authored text and the
+      // assistant's visible reply belong in the mobile transcript.
       if (event.type !== 'user/message' && event.type !== 'assistant/message') continue;
       const data = isRecord(event.data) ? event.data : {};
       if (event.type === 'user/message') {
@@ -332,6 +379,10 @@ export class HostSessionAdapter {
         seq,
         role: event.type === 'user/message' ? 'user' : 'assistant',
         text,
+        // A user message is recorded before its own turn/start, so the current
+        // ordinal still belongs to the previous turn; only steps and replies
+        // carry a turn number.
+        ...(event.type === 'assistant/message' && currentTurn > 0 ? { turn: currentTurn } : {}),
         occurredAt: new Date(event.time).toISOString(),
       };
       messages.push(message);
@@ -997,10 +1048,73 @@ const MAX_TRANSCRIPT_CHARS = 45_000;
 const MAX_ATTACHMENTS_PER_TRANSCRIPT = 12;
 const DEFAULT_MAX_ATTACHMENT_BYTES = 20 << 20;
 const MAX_MESSAGE_CHARS = 4_000;
+const MAX_TOOL_SUMMARY_CHARS = 120;
+const MAX_TOOL_DURATION_MS = 24 * 60 * 60 * 1_000;
 
 function truncate(value: string, limit = MAX_MESSAGE_CHARS): string {
   if (limit <= 0) return '';
   return value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 1))}…`;
+}
+
+/**
+ * Reduces tool arguments to one display-safe line.
+ *
+ * Commands collapse to their first line, file arguments to their base name and
+ * everything else to a short scalar. Absolute directories and raw payloads never
+ * reach the phone.
+ */
+function summarizeToolArguments(value: unknown, workspaceRoot = ''): string {
+  let args: unknown = value;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return '';
+    if (text.startsWith('{') || text.startsWith('[')) {
+      try {
+        args = JSON.parse(text);
+      } catch {
+        return singleLine(text, workspaceRoot);
+      }
+    } else {
+      return singleLine(text, workspaceRoot);
+    }
+  }
+  if (!isRecord(args)) return '';
+  const read = (key: string): string | undefined => {
+    const candidate = args[key];
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+    return undefined;
+  };
+  const command = read('command') ?? read('cmd');
+  if (command) return singleLine(command, workspaceRoot);
+  for (const key of ['path', 'file_path', 'filePath', 'target']) {
+    const path = read(key);
+    if (path) return singleLine(baseName(path), workspaceRoot);
+  }
+  for (const key of ['pattern', 'query', 'url', 'description', 'prompt']) {
+    const scalar = read(key);
+    if (scalar) return singleLine(scalar, workspaceRoot);
+  }
+  for (const candidate of Object.values(args)) {
+    if (typeof candidate === 'string' && candidate.trim()) return singleLine(candidate, workspaceRoot);
+  }
+  return '';
+}
+
+function singleLine(value: string, workspaceRoot = ''): string {
+  let text = value.replace(/\s+/g, ' ').trim();
+  // Keep the workspace path off the phone and mask the usual credential shapes
+  // a command line can carry.
+  if (workspaceRoot) text = text.split(workspaceRoot).join('<workspace>');
+  text = text
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, '***')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer ***')
+    .replace(/\b(api[_-]?key|access[_-]?token|secret|password)\s*[=:]\s*[^\s]+/gi, '$1=***');
+  return truncate(text, MAX_TOOL_SUMMARY_CHARS);
+}
+
+function baseName(value: string): string {
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) ?? value;
 }
 
 function messageText(content: unknown): string {

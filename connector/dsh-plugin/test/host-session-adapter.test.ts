@@ -256,7 +256,7 @@ test('invalid follow cursors fail instead of becoming a null requestedCursor', a
   await assert.rejects(adapter.follow({ sessionId: 's1', cursor: 'not-a-number' }), { code: 'invalid_request' });
 });
 
-test('transcript keeps conversation text and omits reasoning, tool calls and results', async () => {
+test('transcript keeps conversation text and folds tool calls into steps', async () => {
   const records = [
     { type: 'event' as const, event: { type: 'user/message', seq: 1, time: 1_000, data: { id: 'u1', role: 'user', content: [{ type: 'text', text: 'hello' }] } } },
     { type: 'event' as const, event: { type: 'turn/start', seq: 2, time: 1_500, data: { turn: 1 } } },
@@ -291,16 +291,115 @@ test('transcript keeps conversation text and omits reasoning, tool calls and res
     { signal: new AbortController().signal },
   );
   assert.deepEqual(throughSeqs, [99]);
-  assert.equal(result.messages.length, 2);
+  assert.equal(result.messages.length, 3);
   assert.equal(result.messages[0]?.role, 'user');
   assert.equal(result.messages[0]?.text, 'hello');
   assert.equal(result.messages[1]?.role, 'assistant');
   assert.equal(result.messages[1]?.text, 'hi there');
-  assert.equal(result.messages.some((message) => message.role === 'tool'), false);
+  assert.equal(result.messages[1]?.turn, 1);
+  const step = result.messages[2];
+  assert.equal(step?.role, 'tool');
+  assert.equal(step?.toolName, 'bash');
+  assert.equal(step?.summary, 'ls');
+  assert.equal(step?.status, 'ok');
+  assert.equal(step?.durationMs, 1_000);
+  assert.equal(step?.turn, 1);
   assert.equal(result.active, false);
   assert.equal(result.turnEndSeq, 6);
   assert.equal(result.hasMore, true);
   assert.equal(result.nextCursor, '1');
+});
+
+test('tool steps expose a display-safe summary, status and duration', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 2 } } },
+    { type: 'event' as const, event: { type: 'tool/call', seq: 2, time: 2_000, data: { callId: 'c1', name: 'read', arguments: '{"path":"/Users/private/workspace/README.md"}' } } },
+    { type: 'event' as const, event: { type: 'tool/result', seq: 3, time: 3_000, data: { message: { toolCallId: 'c1', isError: true } } } },
+    { type: 'event' as const, event: { type: 'tool/call', seq: 4, time: 4_000, data: { callId: 'c2', name: 'bash', arguments: '{"command":"pnpm test\\n--workspace server && cat /work/a/README.md"}' } } },
+    { type: 'event' as const, event: { type: 'tool/result', seq: 5, time: 5_500, data: { message: { toolCallId: 'c2', isError: false } } } },
+    { type: 'event' as const, event: { type: 'tool/call', seq: 6, time: 6_000, data: { callId: 'c3', name: 'bash', arguments: '{"command":"curl -H \\"Authorization: Bearer sk-testSECRET12345\\" https://example.com"}' } } },
+    { type: 'event' as const, event: { type: 'tool/result', seq: 7, time: 6_200, data: { message: { toolCallId: 'c3', isError: false } } } },
+  ];
+  const { adapter } = setup({
+    controller: {
+      async list() {
+        return {
+          items: [{
+            sessionId: 's1',
+            updatedAt: 1_000,
+            running: true,
+            blank: false,
+            agentAvailable: true,
+            projections: { kind: 'cached', asOfSeq: 5, values: { title: 'Authorized session' } },
+          }],
+        };
+      },
+      async events() {
+        return { records, hasMore: false };
+      },
+    },
+  });
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a', limit: 20 },
+    { signal: new AbortController().signal },
+  );
+
+  assert.equal(result.messages.length, 3);
+  const [failed, succeeded, redacted] = result.messages;
+  assert.equal(failed?.toolName, 'read');
+  assert.equal(failed?.summary, 'README.md');
+  assert.equal(failed?.status, 'error');
+  assert.equal(failed?.durationMs, 1_000);
+  assert.equal(failed?.turn, 2);
+  assert.equal(succeeded?.toolName, 'bash');
+  assert.equal(succeeded?.summary, 'pnpm test --workspace server && cat <workspace>/README.md');
+  assert.equal(succeeded?.status, 'ok');
+  assert.equal(succeeded?.durationMs, 1_500);
+  assert.equal(redacted?.summary?.includes('sk-testSECRET12345'), false);
+  assert.match(redacted?.summary ?? '', /Bearer \*\*\*/);
+});
+
+test('a user message does not inherit the previous turn ordinal', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 1 } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 2, time: 2_000, data: { message: { id: 'a1', content: [{ type: 'text', text: 'first' }] } } } },
+    { type: 'event' as const, event: { type: 'turn/end', seq: 3, time: 3_000, data: {} } },
+    { type: 'event' as const, event: { type: 'user/message', seq: 4, time: 4_000, data: { id: 'u2', role: 'user', content: [{ type: 'text', text: 'second' }] } } },
+    { type: 'event' as const, event: { type: 'turn/start', seq: 5, time: 5_000, data: { turn: 2 } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 6, time: 6_000, data: { message: { id: 'a2', content: [{ type: 'text', text: 'answer' }] } } } },
+  ];
+  const { adapter } = setup({
+    controller: {
+      async list() {
+        return {
+          items: [{
+            sessionId: 's1',
+            updatedAt: 1_000,
+            running: true,
+            blank: false,
+            agentAvailable: true,
+            projections: { kind: 'cached', asOfSeq: 6, values: { title: 'Authorized session' } },
+          }],
+        };
+      },
+      async events() {
+        return { records, hasMore: false };
+      },
+    },
+  });
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a', limit: 20 },
+    { signal: new AbortController().signal },
+  );
+
+  assert.deepEqual(
+    result.messages.map((message) => ({ role: message.role, turn: message.turn })),
+    [
+      { role: 'assistant', turn: 1 },
+      { role: 'user', turn: undefined },
+      { role: 'assistant', turn: 2 },
+    ],
+  );
 });
 
 test('transcript omits injected time, runtime and skill context', async () => {

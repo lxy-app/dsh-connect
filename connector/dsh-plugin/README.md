@@ -10,7 +10,7 @@
 - DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权；配对完成后仍可在“桌面授权范围”中随时增减工作区和动作（`pair.updateGrants`，无需重新配对），以及**手机访问授权**（批准/拒绝/撤销手机申请的工作区与动作）。
 - `/dsh-connect` 自定义 unary RPC，仅 owner peer 可调用；会话流不经过该 RPC。
 - 单条主动出站 Connector WSS，心跳、指数退避、设备令牌重连和固定背压上限。
-- `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 默认只保留 user/assistant 对话文本，工具调用/结果以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页先解析当前 Session 的 projection watermark 再传 `throughSeq`（DSH 对 `throughSeq=-1` 实际返回空页），超出体积预算时优先保留最新消息。
+- `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 保留 user/assistant 对话文本，并把 `tool/call` + `tool/result` 投影成单行步骤（`toolName`、脱敏摘要、状态、耗时、turn）；工具参数、命令输出、推理内容以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页先解析当前 Session 的 projection watermark 再传 `throughSeq`（DSH 对 `throughSeq=-1` 实际返回空页），超出体积预算时优先保留最新消息。
 - 使用 `workspaceRegistry.sessionIds` 校验真实 session → workspace 归属，默认拒绝；归属变化会撤销旧权限和 active follow。
 - prompt 与模型选择全链路 `requestId` 去重，超时后不盲目重新提交。
 - `session.model.catalog` 组合 `modelCatalog + projections`，只读目录不唤醒冷 Agent；`session.model.select` 重新校验 provider/model/reasoningEffort 后直接调用公开 `agent.model.select`，prompt 与切换按 sessionId 串行，迁移未完成时失败关闭。
