@@ -448,13 +448,20 @@ type MobileAttachment struct {
 }
 
 type MobileMessage struct {
-	ID          string             `json:"id"`
-	Seq         uint64             `json:"seq"`
-	Role        string             `json:"role"`
-	Text        string             `json:"text"`
-	ToolName    string             `json:"toolName,omitempty"`
-	ToolCallID  string             `json:"toolCallId,omitempty"`
-	IsError     bool               `json:"isError,omitempty"`
+	ID         string `json:"id"`
+	Seq        uint64 `json:"seq"`
+	Role       string `json:"role"`
+	Text       string `json:"text"`
+	ToolName   string `json:"toolName,omitempty"`
+	ToolCallID string `json:"toolCallId,omitempty"`
+	IsError    bool   `json:"isError,omitempty"`
+	// Summary is the display-safe one-line description of a tool step. It never
+	// carries raw arguments, command output or desktop paths.
+	Summary    string `json:"summary,omitempty"`
+	Status     string `json:"status,omitempty"`
+	DurationMS int64  `json:"durationMs,omitempty"`
+	// Turn is the DSH turn ordinal so the App can fold one turn into one card.
+	Turn        int                `json:"turn,omitempty"`
 	Attachments []MobileAttachment `json:"attachments,omitempty"`
 	// Delivery marks a synthesized message that only carries a turn's
 	// delivered files, so the App can render it as a delivery card.
