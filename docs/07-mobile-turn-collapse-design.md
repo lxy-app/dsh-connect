@@ -1,6 +1,6 @@
 # 移动端会话消息分组与折叠方案
 
-> **状态（2026-11-03）**：设计稿，未落代码。参照 WorkBuddy 的「已完成 / 深度求索中 + 步骤行」形态，解决 DSH Connect 移动端把一个 Turn 拆成多张卡片、且完全看不到执行步骤的问题。
+> **状态（2026-11-07）**：方案中的「按 turn 分组 + 工具步骤单行折叠」已落地到真实移动端：Connector 投影 `tool/call`/`tool/result` 为步骤消息（`turn`、`toolName`、脱敏 `summary`、`status`、`durationMs`），协议与 Server 透传可选字段，App 按 turn 渲染折叠卡片。`detail`（命令与输出展开）和步骤的实时增量推送仍未实现，对应第 5 节 M3 的后续部分。
 
 ## 1. 结论摘要
 
