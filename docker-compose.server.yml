@@ -16,6 +16,8 @@ services:
     ports:
       - "${DSH_CONNECT_HTTP_PORT:-8787}:8787"
     volumes:
+      # A host bind mount such as ./data/attachments:/data/attachments must be
+      # owned by UID/GID 10001; the container runs as the unprivileged app user.
       - dsh-connect-attachments:/data/attachments
     extra_hosts:
       # Allows DSH_CONNECT_DATABASE_URL to reach PostgreSQL on the Docker host

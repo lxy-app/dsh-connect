@@ -66,6 +66,22 @@ docker run -d --name dsh-connect --restart unless-stopped \
 
 容器默认监听 `0.0.0.0:8787`，Admin 与 API 均通过该端口访问。附件字节默认写入 `/data/attachments`，镜像会为非 root 运行用户设置可写权限；生产部署必须像示例一样挂载持久卷，避免重建容器后丢失图片字节。使用 `--env-file .env` 时，若文件内仍是开发默认的 `DSH_CONNECT_LISTEN_ADDR=127.0.0.1:8787`，必须改为 `0.0.0.0:8787`。生产环境应在容器前配置 HTTPS 反向代理，并把 `DSH_CONNECT_SERVER_URL` 设置为手机可访问的公网地址。
 
+若将命名卷改为 `./data/attachments:/data/attachments` 绑定挂载，镜像内的目录属主设置不会覆盖宿主目录。启动前必须在宿主机创建目录并把它交给容器内的 `app` 用户（UID/GID `10001`），否则附件上传会在落盘时失败，手机端持续显示未就绪：
+
+```sh
+mkdir -p ./data/attachments
+sudo chown -R 10001:10001 ./data/attachments
+```
+
+Nginx 默认的 1 MiB 请求体上限会在附件到达 Go Server 前拦截较大的桌面图片上传，表现为手机持续等待且附件目录没有文件。请在对应 `server` 块中将上限提高到大于 `DSH_CONNECT_MAX_ATTACHMENT_BYTES`（默认 20 MiB），然后校验并重载 Nginx：
+
+```nginx
+server {
+    # 其他既有监听、TLS 与 proxy_pass 配置保持不变。
+    client_max_body_size 25m;
+}
+```
+
 也可以用 `docker-compose.server.yml` 部署：它直接读取 `.env`，把监听地址固定覆盖为 `0.0.0.0:8787`，并通过 `host.docker.internal` 支持连接宿主机上的 PostgreSQL 18。宿主端口默认 8787，可用 `DSH_CONNECT_HTTP_PORT` 覆盖。
 
 ```sh
