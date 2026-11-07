@@ -141,7 +141,7 @@ npm install --registry=https://registry.npmjs.org
 “我的 → 语音与模型服务”可分别选择 ASR / TTS 的服务提供方。默认优先使用火山 Agent Plan，也可独立切回系统语音；旧版单一 `provider` 设置会在读取时迁移到两个独立选项。
 
 - ASR Resource-Id：`volc.seedasr.sauc.duration`。双向流式使用 `wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async`，完成后返回使用 `bigmodel_nostream`。麦克风音频按 16 kHz、单声道、Int16 PCM、gzip 二进制帧发送，松开时以负序号标记最后一包，收到服务器最终包后才回填文本。
-- TTS Resource-Id：`seed-tts-2.0`。使用 `POST https://openspeech.bytedance.com/api/v3/plan/tts/unidirectional`，默认音色 `zh_female_gaolengyujie_uranus_bigtts`，合并分块 MP3 数据并确认终端码 `20000000` 后播放。
+- TTS Resource-Id：`seed-tts-2.0`。使用 `POST https://openspeech.bytedance.com/api/v3/plan/tts/unidirectional`，合并分块 MP3 数据并确认终端码 `20000000` 后播放。音色通过内置列表单选，不提供手填入口；默认音色为高冷御姐（`zh_female_gaolengyujie_uranus_bigtts`），试听与保存后的自动播报共用所选音色，列表外的旧配置回退到默认音色。
 - 必须配置 Agent Plan 个人版专属 Key 或企业版席位 Key，不能使用按量平台普通 Key 代替。密钥只写入 SecureStore，不进入日志、SQLite、导航参数或 `EXPO_PUBLIC_*`。
 - 浏览器 WebSocket 不能设置 ASR 握手鉴权头，因此 Web 端应选择系统 ASR；火山 ASR 的 Web 中继尚未实现。iOS / Android Development Build 可直接连接 Agent Plan。
 - 云端合成或识别失败会显示真实错误。缺少最终包、只有部分音频或采样率不符合要求都不会被包装成成功。

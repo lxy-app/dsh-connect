@@ -1,7 +1,10 @@
 import { toByteArray } from 'base64-js';
 
+import { VOLC_TTS_DEFAULT_VOICE, type VolcTtsVoiceId } from './volc-tts-voices';
+
+export { VOLC_TTS_DEFAULT_VOICE } from './volc-tts-voices';
+
 export const VOLC_TTS_RESOURCE_ID = 'seed-tts-2.0';
-export const VOLC_TTS_DEFAULT_VOICE = 'zh_female_gaolengyujie_uranus_bigtts';
 export const VOLC_TTS_DEFAULT_ENDPOINT = 'https://openspeech.bytedance.com';
 
 const TTS_PATH = '/api/v3/plan/tts/unidirectional';
@@ -22,7 +25,7 @@ type FetchLike = (input: string, init?: {
 export type VolcTtsOptions = {
   apiKey: string;
   text: string;
-  speaker?: string;
+  speaker?: VolcTtsVoiceId;
   endpoint?: string;
   signal?: AbortSignal;
 };

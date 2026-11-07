@@ -10,9 +10,13 @@ import type { VolcAsrProtocol } from '@/lib/volc-asr';
 import {
   synthesizeVolcTts,
   VOLC_TTS_DEFAULT_ENDPOINT,
-  VOLC_TTS_DEFAULT_VOICE,
   VOLC_TTS_RESOURCE_ID,
 } from '@/lib/volc-tts';
+import {
+  normalizeVolcTtsVoice,
+  VOLC_TTS_DEFAULT_VOICE,
+  type VolcTtsVoiceId,
+} from '@/lib/volc-tts-voices';
 import { voicePlaybackStatusFromAudio, type VoicePlayback, type VoicePlaybackStatus } from '@/lib/voice-playback';
 
 export type { VoicePlayback, VoicePlaybackStatus } from '@/lib/voice-playback';
@@ -28,7 +32,7 @@ export type VoiceSettings = {
   apiKey: string;
   asrModel: string;
   model: string;
-  voice: string;
+  voice: VolcTtsVoiceId;
   rate: number;
   autoPlay: boolean;
 };
@@ -89,9 +93,7 @@ function restoreSettings(stored: string): VoiceSettings {
         : DEFAULT_SETTINGS.endpoint,
       asrModel: DEFAULT_SETTINGS.asrModel,
       model: DEFAULT_SETTINGS.model,
-      voice: typeof parsed.voice === 'string' && parsed.voice.trim() && parsed.voice !== 'system'
-        ? parsed.voice
-        : DEFAULT_SETTINGS.voice,
+      voice: normalizeVolcTtsVoice(parsed.voice),
     };
   } catch {
     return DEFAULT_SETTINGS;

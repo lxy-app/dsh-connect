@@ -71,3 +71,21 @@ test('TTS request uses Agent Plan headers, resource ID and configured voice', as
   assert.deepEqual(parsed.req_params.audio_params, { format: 'mp3', sample_rate: 24000 });
   assert.equal(requestBody.includes('secret-key'), false);
 });
+
+test('TTS request forwards the selected non-default voice', async () => {
+  let requestBody = '';
+  const responseBody = [
+    JSON.stringify({ code: 0, data: fromByteArray(new Uint8Array([7])) }),
+    JSON.stringify({ code: 20000000 }),
+  ].join('\n');
+  await synthesizeVolcTts(
+    { apiKey: 'secret-key', text: '你好', speaker: 'zh_female_vv_uranus_bigtts' },
+    async (_input, init) => {
+      requestBody = init?.body ?? '';
+      return { ok: true, status: 200, text: async () => responseBody };
+    },
+  );
+
+  const parsed = JSON.parse(requestBody) as { req_params: { speaker: string } };
+  assert.equal(parsed.req_params.speaker, 'zh_female_vv_uranus_bigtts');
+});

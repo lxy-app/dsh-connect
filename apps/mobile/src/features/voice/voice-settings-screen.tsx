@@ -8,7 +8,9 @@ import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { VOLC_ASR_RESOURCE_ID } from '@/lib/volc-asr';
 import { VOLC_TTS_RESOURCE_ID } from '@/lib/volc-tts';
+import { getVolcTtsVoice } from '@/lib/volc-tts-voices';
 import { useVoice, type VoiceServiceProvider, type VoiceSettings } from '@/providers/voice-provider';
+import { VoicePickerSheet } from './voice-picker-sheet';
 
 const PROVIDERS: { id: VoiceServiceProvider; name: string }[] = [
   { id: 'volcengine', name: '火山 Agent Plan' },
@@ -36,6 +38,8 @@ function VoiceSettingsContent() {
   const [form, setForm] = useState<VoiceSettings>(settings);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [voicePickerVisible, setVoicePickerVisible] = useState(false);
+  const selectedVoice = getVolcTtsVoice(form.voice);
 
   const patch = (next: Partial<VoiceSettings>) => setForm((current) => ({ ...current, ...next }));
   const usesCloud = form.asrProvider === 'volcengine' || form.ttsProvider === 'volcengine';
@@ -52,10 +56,6 @@ function VoiceSettingsContent() {
       }
     } catch {
       Alert.alert('服务地址无效', 'Agent Plan 服务地址必须使用 HTTPS，且不能包含账号、密码、查询参数或片段。');
-      return false;
-    }
-    if (!form.voice.trim()) {
-      Alert.alert('音色不能为空', '请填写火山 TTS 音色 ID。');
       return false;
     }
     return true;
@@ -138,7 +138,22 @@ function VoiceSettingsContent() {
       <Section title="语音播报 · TTS" theme={theme}>
         <ProviderChoices value={form.ttsProvider} onChange={(ttsProvider) => patch({ ttsProvider })} theme={theme} />
         {form.ttsProvider === 'volcengine' ? (
-          <Text style={[styles.note, { color: theme.textSecondary }]}>Resource-Id：{VOLC_TTS_RESOURCE_ID}{'\n'}MP3 · 24000 Hz · Agent Plan HTTP 合成</Text>
+          <>
+            <Text style={[styles.note, { color: theme.textSecondary }]}>Resource-Id：{VOLC_TTS_RESOURCE_ID}{'\n'}MP3 · 24000 Hz · Agent Plan HTTP 合成</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`选择 TTS 音色，当前为 ${selectedVoice.name}`}
+              onPress={() => setVoicePickerVisible(true)}
+              style={({ pressed }) => [styles.voiceSelector, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceMuted : theme.background }]}
+            >
+              <View style={styles.rowText}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>音色</Text>
+                <Text style={[styles.rowSub, { color: theme.textSecondary }]}>{selectedVoice.description}</Text>
+              </View>
+              <Text style={[styles.voiceName, { color: theme.accent }]}>{selectedVoice.name}</Text>
+              <Text style={[styles.chevron, { color: theme.textSecondary }]}>›</Text>
+            </Pressable>
+          </>
         ) : (
           <Text style={[styles.note, { color: theme.textSecondary }]}>系统 TTS 无需 API Key，可直接朗读回复。</Text>
         )}
@@ -148,7 +163,6 @@ function VoiceSettingsContent() {
         <Section title="火山 Agent Plan 配置" theme={theme}>
           <Field label="服务地址" value={form.endpoint} onChange={(endpoint) => patch({ endpoint })} placeholder="https://openspeech.bytedance.com" theme={theme} autoCapitalize="none" />
           <Field label="Agent Plan API Key / 企业席位 Key" value={form.apiKey} onChange={(apiKey) => patch({ apiKey })} placeholder="输入套餐专用凭据" theme={theme} secure />
-          <Field label="TTS 音色" value={form.voice} onChange={(voice) => patch({ voice })} placeholder="zh_female_gaolengyujie_uranus_bigtts" theme={theme} autoCapitalize="none" />
           <Text style={[styles.note, { color: theme.textSecondary }]}>请使用 Agent Plan 个人版专属 Key 或企业版席位 Key，不是按量平台的普通 API Key。密钥只保存到 Keychain / Keystore。是否开启超额后付费由你的套餐配置决定。</Text>
         </Section>
       ) : null}
@@ -168,6 +182,15 @@ function VoiceSettingsContent() {
         <ActionButton label={previewing ? '正在请求语音…' : '试听当前配置'} loading={previewing} onPress={() => void preview()} variant="secondary" />
         <ActionButton label={saving ? '正在保存…' : '保存配置'} loading={saving} onPress={() => void save()} variant="primary" />
       </Section>
+      <VoicePickerSheet
+        visible={voicePickerVisible}
+        value={form.voice}
+        onClose={() => setVoicePickerVisible(false)}
+        onSelect={(voice) => {
+          patch({ voice });
+          setVoicePickerVisible(false);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -197,6 +220,8 @@ const styles = StyleSheet.create({
   hero: { borderWidth: 1, borderRadius: 16, padding: 15, gap: 6 }, heroTitle: { fontSize: Typography.reading, lineHeight: 22, fontWeight: '700' }, heroCopy: { fontSize: Typography.body, lineHeight: 21 },
   section: { gap: 7 }, sectionTitle: { fontSize: Typography.secondary, lineHeight: 19, fontWeight: '700', paddingHorizontal: 4 }, group: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 13 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 }, rowText: { flex: 1 }, rowLabel: { fontSize: Typography.control, lineHeight: 21, fontWeight: '600' }, rowSub: { fontSize: Typography.secondary, lineHeight: 20, marginTop: 3 },
+  voiceSelector: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 10 },
+  voiceName: { fontSize: Typography.body, lineHeight: 20, fontWeight: '600' }, chevron: { fontSize: 26, lineHeight: 28 },
   field: { gap: 6 }, fieldLabel: { fontSize: Typography.body, lineHeight: 20, fontWeight: '600' }, input: { borderWidth: 1, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 10, fontSize: Typography.reading, lineHeight: 24 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, choice: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 }, choiceText: { fontSize: Typography.body, lineHeight: 20, fontWeight: '600' },
   note: { fontSize: Typography.secondary, lineHeight: 20 },
