@@ -24,11 +24,13 @@ import { SessionModelProvider, useSessionModel } from '@/features/session/sessio
 import { SessionDrawer } from '@/features/navigation/session-drawer';
 import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { MarkdownText } from '@/components/markdown';
+import { ReadAloudButton } from '@/components/read-aloud-button';
 import { TurnCard } from '@/components/turn-card';
 import { ChatIcon } from '@/components/chat-icon';
 import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { PLAYBACK_AUDIO_MODE, RECORDING_AUDIO_MODE } from '@/lib/audio-session';
 import { groupTurns } from '@/lib/turn-grouping';
 import {
   cancelMobileSession,
@@ -76,7 +78,7 @@ function ChatScreenContent() {
   // Attachment images need a live bearer token in their request headers, so the
   // screen resolves one connection snapshot and refreshes it with the session.
   const [attachmentAuth, setAttachmentAuth] = useState<AttachmentAuth | null>(null);
-  const { settings: voiceSettings, hydrated: voiceHydrated, speak } = useVoice();
+  const { settings: voiceSettings, hydrated: voiceHydrated, speak, pauseSpeaking } = useVoice();
   const { interactions, busyId, decide } = useInteractions();
   const params = useLocalSearchParams<{
     sessionId: string;
@@ -92,6 +94,7 @@ function ChatScreenContent() {
   const sessionId = single(params.sessionId);
   const deviceId = single(params.deviceId);
   const workspaceId = single(params.workspaceId);
+  const playbackScope = `${deviceId}:${workspaceId}:${sessionId}`;
   const title = single(params.title) || '会话';
   const deviceName = single(params.deviceName) || '';
   const workspaceName = single(params.workspaceName) || '';
@@ -183,7 +186,7 @@ function ChatScreenContent() {
     if (expectedGeneration !== undefined && owner !== null && owner !== expectedGeneration) return;
     audioStreamStopRef.current();
     if (expectedGeneration === undefined || owner === expectedGeneration) audioStreamOwnerRef.current = null;
-    void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+    void setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => undefined);
   }, []);
   const finishCloudVoice = useCallback((text: string) => {
     clearVoiceFinishTimer();
@@ -544,13 +547,18 @@ function ChatScreenContent() {
       return;
     }
     if (latest.seq === lastSpokenSeq.current) return;
-    lastSpokenSeq.current = latest.seq;
-    if (voiceHydrated && voiceSettings.autoPlay && !transcript?.active && !streamText) {
-      void speak(markdownToPlainText(latest.text), { key: `turn-${lastCompletedTurn.key}` }).catch((cause: unknown) => {
-        Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
-      });
+    if (!voiceHydrated || !voiceSettings.autoPlay) {
+      lastSpokenSeq.current = latest.seq;
+      return;
     }
-  }, [lastCompletedTurn, speak, streamText, transcript?.active, voiceHydrated, voiceSettings.autoPlay]);
+    // Do not start TTS over an active recording. Leave the sequence pending so
+    // enabling auto-play is not required again after the recording ends.
+    if (voiceMode || transcript?.active || streamText) return;
+    lastSpokenSeq.current = latest.seq;
+    void speak(markdownToPlainText(latest.text), { key: `${playbackScope}:turn-${lastCompletedTurn.key}` }).catch((cause: unknown) => {
+      Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    });
+  }, [lastCompletedTurn, playbackScope, speak, streamText, transcript?.active, voiceHydrated, voiceMode, voiceSettings.autoPlay]);
 
   const loadOlder = useCallback(async () => {
     if (!olderCursor || loadingOlder) return;
@@ -663,12 +671,7 @@ function ChatScreenContent() {
                 return;
               }
               audioStreamOwnerRef.current = generation;
-              await setAudioModeAsync({
-                allowsRecording: true,
-                playsInSilentMode: true,
-                shouldPlayInBackground: false,
-                interruptionMode: 'doNotMix',
-              });
+              await setAudioModeAsync(RECORDING_AUDIO_MODE);
               if (generation !== voiceStartGeneration.current || voiceStopRequested.current) {
                 stopCloudAudio(generation);
                 session.abort();
@@ -725,6 +728,10 @@ function ChatScreenContent() {
     setVoiceCancelArmed(false);
     setVoiceMode(true);
     try {
+      // Recording owns the audio session; keep a cloud reply paused so it can
+      // resume from the same position after the user finishes speaking.
+      await pauseSpeaking({ forRecording: true });
+      if (generation !== voiceStartGeneration.current || voiceStopRequested.current) return;
       if (voiceSettings.asrProvider === 'volcengine') {
         await startCloudVoice(generation);
         return;
@@ -982,6 +989,7 @@ function ChatScreenContent() {
                   <MessageRow
                     attachmentAuth={attachmentAuth}
                     message={group.user}
+                    playbackScope={playbackScope}
                     state={
                       optimistic?.id === group.user.id
                         ? sending
@@ -996,7 +1004,9 @@ function ChatScreenContent() {
                   group={group}
                   liveText={running ? streamText : ''}
                   now={nowTick}
+                  playbackScope={playbackScope}
                   running={running}
+                  readAloudDisabled={voiceMode}
                 />
               </View>
             );
@@ -1252,20 +1262,20 @@ function ChatScreenContent() {
 
 function MessageRow({
   message,
+  playbackScope,
   state,
   streaming = false,
   attachmentAuth = null,
 }: {
   message: MobileMessage;
+  playbackScope: string;
   state?: 'sending' | 'queued';
   streaming?: boolean;
   attachmentAuth?: AttachmentAuth | null;
 }) {
   const theme = useAppTheme();
-  const { hydrated: voiceHydrated, speak, speakingKey } = useVoice();
   const user = message.role === 'user';
   const [expanded, setExpanded] = useState(false);
-  const speaking = !user && speakingKey === messageKey(message);
   const collapsible = !streaming && message.text.length > 700;
   // Assistant replies are Markdown; collapse the plain-text preview so a long
   // answer stays scannable until the reader expands the formatted version.
@@ -1344,28 +1354,7 @@ function MessageRow({
         ) : null}
         <View style={styles.messageFooter}>
           {!user ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={speaking ? '正在朗读回复' : '朗读回复'}
-              accessibilityState={{ disabled: speaking || !voiceHydrated, busy: speaking }}
-              disabled={speaking || !voiceHydrated}
-              hitSlop={10}
-              onPress={() => {
-                void speak(preview, { key: messageKey(message) }).catch((cause: unknown) => {
-                  Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
-                });
-              }}
-              style={({ pressed }) => [
-                styles.messageTts,
-                speaking && { backgroundColor: theme.accentSoft },
-                pressed && !speaking && styles.pressed,
-              ]}
-            >
-              {/* Icon only: the label lives in accessibility so the footer stays compact.
-                  While speaking the icon dims inside a soft pill, which keeps the
-                  "busy / not pressable" signal the old 朗读中 text used to carry. */}
-              <ChatIcon name="read" color={speaking ? theme.textSecondary : theme.accent} size={14} />
-            </Pressable>
+            <ReadAloudButton text={preview} playbackKey={`${playbackScope}:message-${message.seq}`} style={styles.messageTts} />
           ) : null}
           <Text
             style={[
@@ -1379,10 +1368,6 @@ function MessageRow({
       </View>
     </View>
   );
-}
-
-function messageKey(message: MobileMessage): string {
-  return `message-${message.seq}`;
 }
 
 function isInjectedContext(text: string): boolean {
