@@ -85,7 +85,14 @@
           "speechRecognitionPermission": "允许 $(PRODUCT_NAME) 使用系统语音识别将你的语音转写为指令。"
         }
       ],
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "允许 $(PRODUCT_NAME) 使用麦克风将你的语音转写为指令。",
+          "enableBackgroundPlayback": true,
+          "enableBackgroundRecording": false
+        }
+      ],
       "expo-asset"
     ],
     "experiments": {

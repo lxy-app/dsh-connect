@@ -3,14 +3,13 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { AttachmentGrid, type AttachmentAuth } from '@/components/attachment-grid';
 import { AttachmentViewer } from '@/components/attachment-viewer';
-import { ChatIcon } from '@/components/chat-icon';
 import { MarkdownText } from '@/components/markdown';
+import { ReadAloudButton } from '@/components/read-aloud-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { formatTime } from '@/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
 import type { TurnGroup } from '@/lib/turn-grouping';
-import { useVoice } from '@/providers/voice-provider';
 import type { MobileMessage } from '@/types/mobile';
 
 const COLLAPSE_CHARS = 700;
@@ -23,17 +22,20 @@ export function TurnCard({
   group,
   running,
   now,
+  playbackScope,
   liveText = '',
   attachmentAuth = null,
+  readAloudDisabled = false,
 }: {
   group: TurnGroup;
   running: boolean;
   now: number;
+  playbackScope: string;
   liveText?: string;
   attachmentAuth?: AttachmentAuth | null;
+  readAloudDisabled?: boolean;
 }) {
   const theme = useAppTheme();
-  const { hydrated: voiceHydrated, speak, speakingKey } = useVoice();
   const [open, setOpen] = useState(running);
   const manual = useRef(false);
   const [expanded, setExpanded] = useState(false);
@@ -63,7 +65,6 @@ export function TurnCard({
   const hasBody = steps.length > 0 || Boolean(group.final) || group.attachments.length > 0;
   if (!hasBody && !liveText) return null;
 
-  const speaking = speakingKey === `turn-${group.key}`;
   const time = group.final?.occurredAt ?? new Date(group.endedAt).toISOString();
 
   return (
@@ -147,23 +148,7 @@ export function TurnCard({
           ) : null}
           <View style={styles.foot}>
             {group.final && finalText ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={speaking ? '正在朗读回复' : '朗读回复'}
-                accessibilityState={{ disabled: speaking || !voiceHydrated, busy: speaking }}
-                disabled={speaking || !voiceHydrated}
-                hitSlop={10}
-                onPress={() => {
-                  void speak(preview, { key: `turn-${group.key}` }).catch(() => undefined);
-                }}
-                style={({ pressed }) => [
-                  styles.tts,
-                  speaking && { backgroundColor: theme.accentSoft },
-                  pressed && !speaking && styles.pressed,
-                ]}
-              >
-                <ChatIcon name="read" color={speaking ? theme.textSecondary : theme.accent} size={14} />
-              </Pressable>
+              <ReadAloudButton text={preview} playbackKey={`${playbackScope}:turn-${group.key}`} disabled={readAloudDisabled} />
             ) : null}
             <Text style={[styles.time, { color: theme.textSecondary }]}>{formatTime(time)}</Text>
           </View>
@@ -241,7 +226,6 @@ const styles = StyleSheet.create({
   expand: { alignSelf: 'flex-start', paddingVertical: 6 },
   expandText: { fontSize: Typography.body, fontWeight: '600' },
   foot: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
-  tts: { borderRadius: 7, padding: 4 },
   time: { marginLeft: 'auto', fontSize: Typography.caption, fontVariant: ['tabular-nums'] },
   pressed: { opacity: 0.6 },
 });
