@@ -24,10 +24,12 @@ import { SessionModelProvider, useSessionModel } from '@/features/session/sessio
 import { SessionDrawer } from '@/features/navigation/session-drawer';
 import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { MarkdownText } from '@/components/markdown';
+import { TurnCard } from '@/components/turn-card';
 import { ChatIcon } from '@/components/chat-icon';
 import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { groupTurns } from '@/lib/turn-grouping';
 import {
   cancelMobileSession,
   createRequestId,
@@ -149,7 +151,6 @@ function ChatScreenContent() {
   >(() => single(params.awaitingReply) === '1' ? { since: Date.now(), afterSeq: 0, text: '' } : null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [streamText, setStreamText] = useState('');
-  const [streaming, setStreaming] = useState(false);
   const inflight = useRef(false);
   const cursorInitialized = useRef(false);
   const latestSeqRef = useRef(0);
@@ -326,7 +327,6 @@ function ChatScreenContent() {
         );
         if (finalized) {
           setStreamText((current) => (current ? '' : current));
-          setStreaming(false);
         }
         if (!cursorInitialized.current) {
           cursorInitialized.current = true;
@@ -413,13 +413,11 @@ function ChatScreenContent() {
             onClose: () => {
               scheduleReconnect();
             },
-            onStart: () => setStreaming(true),
+            onStart: () => undefined,
             onDelta: (text) => {
-              setStreaming(true);
               setStreamText((currentText) => currentText + text);
             },
             onEnd: () => {
-              setStreaming(false);
               void loadLatest('silent');
             },
             onRefresh: () => {
@@ -470,13 +468,24 @@ function ChatScreenContent() {
   }, [older, optimistic, transcript]);
 
   const conversation = useMemo(
-    () => messages.filter(
-      (message) => message.role !== 'tool'
-        && !(message.role === 'user' && isInjectedContext(message.text)),
-    ),
+    () => messages.filter((message) => !(message.role === 'user' && isInjectedContext(message.text))),
     [messages],
   );
-  const hiddenToolCount = messages.filter((message) => message.role === 'tool').length;
+  const turns = useMemo(() => groupTurns(conversation), [conversation]);
+  // While a new prompt is optimistic, the still-executing turn is the last one
+  // with content rather than the trailing user-only group.
+  const runningIndex = transcript?.active === true
+    ? turns.reduce(
+      (latest, turn, index) => (
+        turn.steps.length > 0 || turn.final || turn.attachments.length > 0 ? index : latest
+      ),
+      -1,
+    )
+    : -1;
+  const runningTurn = runningIndex >= 0 ? turns[runningIndex] : undefined;
+  const runningHasContent = Boolean(
+    runningTurn && (runningTurn.steps.length > 0 || runningTurn.final || runningTurn.attachments.length > 0),
+  );
 
   const waitSeconds = pendingReply
     ? Math.max(0, Math.floor((nowTick - pendingReply.since) / 1_000))
@@ -518,11 +527,17 @@ function ChatScreenContent() {
   }, [connection, session?.accessToken]);
 
   const canRefreshManually = awaitingReply && (waitSeconds >= 6 || error !== null);
+  const lastCompletedTurn = useMemo(() => {
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+      if (index === runningIndex) continue;
+      const group = turns[index];
+      if (group?.final && group.final.text.trim().length > 0) return group;
+    }
+    return undefined;
+  }, [turns, runningIndex]);
   useEffect(() => {
-    const latest = [...conversation]
-      .reverse()
-      .find((message) => message.role === 'assistant' && message.text.trim().length > 0);
-    if (!latest) return;
+    const latest = lastCompletedTurn?.final;
+    if (!latest || !lastCompletedTurn) return;
     if (!speechInitialized.current) {
       speechInitialized.current = true;
       lastSpokenSeq.current = latest.seq;
@@ -531,11 +546,11 @@ function ChatScreenContent() {
     if (latest.seq === lastSpokenSeq.current) return;
     lastSpokenSeq.current = latest.seq;
     if (voiceHydrated && voiceSettings.autoPlay && !transcript?.active && !streamText) {
-      void speak(markdownToPlainText(latest.text), { key: messageKey(latest) }).catch((cause: unknown) => {
+      void speak(markdownToPlainText(latest.text), { key: `turn-${lastCompletedTurn.key}` }).catch((cause: unknown) => {
         Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '请稍后重试。');
       });
     }
-  }, [conversation, speak, streamText, transcript?.active, voiceHydrated, voiceSettings.autoPlay]);
+  }, [lastCompletedTurn, speak, streamText, transcript?.active, voiceHydrated, voiceSettings.autoPlay]);
 
   const loadOlder = useCallback(async () => {
     if (!olderCursor || loadingOlder) return;
@@ -958,21 +973,34 @@ function ChatScreenContent() {
             <ActivityIndicator color={theme.accent} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>正在读取对话…</Text>
           </View>
-        ) : conversation.length > 0 ? (
-          conversation.map((message) => (
-            <MessageRow
-              key={`${message.seq}-${message.id}`}
-              attachmentAuth={attachmentAuth}
-              message={message}
-              state={
-                optimistic?.id === message.id
-                  ? sending
-                    ? 'sending'
-                    : 'queued'
-                  : undefined
-              }
-            />
-          ))
+        ) : turns.length > 0 ? (
+          turns.map((group, index) => {
+            const running = index === runningIndex;
+            return (
+              <View key={group.key}>
+                {group.user ? (
+                  <MessageRow
+                    attachmentAuth={attachmentAuth}
+                    message={group.user}
+                    state={
+                      optimistic?.id === group.user.id
+                        ? sending
+                          ? 'sending'
+                          : 'queued'
+                        : undefined
+                    }
+                  />
+                ) : null}
+                <TurnCard
+                  attachmentAuth={attachmentAuth}
+                  group={group}
+                  liveText={running ? streamText : ''}
+                  now={nowTick}
+                  running={running}
+                />
+              </View>
+            );
+          })
         ) : awaitingReply ? null : (
           <View style={styles.empty}>
             <Text style={[styles.emptyTitle, { color: theme.text }]}>还没有消息</Text>
@@ -982,21 +1010,7 @@ function ChatScreenContent() {
           </View>
         )}
 
-        {streamText ? (
-          <MessageRow
-            key="live-stream"
-            streaming={streaming}
-            message={{
-              id: 'live-stream',
-              seq: Number.MAX_SAFE_INTEGER,
-              role: 'assistant',
-              text: streamText,
-              occurredAt: new Date().toISOString(),
-            }}
-          />
-        ) : null}
-
-        {awaitingReply && !streamText ? (
+        {awaitingReply && !streamText && !runningHasContent ? (
           <View style={styles.messageRow}>
             <View
               style={[
@@ -1027,12 +1041,6 @@ function ChatScreenContent() {
               ) : null}
             </View>
           </View>
-        ) : null}
-
-        {hiddenToolCount > 0 ? (
-          <Text style={[styles.hiddenTools, { color: theme.textSecondary }]}>
-            已省略 {hiddenToolCount} 个工具调用与输出，仅显示对话内容。
-          </Text>
         ) : null}
 
         {transcript?.truncated ? (
@@ -1565,12 +1573,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.body,
     lineHeight: 20,
     fontWeight: '700',
-  },
-  hiddenTools: {
-    fontSize: Typography.caption,
-    lineHeight: 18,
-    textAlign: 'center',
-    marginTop: 4,
   },
   messageFooter: {
     flexDirection: 'row',

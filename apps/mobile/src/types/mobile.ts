@@ -149,6 +149,12 @@ export type MobileMessage = {
   toolName?: string;
   toolCallId?: string;
   isError?: boolean;
+  /** Display-safe one-line description of a tool step. */
+  summary?: string;
+  status?: 'ok' | 'error' | string;
+  durationMs?: number;
+  /** DSH turn ordinal; folds one turn into one card. */
+  turn?: number;
   attachments?: MobileAttachment[];
   /** Synthesized message that only carries a turn's delivered files. */
   delivery?: boolean;

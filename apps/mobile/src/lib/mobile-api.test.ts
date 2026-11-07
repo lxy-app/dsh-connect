@@ -111,6 +111,52 @@ test('mobile transcript preserves delivered attachments and delivery-only messag
   }]);
 });
 
+test('mobile transcript keeps folded tool steps and their turn metadata', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    sessionId: 'sess-1',
+    deviceId: 'dev-1',
+    workspaceId: 'ws-1',
+    messages: [{
+      id: 'tool-call-1',
+      seq: 9,
+      role: 'tool',
+      text: '',
+      toolName: 'bash',
+      toolCallId: 'call-1',
+      summary: 'pnpm test --workspace server',
+      status: 'ok',
+      durationMs: 1500,
+      turn: 3,
+      occurredAt: '2026-11-03T01:00:00.000Z',
+    }],
+    hasMore: false,
+    active: false,
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  const transcript = await getMobileTranscript(
+    'https://connect.example.com',
+    'mobile-token',
+    'sess-1',
+    { deviceId: 'dev-1', workspaceId: 'ws-1' },
+  );
+
+  assert.deepEqual(
+    {
+      role: transcript.messages[0]?.role,
+      summary: transcript.messages[0]?.summary,
+      status: transcript.messages[0]?.status,
+      durationMs: transcript.messages[0]?.durationMs,
+      turn: transcript.messages[0]?.turn,
+    },
+    { role: 'tool', summary: 'pnpm test --workspace server', status: 'ok', durationMs: 1_500, turn: 3 },
+  );
+});
+
 test('mobile model catalog uses the granted query and parses nested reasoning metadata', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
