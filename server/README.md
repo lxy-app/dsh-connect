@@ -71,12 +71,12 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | POST | `/v1/admin/auth/login` | 无 | 邮箱密码登录，返回 `token/expiresAt/user` |
 | POST | `/v1/admin/auth/logout` | 已登录 | 吊销当前会话 |
 | GET | `/v1/admin/auth/me` | 已登录 | 当前操作者 |
-| GET | `/v1/admin/overview` | 已登录 | 设备/账号计数与最近 8 条审计 |
+| GET | `/v1/admin/overview` | owner/admin/auditor | 设备/账号计数与最近 8 条审计 |
 | GET | `/v1/admin/users` | owner/admin/auditor | 用户列表 |
 | POST | `/v1/admin/users` | owner/admin | 创建用户（仅 owner 可建 owner） |
-| PATCH | `/v1/admin/users/{id}` | owner/admin | 改显示名/密码；角色与状态仅 owner |
+| PATCH | `/v1/admin/users/{id}` | owner/admin | 改非 Owner 账号显示名/密码；角色与状态仅 owner；admin 不能修改 owner |
 | DELETE | `/v1/admin/users/{id}` | owner | 删除用户并撤销其会话 |
-| GET | `/v1/admin/devices` | 已登录 | 设备列表（含 `hasToken`） |
+| GET | `/v1/admin/devices` | owner/admin/auditor | 设备列表（含 `hasToken`） |
 | PATCH | `/v1/admin/devices/{id}` | owner/admin | 重命名设备 |
 | POST | `/v1/admin/devices/{id}/revoke` | owner/admin | 吊销凭据并断开在线 Connector |
 | DELETE | `/v1/admin/devices/{id}` | owner/admin | 删除设备记录 |
@@ -89,7 +89,9 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 
 安全约束：
 
-- 最后一位 Owner 不能被降级、禁用或删除（返回 `conflict`），避免部署失去管理员。
+- 最后一位 **active** Owner 不能被降级、禁用或删除（返回 `conflict`）。Store 在事务内锁定 active Owner 集合并完成检查与写入，避免并发请求同时移除不同 Owner；删除用户及其依赖清理也在同一事务内完成。
+- Admin 只能维护非 Owner 账号；Owner 的显示名、角色、状态和密码只能由 Owner 修改，防止通过重置 Owner 密码提权。
+- Member 不能通过概览或设备列表读取全局账号、审计、工作区路径或设备指纹。
 - 登录失败对“邮箱不存在”和“密码错误”返回同一响应，且都会写审计，便于发现暴力破解。
 - 已吊销设备不会被断线回调改写回 `offline`（`revoked` 是终态）。
 - 配对码属于授权动作，只有 owner/admin 能生成；列表只暴露 `active/used/expired` 状态，明文码不可回读。
@@ -154,6 +156,7 @@ Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start r
 - 会话列表、create、transcript、模型读取/选择、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验工作区授权、会话真实归属或审批答案，形成双重 fail-closed。
 - 待处理审批只存在内存中，Server 重启或 Connector 断连即清空；同一 interaction 在 Server 内用 CAS 预留，避免两台手机重复消费。
 - 手机 logout、管理员吊销手机、桌面吊销都会撤销相关 grant。
+- 手机 logout、管理员吊销手机、手机或桌面撤销 grant、用户被禁用或删除时，Server 会关闭该手机/用户已建立的 `/v1/mobile/events/ws`。事件订阅登记后会重新读取当前手机、用户和 grant 状态，避免旧握手身份在吊销竞态中继续建立连接。
 - **移动 Access Token 不能访问 `/v1/devices`、`/v1/sessions` 或 `/v1/events/ws` 等调试接口。** 移动端仅使用受 grant 约束的 `/v1/mobile/*` API；`/v1/mobile/events/ws` 先校验 grant，再以 compact follow 推送 assistant 增量，原始工具 payload 由 Server 过滤。
 
 ## 移动端附件

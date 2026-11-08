@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect"
 	"github.com/deepseek/dsh-connect/server/ent"
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
 	"github.com/deepseek/dsh-connect/server/ent/mobileaccessgrant"
@@ -178,9 +179,62 @@ type UserUpdate struct {
 	Password    *string
 }
 
-// UpdateUser applies a partial update to a user.
+// UpdateUser applies a partial update without restricting the target role.
+// Administrative callers serving the admin role must use UpdateUserExcludingOwner.
 func (s *Store) UpdateUser(ctx context.Context, userID string, update UserUpdate) (User, error) {
-	builder := s.client.User.Update().Where(user.IDEQ(userID)).SetUpdatedAt(time.Now().UTC())
+	return s.updateUser(ctx, userID, update, false)
+}
+
+// UpdateUserExcludingOwner prevents an admin from changing an owner even if the
+// target is promoted between the HTTP authorization check and this write.
+func (s *Store) UpdateUserExcludingOwner(ctx context.Context, userID string, update UserUpdate) (User, error) {
+	return s.updateUser(ctx, userID, update, true)
+}
+
+// updateUser runs role and status changes in a transaction that locks active
+// owners before removing one, so concurrent requests cannot demote or disable
+// the last active owner on PostgreSQL. SQLite executes them on one connection.
+func (s *Store) updateUser(ctx context.Context, userID string, update UserUpdate, forbidOwnerTarget bool) (User, error) {
+	var passwordHash *string
+	if update.Password != nil {
+		hash, err := HashPassword(*update.Password)
+		if err != nil {
+			return User{}, err
+		}
+		passwordHash = &hash
+	}
+
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return User{}, fmt.Errorf("begin user update transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	activeOwners := 0
+	if update.Role != nil || update.Status != nil {
+		activeOwners, err = s.lockActiveOwners(ctx, tx)
+		if err != nil {
+			return User{}, err
+		}
+	}
+	target, err := tx.User.Query().Where(user.IDEQ(userID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("load user for update: %w", err)
+	}
+	if forbidOwnerTarget && target.Role == user.RoleOwner {
+		return User{}, ErrOwnerUpdateForbidden
+	}
+	if removesActiveOwner(target, update) && activeOwners <= 1 {
+		return User{}, ErrLastActiveOwner
+	}
+
+	builder := tx.User.Update().Where(user.IDEQ(userID)).SetUpdatedAt(time.Now().UTC())
+	if forbidOwnerTarget {
+		builder.Where(user.RoleNEQ(user.RoleOwner))
+	}
 	if update.DisplayName != nil {
 		builder.SetDisplayName(*update.DisplayName)
 	}
@@ -190,12 +244,8 @@ func (s *Store) UpdateUser(ctx context.Context, userID string, update UserUpdate
 	if update.Status != nil {
 		builder.SetStatus(user.Status(*update.Status))
 	}
-	if update.Password != nil {
-		hash, err := HashPassword(*update.Password)
-		if err != nil {
-			return User{}, err
-		}
-		builder.SetPasswordHash(hash)
+	if passwordHash != nil {
+		builder.SetPasswordHash(*passwordHash)
 	}
 	affected, err := builder.Save(ctx)
 	if err != nil {
@@ -204,50 +254,97 @@ func (s *Store) UpdateUser(ctx context.Context, userID string, update UserUpdate
 	if affected == 0 {
 		return User{}, ErrUserNotFound
 	}
-	return s.UserByID(ctx, userID)
+	updated, err := tx.User.Query().Where(user.IDEQ(userID)).Only(ctx)
+	if err != nil {
+		return User{}, fmt.Errorf("reload updated user: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return User{}, fmt.Errorf("commit user update: %w", err)
+	}
+	return toUser(updated), nil
+}
+
+func removesActiveOwner(target *ent.User, update UserUpdate) bool {
+	if target.Role != user.RoleOwner || target.Status != user.StatusActive {
+		return false
+	}
+	return (update.Role != nil && *update.Role != RoleOwner) ||
+		(update.Status != nil && *update.Status != UserStatusActive)
+}
+
+// lockActiveOwners serializes owner removal on PostgreSQL. SQLite does not
+// support FOR UPDATE; its single connection serializes these transactions for
+// the supported single-instance deployment.
+func (s *Store) lockActiveOwners(ctx context.Context, tx *ent.Tx) (int, error) {
+	query := tx.User.Query().
+		Where(user.RoleEQ(user.RoleOwner), user.StatusEQ(user.StatusActive)).
+		Order(ent.Asc(user.FieldID))
+	if s.databaseDialect == dialect.Postgres {
+		query = query.ForUpdate()
+	}
+	owners, err := query.All(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("lock active owners: %w", err)
+	}
+	return len(owners), nil
 }
 
 // DeleteUser removes a user and revokes their admin sessions, mobile devices and
-// outstanding mobile pairing codes.
+// outstanding mobile pairing codes atomically. Active owner rows are locked
+// before the last-active-owner check so concurrent deletes cannot remove both.
 func (s *Store) DeleteUser(ctx context.Context, userID string) error {
-	if _, err := s.client.AdminSession.Delete().
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin user delete transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	activeOwners, err := s.lockActiveOwners(ctx, tx)
+	if err != nil {
+		return err
+	}
+	target, err := tx.User.Query().Where(user.IDEQ(userID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return ErrUserNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("load user for delete: %w", err)
+	}
+	if target.Role == user.RoleOwner && target.Status == user.StatusActive && activeOwners <= 1 {
+		return ErrLastActiveOwner
+	}
+
+	if _, err := tx.AdminSession.Delete().
 		Where(adminsession.UserIDEQ(userID)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("delete user sessions: %w", err)
 	}
-	if _, err := s.client.MobileAccessGrant.Delete().
+	if _, err := tx.MobileAccessGrant.Delete().
 		Where(mobileaccessgrant.UserIDEQ(userID)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("delete user mobile access grants: %w", err)
 	}
-	if _, err := s.client.MobileDevice.Delete().
+	if _, err := tx.MobileDevice.Delete().
 		Where(mobiledevice.UserIDEQ(userID)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("delete user mobile devices: %w", err)
 	}
-	if _, err := s.client.MobilePairingCode.Delete().
+	if _, err := tx.MobilePairingCode.Delete().
 		Where(mobilepairingcode.UserIDEQ(userID)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("delete user mobile pairing codes: %w", err)
 	}
-	affected, err := s.client.User.Delete().Where(user.IDEQ(userID)).Exec(ctx)
+	affected, err := tx.User.Delete().Where(user.IDEQ(userID)).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}
 	if affected == 0 {
 		return ErrUserNotFound
 	}
-	return nil
-}
-
-// CountOwners reports how many owner accounts exist; used to block removing the
-// last owner.
-func (s *Store) CountOwners(ctx context.Context) (int, error) {
-	count, err := s.client.User.Query().Where(user.RoleEQ(user.RoleOwner)).Count(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("count owners: %w", err)
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit user delete: %w", err)
 	}
-	return count, nil
+	return nil
 }
 
 // AdminSession is a browser login session for the Web Admin.

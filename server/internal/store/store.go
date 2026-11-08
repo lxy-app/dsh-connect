@@ -39,6 +39,8 @@ var (
 	ErrIdempotencyExists       = errors.New("idempotency record already exists")
 	ErrUserNotFound            = errors.New("user not found")
 	ErrUserEmailTaken          = errors.New("user email is already registered")
+	ErrLastActiveOwner         = errors.New("the last active owner is required")
+	ErrOwnerUpdateForbidden    = errors.New("owner update is forbidden")
 	ErrSessionInvalid          = errors.New("admin session is invalid or expired")
 )
 
@@ -86,8 +88,9 @@ type AuditEntry struct {
 
 // Store owns the ent client and the underlying database handle.
 type Store struct {
-	client *ent.Client
-	db     *sql.DB
+	client          *ent.Client
+	db              *sql.DB
+	databaseDialect string
 }
 
 var sqliteDriverPragmas = []string{
@@ -165,7 +168,7 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		}
 	}
 	driver := entsql.OpenDB(entDialect, db)
-	return &Store{client: ent.NewClient(ent.Driver(driver)), db: db}, nil
+	return &Store{client: ent.NewClient(ent.Driver(driver)), db: db, databaseDialect: entDialect}, nil
 }
 
 // Client exposes the generated ent client for administrative queries.

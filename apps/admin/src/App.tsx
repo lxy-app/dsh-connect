@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
-import { Avatar, Button, Dropdown, Layout, Menu, Space, Spin, Tag, Typography, theme } from 'antd';
+import type { ReactNode } from 'react';
+import { Avatar, Button, Dropdown, Layout, Menu, Result, Space, Spin, Tag, Typography, theme } from 'antd';
 import {
   AuditOutlined,
   CloudServerOutlined,
@@ -15,6 +16,7 @@ import {
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import { LoginPage } from './pages/LoginPage';
+import type { Role } from './api/client';
 import { roleColors, roleLabels } from './utils/format';
 
 // Route-level code splitting: the login screen stays in the entry chunk while
@@ -28,6 +30,8 @@ const MobilePage = lazy(() => import('./pages/MobilePage').then((m) => ({ defaul
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
+
+const MANAGEMENT_ROLES: readonly Role[] = ['owner', 'admin', 'auditor'];
 
 const NAV = [
   { key: '/overview', icon: <DashboardOutlined />, label: '概览' },
@@ -57,7 +61,19 @@ export function App() {
     return <LoginPage />;
   }
 
-  const selected = NAV.find((item) => location.pathname.startsWith(item.key))?.key ?? '/overview';
+  const canViewManagement = MANAGEMENT_ROLES.includes(user.role);
+  const navItems = canViewManagement ? NAV : [];
+  const selected = navItems.find((item) => location.pathname.startsWith(item.key))?.key ?? '/overview';
+  const guardManagementPage = (page: ReactNode) =>
+    canViewManagement ? (
+      page
+    ) : (
+      <Result
+        status="403"
+        title="当前账号没有全局管理权限"
+        subTitle="Member 仅能使用本人身份；用户、设备、配对和审计数据不会加载。请联系 Owner 或 Admin。"
+      />
+    );
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -107,7 +123,7 @@ export function App() {
         <Menu
           mode="inline"
           selectedKeys={[selected]}
-          items={NAV}
+          items={navItems}
           onClick={({ key }) => navigate(key)}
           style={{ borderInlineEnd: 'none' }}
         />
@@ -130,7 +146,7 @@ export function App() {
             onClick={() => setCollapsed(!collapsed)}
           />
           <Text strong style={{ fontSize: 16 }}>
-            {NAV.find((item) => item.key === selected)?.label}
+            {canViewManagement ? NAV.find((item) => item.key === selected)?.label : '账号访问'}
           </Text>
           <Space style={{ marginLeft: 'auto' }}>
             <Tag color={roleColors[user.role]}>{roleLabels[user.role] ?? user.role}</Tag>
@@ -158,12 +174,12 @@ export function App() {
             }
           >
             <Routes>
-              <Route path="/overview" element={<OverviewPage />} />
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/devices" element={<DevicesPage />} />
-              <Route path="/pairing" element={<PairingPage />} />
-              <Route path="/mobile" element={<MobilePage />} />
-              <Route path="/audit" element={<AuditPage />} />
+              <Route path="/overview" element={guardManagementPage(<OverviewPage />)} />
+              <Route path="/users" element={guardManagementPage(<UsersPage />)} />
+              <Route path="/devices" element={guardManagementPage(<DevicesPage />)} />
+              <Route path="/pairing" element={guardManagementPage(<PairingPage />)} />
+              <Route path="/mobile" element={guardManagementPage(<MobilePage />)} />
+              <Route path="/audit" element={guardManagementPage(<AuditPage />)} />
               <Route path="*" element={<Navigate to="/overview" replace />} />
             </Routes>
           </Suspense>

@@ -63,11 +63,13 @@ func (h *Hub) CloseAll() {
 }
 
 type subscription struct {
-	deviceID  string
-	sessionID string
-	ch        chan protocol.Event
-	done      chan struct{}
-	reason    protocol.Error
+	deviceID       string
+	sessionID      string
+	mobileDeviceID string
+	userID         string
+	ch             chan protocol.Event
+	done           chan struct{}
+	reason         protocol.Error
 }
 
 type EventHub struct {
@@ -82,6 +84,16 @@ func NewEventHub(buffer int) *EventHub {
 }
 
 func (h *EventHub) Subscribe(deviceID, sessionID string) (*subscription, bool) {
+	return h.subscribe(deviceID, sessionID, "", "")
+}
+
+// SubscribeMobile records the authenticated phone and user alongside the
+// session coordinates so revocation can close already established streams.
+func (h *EventHub) SubscribeMobile(deviceID, sessionID, mobileDeviceID, userID string) (*subscription, bool) {
+	return h.subscribe(deviceID, sessionID, mobileDeviceID, userID)
+}
+
+func (h *EventHub) subscribe(deviceID, sessionID, mobileDeviceID, userID string) (*subscription, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closing {
@@ -95,10 +107,12 @@ func (h *EventHub) Subscribe(deviceID, sessionID string) (*subscription, bool) {
 		}
 	}
 	sub := &subscription{
-		deviceID:  deviceID,
-		sessionID: sessionID,
-		ch:        make(chan protocol.Event, h.buffer),
-		done:      make(chan struct{}),
+		deviceID:       deviceID,
+		sessionID:      sessionID,
+		mobileDeviceID: mobileDeviceID,
+		userID:         userID,
+		ch:             make(chan protocol.Event, h.buffer),
+		done:           make(chan struct{}),
 	}
 	h.subs[sub] = struct{}{}
 	return sub, true
@@ -108,6 +122,40 @@ func (h *EventHub) Unsubscribe(sub *subscription) {
 	h.mu.Lock()
 	delete(h.subs, sub)
 	h.mu.Unlock()
+}
+
+// CloseMobile immediately revokes every live event stream owned by one phone.
+func (h *EventHub) CloseMobile(mobileDeviceID string) {
+	h.closeMatching(func(sub *subscription) bool {
+		return sub.mobileDeviceID != "" && sub.mobileDeviceID == mobileDeviceID
+	}, "mobile device access was revoked")
+}
+
+// CloseMobileForDevice closes only streams backed by one revoked desktop grant.
+func (h *EventHub) CloseMobileForDevice(mobileDeviceID, deviceID string) {
+	h.closeMatching(func(sub *subscription) bool {
+		return sub.mobileDeviceID != "" && sub.mobileDeviceID == mobileDeviceID && sub.deviceID == deviceID
+	}, "mobile grant was revoked")
+}
+
+// CloseUser immediately revokes every live mobile event stream owned by a user.
+func (h *EventHub) CloseUser(userID string) {
+	h.closeMatching(func(sub *subscription) bool {
+		return sub.userID != "" && sub.userID == userID
+	}, "user access was revoked")
+}
+
+func (h *EventHub) closeMatching(matches func(*subscription) bool, message string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for sub := range h.subs {
+		if !matches(sub) {
+			continue
+		}
+		sub.reason = protocol.NewError(protocol.CodeUnauthorized, message, false)
+		delete(h.subs, sub)
+		close(sub.done)
+	}
 }
 
 func (h *EventHub) Broadcast(event protocol.Event) {

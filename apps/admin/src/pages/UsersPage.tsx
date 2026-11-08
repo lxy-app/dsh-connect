@@ -199,7 +199,7 @@ export function UsersPage() {
             type="link"
             size="small"
             icon={<EditOutlined />}
-            disabled={!canManage}
+            disabled={!canManage || (!isOwner && row.role === 'owner')}
             onClick={() => openEdit(row)}
           >
             编辑
