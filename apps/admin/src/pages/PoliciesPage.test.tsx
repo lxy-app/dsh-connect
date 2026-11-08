@@ -131,6 +131,39 @@ describe('PoliciesPage editing', () => {
     });
   });
 
+  it('only offers and submits scopes authorized on the selected desktop', async () => {
+    apiMocks.devices.mockResolvedValue([{ ...device, scopes: ['read', 'prompt'] }]);
+    apiMocks.policies.mockResolvedValue([{
+      ...policy,
+      rules: [{ deviceId: device.deviceId, workspaceIds: ['ws-1'], scopes: ['read', 'cancel'] }],
+    }]);
+    const user = userEvent.setup();
+    renderPoliciesPage();
+
+    await screen.findByText(policy.name);
+    await user.click(screen.getByRole('button', { name: /编\s*辑/ }));
+    const drawer = await screen.findByRole('dialog');
+
+    expect(within(drawer).getByRole('checkbox', { name: 'read' })).toBeChecked();
+    expect(within(drawer).getByRole('checkbox', { name: 'prompt' })).not.toBeChecked();
+    expect(within(drawer).queryByRole('checkbox', { name: 'cancel' })).not.toBeInTheDocument();
+    expect(within(drawer).queryByRole('checkbox', { name: 'approve' })).not.toBeInTheDocument();
+
+    await user.click(within(drawer).getByRole('checkbox', { name: 'prompt' }));
+    await user.click(within(drawer).getByRole('button', { name: '保存策略' }));
+
+    await waitFor(() => {
+      expect(apiMocks.updatePolicy).toHaveBeenCalledWith(policy.policyId, {
+        name: policy.name,
+        description: policy.description,
+        enabled: true,
+        memberIds: [member.id],
+        rules: [{ deviceId: device.deviceId, workspaceIds: ['ws-1'], scopes: ['read', 'prompt'] }],
+        revision: 3,
+      });
+    });
+  });
+
   it('keeps the editor open and explains a revision conflict', async () => {
     apiMocks.updatePolicy.mockRejectedValue(new ApiError(409, 'revision_conflict', 'Policy has changed'));
     const user = userEvent.setup();
