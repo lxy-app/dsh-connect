@@ -18,7 +18,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "deviceId and sessionId are required; cursor must be at most 4096 bytes", false))
 		return
 	}
-	s.serveEvents(w, r, deviceID, sessionID, cursor, false)
+	s.serveEvents(w, r, deviceID, "", sessionID, cursor, nil)
 }
 
 // handleMobileEvents authenticates a paired phone, checks its workspace grant,
@@ -33,25 +33,41 @@ func (s *Server) handleMobileEvents(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "deviceId, workspaceId and sessionId are required; cursor must be at most 4096 bytes", false))
 		return
 	}
-	if _, commandError := s.authorizeMobileSession(r, deviceID, workspaceID, sessionID, "read"); commandError != nil {
+	actor, commandError := s.authorizeMobileSession(r, deviceID, workspaceID, sessionID, "read")
+	if commandError != nil {
 		writeAPIError(w, *commandError)
 		return
 	}
-	s.serveEvents(w, r, deviceID, sessionID, cursor, true)
+	s.serveEvents(w, r, deviceID, workspaceID, sessionID, cursor, &actor)
 }
 
-func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request, deviceID, sessionID, cursor string, mobile bool) {
+func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request, deviceID, workspaceID, sessionID, cursor string, mobile *mobileActor) {
 	timeout, commandError := s.queryTimeout(r)
 	if commandError != nil {
 		writeAPIError(w, *commandError)
 		return
 	}
-	sub, ok := s.events.Subscribe(deviceID, sessionID)
+	var sub *subscription
+	var ok bool
+	if mobile != nil {
+		sub, ok = s.events.SubscribeMobile(deviceID, sessionID, mobile.Device.Device.MobileDeviceID, mobile.User.ID)
+	} else {
+		sub, ok = s.events.Subscribe(deviceID, sessionID)
+	}
 	if !ok {
 		writeAPIError(w, protocol.NewError(protocol.CodeDeviceOffline, "server is shutting down", true))
 		return
 	}
 	defer s.events.Unsubscribe(sub)
+	if mobile != nil {
+		// Register first, then reload the current phone/user and authorize again.
+		// A revocation racing the initial handshake either makes this check fail
+		// or closes the registered stream. The stale handshake actor is not enough.
+		if commandError := s.reauthorizeMobileEvent(r, deviceID, workspaceID, sessionID, *mobile); commandError != nil {
+			writeAPIError(w, *commandError)
+			return
+		}
+	}
 
 	connection, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
@@ -62,6 +78,20 @@ func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request, deviceID, s
 	defer cancel()
 	defer connection.Close(websocket.StatusNormalClosure, "event stream closed")
 
+	// Only security revocation cancels an in-progress mobile session.follow.
+	// Desktop streams and ordinary supersession keep their existing terminal
+	// error and cleanup behavior.
+	if mobile != nil {
+		go func() {
+			select {
+			case <-sub.done:
+				if sub.reason.Code == protocol.CodeUnauthorized {
+					cancel()
+				}
+			case <-ctx.Done():
+			}
+		}()
+	}
 	go func() {
 		for {
 			if _, _, err := connection.Read(ctx); err != nil {
@@ -79,7 +109,7 @@ func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request, deviceID, s
 	if err != nil {
 		return
 	}
-	params := protocol.SessionFollowParams{SessionID: sessionID, FollowID: followID, Stream: true, Compact: mobile}
+	params := protocol.SessionFollowParams{SessionID: sessionID, FollowID: followID, Stream: true, Compact: mobile != nil}
 	if cursor != "" {
 		params.Cursor = cursor
 	}
@@ -100,14 +130,21 @@ func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request, deviceID, s
 	for {
 		select {
 		case event := <-sub.ch:
-			if mobile && !mobileStreamEvent(event) {
+			// A revoked subscription may still have buffered events. Never forward
+			// one after EventHub has closed the subscription.
+			select {
+			case <-sub.done:
+				return
+			default:
+			}
+			if mobile != nil && !mobileStreamEvent(event) {
 				continue
 			}
 			if err := s.writeEventFrame(ctx, connection, event); err != nil {
 				return
 			}
 		case <-sub.done:
-			s.writeEventFrame(ctx, connection, protocol.ErrorEnvelope{V: protocol.Version, Type: protocol.TypeError, RequestID: requestID, Error: sub.reason})
+			s.writeEventFrame(context.Background(), connection, protocol.ErrorEnvelope{V: protocol.Version, Type: protocol.TypeError, RequestID: requestID, Error: sub.reason})
 			return
 		case <-ticker.C:
 			pingContext, pingCancel := context.WithTimeout(ctx, s.config.WriteTimeout)
@@ -120,6 +157,20 @@ func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request, deviceID, s
 			return
 		}
 	}
+}
+
+func (s *Server) reauthorizeMobileEvent(r *http.Request, deviceID, workspaceID, sessionID string, actor mobileActor) *protocol.Error {
+	device, deviceErr := s.store.MobileDeviceByID(r.Context(), actor.Device.Device.MobileDeviceID)
+	user, userErr := s.store.UserByID(r.Context(), actor.User.ID)
+	if deviceErr != nil || userErr != nil ||
+		device.Device.Status != "active" || device.Device.UserID != actor.User.ID || user.Status != "active" {
+		return errorPtr(protocol.NewError(protocol.CodeUnauthorized, "mobile event access is no longer active", false))
+	}
+	actor.Device = device
+	actor.User = user
+	ctx := context.WithValue(r.Context(), mobileContextKey{}, actor)
+	_, commandError := s.authorizeMobileSession(r.WithContext(ctx), deviceID, workspaceID, sessionID, "read")
+	return commandError
 }
 
 // mobileStreamEvent keeps large raw tool payloads off the phone socket.

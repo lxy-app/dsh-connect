@@ -152,7 +152,7 @@ func TestAdminSessionTokenIsHashedAndRevocable(t *testing.T) {
 
 func TestAdminRolePermissions(t *testing.T) {
 	environment := newAdminEnvironment(t)
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
+	ownerToken, ownerID := environment.login(t, testOwnerEmail, testOwnerPassword)
 
 	// Create one admin, one member and one auditor.
 	createUser := func(email, password, role string) store.User {
@@ -175,9 +175,14 @@ func TestAdminRolePermissions(t *testing.T) {
 	memberToken, _ := environment.login(t, memberUser.Email, "member-password")
 	auditorToken, _ := environment.login(t, auditorUser.Email, "auditor-password")
 
-	// Members may read their own profile but cannot list users.
+	// Members may read their own profile but cannot list users or expose global
+	// device, workspace and audit data through other admin endpoints.
 	status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/users", memberToken, nil)
 	assertErrorResponse(t, status, body, http.StatusForbidden, "forbidden")
+	for _, path := range []string{"/v1/admin/overview", "/v1/admin/devices"} {
+		status, body = testRequest(t, http.MethodGet, environment.http.URL+path, memberToken, nil)
+		assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+	}
 
 	// Auditors can read users and audit but cannot mutate anything.
 	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/users", auditorToken, nil)
@@ -205,13 +210,30 @@ func TestAdminRolePermissions(t *testing.T) {
 	})
 	assertErrorResponse(t, status, body, http.StatusForbidden, "forbidden")
 
-	// Admins can still perform non-escalating edits.
+	// Admins cannot alter an owner's profile or take over the account by
+	// resetting its password.
+	for _, payload := range []map[string]string{
+		{"displayName": "Admin Controlled Owner"},
+		{"password": "admin-controlled-password"},
+	} {
+		status, body = testRequest(t, http.MethodPatch, environment.http.URL+"/v1/admin/users/"+ownerID, adminToken, payload)
+		assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+	}
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/admin/auth/login", "", map[string]string{
+		"email": testOwnerEmail, "password": "admin-controlled-password",
+	})
+	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	environment.login(t, testOwnerEmail, testOwnerPassword)
+
+	// Admins can still perform non-escalating edits and credential resets for
+	// ordinary members.
 	status, body = testRequest(t, http.MethodPatch, environment.http.URL+"/v1/admin/users/"+memberUser.ID, adminToken, map[string]string{
-		"displayName": "Renamed Member",
+		"displayName": "Renamed Member", "password": "new-member-password",
 	})
 	if status != http.StatusOK {
-		t.Fatalf("admin rename member status=%d body=%s", status, body)
+		t.Fatalf("admin update member status=%d body=%s", status, body)
 	}
+	environment.login(t, memberUser.Email, "new-member-password")
 }
 
 func TestAdminCannotRemoveLastOwner(t *testing.T) {
@@ -230,6 +252,39 @@ func TestAdminCannotRemoveLastOwner(t *testing.T) {
 
 	status, body = testRequest(t, http.MethodDelete, environment.http.URL+"/v1/admin/users/"+ownerID, ownerToken, nil)
 	assertErrorResponse(t, status, body, http.StatusConflict, "conflict")
+}
+
+func TestAdminCannotRemoveLastActiveOwnerWithDisabledOwner(t *testing.T) {
+	environment := newAdminEnvironment(t)
+	ownerToken, ownerID := environment.login(t, testOwnerEmail, testOwnerPassword)
+
+	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/admin/users", ownerToken, map[string]string{
+		"email": "disabled-owner@example.com", "displayName": "Disabled Owner", "password": "owner-password-456", "role": store.RoleOwner,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create second owner status=%d body=%s", status, body)
+	}
+	var secondOwner store.User
+	decodeTestJSON(t, body, &secondOwner)
+	status, body = testRequest(t, http.MethodPatch, environment.http.URL+"/v1/admin/users/"+secondOwner.ID, ownerToken, map[string]string{
+		"status": store.UserStatusDisabled,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("disable second owner status=%d body=%s", status, body)
+	}
+
+	for _, operation := range []struct {
+		method  string
+		payload map[string]string
+	}{
+		{method: http.MethodPatch, payload: map[string]string{"role": store.RoleMember}},
+		{method: http.MethodPatch, payload: map[string]string{"status": store.UserStatusDisabled}},
+		{method: http.MethodDelete},
+	} {
+		status, body = testRequest(t, operation.method, environment.http.URL+"/v1/admin/users/"+ownerID, ownerToken, operation.payload)
+		assertErrorResponse(t, status, body, http.StatusConflict, protocol.CodeConflict)
+	}
+	environment.login(t, testOwnerEmail, testOwnerPassword)
 }
 
 func TestAdminUserValidation(t *testing.T) {

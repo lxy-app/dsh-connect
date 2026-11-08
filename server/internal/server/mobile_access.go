@@ -162,8 +162,17 @@ func (s *Server) handleMobileAccessRevoke(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "valid grantId required", false))
 		return
 	}
+	grant, err := s.store.MobileAccessGrantByID(r.Context(), grantID)
+	if errors.Is(err, store.ErrMobileGrantNotFound) || (err == nil && grant.MobileDeviceID != actor.Device.Device.MobileDeviceID) {
+		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "access grant not found", false))
+		return
+	}
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load access grant", true))
+		return
+	}
 	now := nowUTC()
-	err := s.store.RevokeMobileAccessGrantByID(r.Context(), grantID, actor.Device.Device.MobileDeviceID, now)
+	err = s.store.RevokeMobileAccessGrantByID(r.Context(), grantID, actor.Device.Device.MobileDeviceID, now)
 	if errors.Is(err, store.ErrMobileGrantNotFound) {
 		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "access grant not found", false))
 		return
@@ -172,6 +181,7 @@ func (s *Server) handleMobileAccessRevoke(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke access grant", true))
 		return
 	}
+	s.events.CloseMobileForDevice(actor.Device.Device.MobileDeviceID, grant.DeviceID)
 	s.audit(store.AuditEntry{
 		OccurredAt: now,
 		Actor:      "user:" + actor.User.ID,
@@ -901,6 +911,9 @@ func (s *Server) connectorMobileAccessDecide(ctx context.Context, deviceID strin
 	}
 	if err != nil {
 		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not decide mobile access request", true))
+	}
+	if status != "active" {
+		s.events.CloseMobileForDevice(decision.MobileDeviceID, deviceID)
 	}
 	action := "mobile.access." + decision.Action
 	s.audit(store.AuditEntry{

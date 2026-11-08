@@ -16,14 +16,14 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/admin/auth/logout", s.adminAuth(s.handleAdminLogout))
 	mux.HandleFunc("GET /v1/admin/auth/me", s.adminAuth(s.handleAdminMe))
 
-	mux.HandleFunc("GET /v1/admin/overview", s.adminAuth(s.handleAdminOverview))
+	mux.HandleFunc("GET /v1/admin/overview", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminOverview))
 
 	mux.HandleFunc("GET /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminUsers))
 	mux.HandleFunc("POST /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateUser))
 	mux.HandleFunc("PATCH /v1/admin/users/{userId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateUser))
 	mux.HandleFunc("DELETE /v1/admin/users/{userId}", s.requireRole(store.RoleOwner)(s.handleAdminDeleteUser))
 
-	mux.HandleFunc("GET /v1/admin/devices", s.adminAuth(s.handleAdminDevices))
+	mux.HandleFunc("GET /v1/admin/devices", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminDevices))
 	mux.HandleFunc("PATCH /v1/admin/devices/{deviceId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateDevice))
 	mux.HandleFunc("DELETE /v1/admin/devices/{deviceId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminDeleteDevice))
 	mux.HandleFunc("POST /v1/admin/devices/{deviceId}/revoke", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminRevokeDevice))
@@ -328,28 +328,43 @@ func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load user", true))
 		return
 	}
-	// Never allow the last owner to be demoted or disabled: the deployment would
-	// become unadministrable.
-	if target.Role == store.RoleOwner && ((request.Role != nil && *request.Role != store.RoleOwner) || (request.Status != nil && *request.Status != store.UserStatusActive)) {
-		owners, err := s.store.CountOwners(r.Context())
-		if err != nil {
-			writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not count owners", true))
-			return
-		}
-		if owners <= 1 {
-			writeAPIError(w, protocol.NewError(protocol.CodeConflict, "the last owner cannot be demoted or disabled", false))
-			return
-		}
+	// Administrators may maintain non-owner accounts, but only an owner may alter
+	// an owner's profile or credentials. The UI hides this action as well; this
+	// server-side check is the security boundary against password-reset escalation.
+	if !actorIsOwner && target.Role == store.RoleOwner {
+		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "only an owner can update an owner", false))
+		return
 	}
-	updated, err := s.store.UpdateUser(r.Context(), userID, store.UserUpdate{
+	update := store.UserUpdate{
 		DisplayName: request.DisplayName,
 		Role:        request.Role,
 		Status:      request.Status,
 		Password:    request.Password,
-	})
+	}
+	var updated store.User
+	if actorIsOwner {
+		updated, err = s.store.UpdateUser(r.Context(), userID, update)
+	} else {
+		updated, err = s.store.UpdateUserExcludingOwner(r.Context(), userID, update)
+	}
+	if errors.Is(err, store.ErrOwnerUpdateForbidden) {
+		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "only an owner can update an owner", false))
+		return
+	}
+	if errors.Is(err, store.ErrUserNotFound) {
+		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "user not found", false))
+		return
+	}
+	if errors.Is(err, store.ErrLastActiveOwner) {
+		writeAPIError(w, protocol.NewError(protocol.CodeConflict, "the last active owner cannot be demoted or disabled", false))
+		return
+	}
 	if err != nil {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not update user", true))
 		return
+	}
+	if request.Status != nil && *request.Status == store.UserStatusDisabled {
+		s.events.CloseUser(userID)
 	}
 	s.recordAdminAudit(r, "admin.user.update", "success", "")
 	writeJSON(w, http.StatusOK, updated)
@@ -361,30 +376,19 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "valid userId required", false))
 		return
 	}
-	target, err := s.store.UserByID(r.Context(), userID)
-	if errors.Is(err, store.ErrUserNotFound) {
-		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "user not found", false))
-		return
-	}
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load user", true))
-		return
-	}
-	if target.Role == store.RoleOwner {
-		owners, err := s.store.CountOwners(r.Context())
-		if err != nil {
-			writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not count owners", true))
-			return
-		}
-		if owners <= 1 {
-			writeAPIError(w, protocol.NewError(protocol.CodeConflict, "the last owner cannot be deleted", false))
-			return
-		}
-	}
 	if err := s.store.DeleteUser(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "user not found", false))
+			return
+		}
+		if errors.Is(err, store.ErrLastActiveOwner) {
+			writeAPIError(w, protocol.NewError(protocol.CodeConflict, "the last active owner cannot be deleted", false))
+			return
+		}
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not delete user", true))
 		return
 	}
+	s.events.CloseUser(userID)
 	s.recordAdminAudit(r, "admin.user.delete", "success", "")
 	w.WriteHeader(http.StatusNoContent)
 }

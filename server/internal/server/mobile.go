@@ -281,6 +281,7 @@ func (s *Server) handleMobileLogout(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile session", true))
 		return
 	}
+	s.events.CloseMobile(actor.Device.Device.MobileDeviceID)
 	// Access grants must never outlive the phone credential that asked for them.
 	if err := s.store.RevokeMobileAccessGrantsForMobileDevice(r.Context(), actor.Device.Device.MobileDeviceID, now); err != nil {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
@@ -337,6 +338,7 @@ func (s *Server) handleAdminRevokeMobileDevice(w http.ResponseWriter, r *http.Re
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile device", true))
 		return
 	}
+	s.events.CloseMobile(mobileDeviceID)
 	if err := s.store.RevokeMobileAccessGrantsForMobileDevice(r.Context(), mobileDeviceID, now); err != nil {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
 		return
