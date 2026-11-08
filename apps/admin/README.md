@@ -55,7 +55,7 @@ Server 返回的 `serverUrl` 必须能被手机访问。若页面提示回环地
 
 ## 访问策略与用户预览
 
-`/policies` 按“成员 → 桌面 → 工作区 → read/prompt/cancel/approve”配置真实权限。多个启用策略按工作区求并集，无策略默认拒绝；手机 active grant 和桌面当前授权仍会进一步收窄结果。
+`/policies` 按“成员 → 桌面 → 工作区 → read/prompt/cancel/approve”配置真实权限。编辑器只展示并提交所选桌面当前开放的 scopes，旧草稿中已不再授权的 scopes 会在打开时移除；Server 仍强制拒绝越权规则。多个启用策略按工作区求并集，无策略默认拒绝；手机 active grant 和桌面当前授权仍会进一步收窄结果。
 
 用户与角色页可查看关联策略并打开 Server 计算的策略预览。预览只表示策略允许范围，不代表某台手机已经获得 grant；实际控制仍需桌面单独确认。
 

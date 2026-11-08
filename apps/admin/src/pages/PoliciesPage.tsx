@@ -85,13 +85,14 @@ export function PoliciesPage() {
 
   const nextRule = useCallback((rule?: AccessPolicyRule): DraftRule => {
     ruleKey.current += 1;
+    const device = devices.find((candidate) => candidate.deviceId === rule?.deviceId);
     return {
       key: `rule-${ruleKey.current}`,
       deviceId: rule?.deviceId ?? '',
       workspaceIds: rule?.workspaceIds ?? [],
-      scopes: rule?.scopes ?? [],
+      scopes: (rule?.scopes ?? []).filter((scope) => device?.scopes.includes(scope)),
     };
-  }, []);
+  }, [devices]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -527,6 +528,7 @@ export function PoliciesPage() {
                 <Space orientation="vertical" size={12} style={{ width: '100%' }}>
                   {editor.draft.rules.map((rule, index) => {
                     const device = devices.find((candidate) => candidate.deviceId === rule.deviceId);
+                    const availableScopes = SCOPE_OPTIONS.filter((scope) => device?.scopes.includes(scope));
                     return (
                       <Card
                         key={rule.key}
@@ -585,9 +587,9 @@ export function PoliciesPage() {
                             <div style={{ marginTop: 6 }}>
                               <Checkbox.Group
                                 aria-label={`规则 ${index + 1} 操作权限`}
-                                options={SCOPE_OPTIONS}
+                                options={availableScopes}
                                 value={rule.scopes}
-                                disabled={!canManage}
+                                disabled={!canManage || !rule.deviceId}
                                 onChange={(values) => updateRule(rule.key, { scopes: values.map(String) })}
                               />
                             </div>
