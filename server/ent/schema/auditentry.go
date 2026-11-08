@@ -32,6 +32,9 @@ func (AuditEntry) Fields() []ent.Field {
 			Optional(),
 		field.String("source_ip").
 			Optional(),
+		field.Bytes("details").
+			Optional().
+			Comment("Optional JSON metadata such as access-policy before/after changes"),
 	}
 }
 

@@ -232,6 +232,11 @@ func (s *Server) handleMobileInteractions(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
 		return
 	}
+	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		return
+	}
 	type grantKey struct{ deviceID, workspaceID string }
 	allowed := make(map[grantKey]struct{}, len(grants))
 	for _, grant := range grants {
@@ -239,7 +244,9 @@ func (s *Server) handleMobileInteractions(w http.ResponseWriter, r *http.Request
 			continue
 		}
 		for _, workspace := range grant.Workspaces {
-			allowed[grantKey{deviceID: grant.DeviceID, workspaceID: workspace.ID}] = struct{}{}
+			if access.allows(grant.DeviceID, workspace.ID, "approve") {
+				allowed[grantKey{deviceID: grant.DeviceID, workspaceID: workspace.ID}] = struct{}{}
+			}
 		}
 	}
 	deviceNames := map[string]string{}
@@ -299,13 +306,23 @@ func (s *Server) connectorInteractionAudience(ctx context.Context, deviceID stri
 		return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
 	}
 	candidates := make([]string, 0, len(grants))
+	accessByUser := make(map[string]policyAccess)
 	for _, grant := range grants {
 		if grant.Status != "active" || !hasScope(grant.Scopes, "approve") {
 			continue
 		}
+		access, loaded := accessByUser[grant.UserID]
+		if !loaded {
+			var accessErr error
+			access, accessErr = s.policyAccessForUser(ctx, grant.UserID)
+			if accessErr != nil {
+				return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+			}
+			accessByUser[grant.UserID] = access
+		}
 		allowed := false
 		for _, workspace := range grant.Workspaces {
-			if workspace.ID == input.WorkspaceID {
+			if workspace.ID == input.WorkspaceID && access.allows(deviceID, input.WorkspaceID, "approve") {
 				allowed = true
 				break
 			}

@@ -7,6 +7,8 @@ import { UsersPage } from './UsersPage';
 
 const apiMocks = vi.hoisted(() => ({
   users: vi.fn(),
+  policies: vi.fn(),
+  accessPreview: vi.fn(),
   updateUser: vi.fn(),
 }));
 
@@ -19,6 +21,8 @@ vi.mock('../api/client', async (importOriginal) => {
     adminApi: {
       ...actual.adminApi,
       users: apiMocks.users,
+      policies: apiMocks.policies,
+      accessPreview: apiMocks.accessPreview,
       updateUser: apiMocks.updateUser,
     },
   };
@@ -88,9 +92,12 @@ function editButtonFor(displayName: string) {
 
 beforeEach(() => {
   apiMocks.users.mockReset();
+  apiMocks.policies.mockReset();
+  apiMocks.accessPreview.mockReset();
   apiMocks.updateUser.mockReset();
   useAuthMock.mockReset();
   apiMocks.users.mockResolvedValue([admin, member, owner]);
+  apiMocks.policies.mockResolvedValue([]);
   apiMocks.updateUser.mockResolvedValue(undefined);
 });
 
@@ -146,5 +153,44 @@ describe('UsersPage role-aware editing', () => {
         role: 'owner',
       });
     });
+  });
+
+  it('loads and renders the server access preview for the selected user', async () => {
+    mockCurrentUser(admin);
+    apiMocks.policies.mockResolvedValue([{
+      policyId: 'policy-1',
+      name: 'Engineering access',
+      description: '',
+      enabled: true,
+      memberIds: [member.id],
+      rules: [{ deviceId: 'dev-1', workspaceIds: ['ws-1'], scopes: ['read', 'approve'] }],
+      revision: 1,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }]);
+    apiMocks.accessPreview.mockResolvedValue({
+      userId: member.id,
+      policyIds: ['policy-1'],
+      desktops: [{
+        deviceId: 'dev-1',
+        deviceName: 'Engineering MacBook',
+        online: true,
+        workspaces: [{ id: 'ws-1', name: 'dsh-connect', scopes: ['read'] }],
+        scopes: ['read', 'approve'],
+      }],
+    });
+    const user = userEvent.setup();
+    renderUsersPage();
+
+    await screen.findByText(member.displayName);
+    await user.click(within(rowFor(member.displayName)).getByRole('button', { name: /访\s*问\s*预\s*览/ }));
+
+    const drawer = await screen.findByRole('dialog');
+    await within(drawer).findByText('Engineering MacBook');
+    expect(apiMocks.accessPreview).toHaveBeenCalledWith(member.id, expect.anything());
+    expect(within(drawer).getByText('dsh-connect')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('read')).toHaveLength(2);
+    expect(within(drawer).getByText('approve')).toBeInTheDocument();
+    expect(within(drawer).getByText('在线')).toBeInTheDocument();
   });
 });

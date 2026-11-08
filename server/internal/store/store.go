@@ -42,6 +42,9 @@ var (
 	ErrLastActiveOwner         = errors.New("the last active owner is required")
 	ErrOwnerUpdateForbidden    = errors.New("owner update is forbidden")
 	ErrSessionInvalid          = errors.New("admin session is invalid or expired")
+	ErrAccessPolicyNotFound    = errors.New("access policy not found")
+	ErrAccessPolicyConflict    = errors.New("access policy revision conflict")
+	ErrAccessPolicyNameTaken   = errors.New("access policy name is already registered")
 )
 
 // PairingCode is a one-time desktop pairing code. Only CodeHash is persisted.
@@ -75,15 +78,16 @@ type IdempotencyRecord struct {
 
 // AuditEntry is an append-only record of an administrative or Connector action.
 type AuditEntry struct {
-	OccurredAt time.Time `json:"occurredAt"`
-	Actor      string    `json:"actor"`
-	Action     string    `json:"action"`
-	RequestID  string    `json:"requestId,omitempty"`
-	DeviceID   string    `json:"deviceId,omitempty"`
-	SessionID  string    `json:"sessionId,omitempty"`
-	Result     string    `json:"result"`
-	ErrorCode  string    `json:"errorCode,omitempty"`
-	SourceIP   string    `json:"sourceIp,omitempty"`
+	OccurredAt time.Time       `json:"occurredAt"`
+	Actor      string          `json:"actor"`
+	Action     string          `json:"action"`
+	RequestID  string          `json:"requestId,omitempty"`
+	DeviceID   string          `json:"deviceId,omitempty"`
+	SessionID  string          `json:"sessionId,omitempty"`
+	Result     string          `json:"result"`
+	ErrorCode  string          `json:"errorCode,omitempty"`
+	SourceIP   string          `json:"sourceIp,omitempty"`
+	Details    json.RawMessage `json:"details,omitempty"`
 }
 
 // Store owns the ent client and the underlying database handle.
@@ -261,7 +265,7 @@ func toIdempotencyRecord(record *ent.IdempotencyRecord) IdempotencyRecord {
 }
 
 func toAuditEntry(entry *ent.AuditEntry) AuditEntry {
-	return AuditEntry{
+	result := AuditEntry{
 		OccurredAt: entry.OccurredAt,
 		Actor:      entry.Actor,
 		Action:     entry.Action,
@@ -272,4 +276,8 @@ func toAuditEntry(entry *ent.AuditEntry) AuditEntry {
 		ErrorCode:  entry.ErrorCode,
 		SourceIP:   entry.SourceIP,
 	}
+	if len(entry.Details) > 0 {
+		result.Details = json.RawMessage(append([]byte(nil), entry.Details...))
+	}
+	return result
 }

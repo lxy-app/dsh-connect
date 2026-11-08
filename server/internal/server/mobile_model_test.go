@@ -29,6 +29,7 @@ func newMobileModelFixture(t *testing.T, scopes []string) mobileModelFixture {
 	connector := pairConnector(t, environment.testEnvironment)
 	code := issueMobilePairingCode(t, environment, ownerToken, "")
 	phone := pairMobile(t, environment, code.Code, "Model iPhone")
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, scopes)
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
 		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": scopes,
 	})

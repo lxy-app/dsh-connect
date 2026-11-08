@@ -31,6 +31,8 @@ const (
 	FieldErrorCode = "error_code"
 	// FieldSourceIP holds the string denoting the source_ip field in the database.
 	FieldSourceIP = "source_ip"
+	// FieldDetails holds the string denoting the details field in the database.
+	FieldDetails = "details"
 	// Table holds the table name of the auditentry in the database.
 	Table = "audit_entries"
 )
@@ -47,6 +49,7 @@ var Columns = []string{
 	FieldResult,
 	FieldErrorCode,
 	FieldSourceIP,
+	FieldDetails,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).

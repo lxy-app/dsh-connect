@@ -78,6 +78,9 @@ func (s *Store) AppendAudit(ctx context.Context, entry AuditEntry) error {
 	if entry.SourceIP != "" {
 		builder.SetSourceIP(entry.SourceIP)
 	}
+	if len(entry.Details) > 0 {
+		builder.SetDetails([]byte(entry.Details))
+	}
 	if err := builder.Exec(ctx); err != nil {
 		return fmt.Errorf("append audit entry: %w", err)
 	}

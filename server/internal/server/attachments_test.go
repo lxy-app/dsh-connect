@@ -256,6 +256,7 @@ func TestMobileAttachmentLearnFetchUploadDownload(t *testing.T) {
 // desktop, returning the grant id.
 func grantMobileRead(t *testing.T, environment *adminEnvironment, connector pairedConnector, phone protocol.MobileSessionResponse) string {
 	t.Helper()
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
 		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
 	})

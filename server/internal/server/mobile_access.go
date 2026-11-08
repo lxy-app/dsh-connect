@@ -52,21 +52,44 @@ func (s *Server) handleMobileAccessOverview(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load desktop devices", true))
 		return
 	}
+	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		return
+	}
 	desktops := make([]protocol.MobileDesktopAccess, 0, len(devices))
 	for _, device := range devices {
 		if device.Device.Status == "revoked" || device.Device.Status == "waiting_desktop_authorization" {
 			continue
+		}
+		allowedWorkspaces := access.workspaceScopes(device.Device.DeviceID)
+		if len(allowedWorkspaces) == 0 {
+			continue
+		}
+		availableWorkspaces := make([]protocol.MobileWorkspaceSummary, 0, len(allowedWorkspaces))
+		for _, workspace := range mobileWorkspaceSummaries(device.Device.Workspaces) {
+			if _, allowed := allowedWorkspaces[workspace.ID]; allowed {
+				availableWorkspaces = append(availableWorkspaces, workspace)
+			}
 		}
 		desktop := protocol.MobileDesktopAccess{
 			DeviceID:            device.Device.DeviceID,
 			DeviceName:          device.Device.DeviceName,
 			ConnectorVersion:    device.Device.ConnectorVersion,
 			Online:              s.hub.Get(device.Device.DeviceID) != nil,
-			AvailableWorkspaces: mobileWorkspaceSummaries(device.Device.Workspaces),
-			AvailableScopes:     orderScopes(device.Device.Scopes),
+			AvailableWorkspaces: availableWorkspaces,
+			AvailableScopes:     policyScopeUnion(allowedWorkspaces, device.Device.Scopes),
 		}
 		if grant, exists := byDevice[device.Device.DeviceID]; exists {
-			projection := mobileGrantProjection(grant, actor, device.Device)
+			effectiveGrant := grant
+			effectiveGrant.Workspaces = nil
+			for _, workspace := range grant.Workspaces {
+				if _, allowed := allowedWorkspaces[workspace.ID]; allowed {
+					effectiveGrant.Workspaces = append(effectiveGrant.Workspaces, workspace)
+				}
+			}
+			effectiveGrant.Scopes = policyGrantScopes(grant, access)
+			projection := mobileGrantProjection(effectiveGrant, actor, device.Device)
 			desktop.Grant = &projection
 		}
 		desktops = append(desktops, desktop)
@@ -117,6 +140,15 @@ func (s *Server) handleMobileAccessRequest(w http.ResponseWriter, r *http.Reques
 	scopes, scopeError := selectGrantedScopes(device.Device.Scopes, request.Scopes)
 	if scopeError != nil {
 		writeAPIError(w, *scopeError)
+		return
+	}
+	access, accessError := s.policyAccessForUser(r.Context(), actor.User.ID)
+	if accessError != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		return
+	}
+	if !access.allowsRequest(device.Device.DeviceID, request.Workspaces, request.Scopes) {
+		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "the user access policy does not allow this request", false))
 		return
 	}
 
@@ -205,6 +237,11 @@ func (s *Server) handleMobileWorkspaces(w http.ResponseWriter, r *http.Request) 
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
 		return
 	}
+	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		return
+	}
 	workspaces := make([]protocol.MobileWorkspaceView, 0)
 	for _, grant := range grants {
 		if grant.Status != "active" {
@@ -216,12 +253,22 @@ func (s *Server) handleMobileWorkspaces(w http.ResponseWriter, r *http.Request) 
 		}
 		online := s.hub.Get(grant.DeviceID) != nil
 		for _, workspace := range grant.Workspaces {
+			allowedScopes := access.scopes(grant.DeviceID, workspace.ID)
+			scopes := make([]string, 0, len(allowedScopes))
+			for _, scope := range grant.Scopes {
+				if hasScope(allowedScopes, scope) {
+					scopes = append(scopes, scope)
+				}
+			}
+			if len(scopes) == 0 {
+				continue
+			}
 			workspaces = append(workspaces, protocol.MobileWorkspaceView{
 				GrantID:    grant.ID,
 				DeviceID:   grant.DeviceID,
 				DeviceName: device.Device.DeviceName,
 				Workspace:  protocol.MobileWorkspaceSummary{ID: workspace.ID, Name: workspace.Name},
-				Scopes:     orderScopes(grant.Scopes),
+				Scopes:     orderScopes(scopes),
 				Online:     online,
 			})
 		}
@@ -268,6 +315,11 @@ func (s *Server) handleMobileSessionList(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
 		return
 	}
+	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		return
+	}
 	type workspaceAccess struct {
 		summary protocol.MobileWorkspaceSummary
 		scopes  []string
@@ -293,10 +345,23 @@ func (s *Server) handleMobileSessionList(w http.ResponseWriter, r *http.Request)
 			if workspaceFilter != "" && workspace.ID != workspaceFilter {
 				continue
 			}
+			allowedScopes := access.scopes(grant.DeviceID, workspace.ID)
+			if !hasScope(allowedScopes, "read") {
+				continue
+			}
+			effectiveScopes := make([]string, 0, len(allowedScopes))
+			for _, scope := range grant.Scopes {
+				if hasScope(allowedScopes, scope) {
+					effectiveScopes = append(effectiveScopes, scope)
+				}
+			}
 			group.workspaces[workspace.ID] = workspaceAccess{
 				summary: protocol.MobileWorkspaceSummary{ID: workspace.ID, Name: workspace.Name},
-				scopes:  append([]string(nil), grant.Scopes...),
+				scopes:  orderScopes(effectiveScopes),
 			}
+		}
+		if len(group.workspaces) == 0 {
+			delete(groups, grant.DeviceID)
 		}
 	}
 	if deviceFilter != "" {
@@ -718,6 +783,13 @@ func (s *Server) authorizeMobileSession(r *http.Request, deviceID, workspaceID, 
 	if !allowed {
 		return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "the workspace is not granted to this phone", false))
 	}
+	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
+	if err != nil {
+		return actor, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+	}
+	if !access.allows(deviceID, workspaceID, scope) {
+		return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "the user access policy does not include this action", false))
+	}
 	return actor, nil
 }
 
@@ -789,6 +861,7 @@ func (s *Server) connectorUpdateGrants(ctx context.Context, deviceID string, par
 	if err != nil {
 		return protocol.Device{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not update desktop grants", true))
 	}
+	s.events.CloseDevice(deviceID)
 	s.audit(store.AuditEntry{OccurredAt: nowUTC(), Actor: "connector", Action: "pair.grants.update", DeviceID: deviceID, Result: "success"})
 	return updated.Device, nil
 }
@@ -1038,6 +1111,38 @@ func selectGrantedScopes(available []string, requested []string) ([]string, *pro
 		}
 	}
 	return result, nil
+}
+
+func policyScopeUnion(workspaces map[string]map[string]struct{}, deviceScopes []string) []string {
+	allowed := make(map[string]struct{})
+	for _, scopes := range workspaces {
+		for scope := range scopes {
+			if hasScope(deviceScopes, scope) {
+				allowed[scope] = struct{}{}
+			}
+		}
+	}
+	result := make([]string, 0, len(allowed))
+	for scope := range allowed {
+		result = append(result, scope)
+	}
+	return orderScopes(result)
+}
+
+func policyGrantScopes(grant store.MobileAccessGrantRecord, access policyAccess) []string {
+	allowed := make(map[string]struct{})
+	for _, workspace := range grant.Workspaces {
+		for _, scope := range access.scopes(grant.DeviceID, workspace.ID) {
+			if hasScope(grant.Scopes, scope) {
+				allowed[scope] = struct{}{}
+			}
+		}
+	}
+	result := make([]string, 0, len(allowed))
+	for scope := range allowed {
+		result = append(result, scope)
+	}
+	return orderScopes(result)
 }
 
 // orderScopes keeps user-facing action order stable regardless of storage order.

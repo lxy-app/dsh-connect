@@ -254,7 +254,16 @@
           "description": "Stored result such as success, error, waiting_desktop_authorization, started, or failed."
         },
         "errorCode": {"type": "string", "minLength": 1},
-        "sourceIp": {"type": "string", "minLength": 1}
+        "sourceIp": {"type": "string", "minLength": 1},
+        "details": {
+          "type": "object",
+          "description": "Optional access-policy audit snapshots. Policy mutations may include before and/or after; no credential material is present.",
+          "properties": {
+            "before": {"$ref": "#/$defs/AccessPolicy"},
+            "after": {"$ref": "#/$defs/AccessPolicy"}
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
@@ -274,6 +283,167 @@
         },
         "limit": {"type": "integer", "minimum": 1, "maximum": 500},
         "offset": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyRule": {
+      "type": "object",
+      "description": "Workspace and scope grants for one desktop. Each device may appear in at most one rule per policy; duplicate workspace ids and scopes are normalized away.",
+      "required": ["deviceId", "workspaceIds", "scopes"],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicy": {
+      "type": "object",
+      "required": [
+        "policyId",
+        "name",
+        "description",
+        "enabled",
+        "memberIds",
+        "rules",
+        "revision",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "policyId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "description": {"type": "string", "maxLength": 1024},
+        "enabled": {"type": "boolean"},
+        "memberIds": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "rules": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPolicyRule"}
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1,
+          "description": "Optimistic-concurrency revision; every successful update increments it."
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyCreateRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected, including inside rules. Omitted description, memberIds and rules default to empty values; enabled defaults to true.",
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "description": {"type": "string", "maxLength": 1024, "default": ""},
+        "enabled": {"type": "boolean", "default": true},
+        "memberIds": {
+          "type": "array",
+          "default": [],
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "rules": {
+          "type": "array",
+          "default": [],
+          "items": {"$ref": "#/$defs/AccessPolicyRule"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyUpdateRequest": {
+      "type": "object",
+      "description": "Strictly decoded partial update: unknown JSON fields are rejected, including inside rules. All policy fields are optional; revision is required and must match the current revision.",
+      "required": ["revision"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "description": {"type": "string", "maxLength": 1024},
+        "enabled": {"type": "boolean"},
+        "memberIds": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "rules": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPolicyRule"}
+        },
+        "revision": {"type": "integer", "format": "int64", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyListResponse": {
+      "type": "object",
+      "required": ["policies"],
+      "properties": {
+        "policies": {
+          "type": "array",
+          "description": "Access policies ordered by creation time, oldest first.",
+          "items": {"$ref": "#/$defs/AccessPolicy"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPreviewWorkspace": {
+      "type": "object",
+      "description": "Display-safe workspace projection. Scopes may be empty when desktop grants no longer permit policy scopes; filesystem paths are never exposed.",
+      "required": ["id", "name", "scopes"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "scopes": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPreviewDesktop": {
+      "type": "object",
+      "description": "Effective desktop access after intersecting enabled policies with current desktop grants. No workspace paths or credential material are included.",
+      "required": ["deviceId", "deviceName", "online", "workspaces", "scopes"],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "online": {"type": "boolean"},
+        "workspaces": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPreviewWorkspace"}
+        },
+        "scopes": {
+          "type": "array",
+          "description": "Union of effective scopes across the listed workspaces.",
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPreviewResponse": {
+      "type": "object",
+      "description": "Effective access for one user. Only enabled policies assigned to the user contribute; revoked and waiting desktops are omitted. Filesystem paths are never returned.",
+      "required": ["userId", "policyIds", "desktops"],
+      "properties": {
+        "userId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "policyIds": {
+          "type": "array",
+          "description": "Sorted ids of enabled policies assigned to this user.",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "desktops": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPreviewDesktop"}
+        }
       },
       "additionalProperties": false
     },

@@ -40,6 +40,11 @@ export interface Device {
   hasToken: boolean;
 }
 
+export interface AccessPolicyAuditDetails {
+  before?: AccessPolicy;
+  after?: AccessPolicy;
+}
+
 export interface AuditEntry {
   occurredAt: string;
   actor: string;
@@ -50,6 +55,7 @@ export interface AuditEntry {
   result: string;
   errorCode?: string;
   sourceIp?: string;
+  details?: AccessPolicyAuditDetails;
 }
 
 export interface Overview {
@@ -120,6 +126,46 @@ export interface MobileDevice {
   updatedAt: string;
   lastSeenAt?: string;
   revokedAt?: string;
+}
+
+export interface AccessPolicyRule {
+  deviceId: string;
+  workspaceIds: string[];
+  scopes: string[];
+}
+
+export interface AccessPolicy {
+  policyId: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  memberIds: string[];
+  rules: AccessPolicyRule[];
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccessPolicyInput {
+  name: string;
+  description: string;
+  enabled: boolean;
+  memberIds: string[];
+  rules: AccessPolicyRule[];
+}
+
+export interface AccessPreviewDesktop {
+  deviceId: string;
+  deviceName: string;
+  online: boolean;
+  workspaces: Array<{ id: string; name: string; scopes: string[] }>;
+  scopes: string[];
+}
+
+export interface UserAccessPreview {
+  userId: string;
+  policyIds: string[];
+  desktops: AccessPreviewDesktop[];
 }
 
 /** API error carrying the server's protocol error code. */
@@ -302,6 +348,33 @@ export const adminApi = {
 
   deleteUser(userId: string): Promise<void> {
     return request<void>(`/v1/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+  },
+
+  async policies(signal?: AbortSignal): Promise<AccessPolicy[]> {
+    const response = await request<{ policies: AccessPolicy[] }>('/v1/admin/policies', { signal });
+    return response.policies ?? [];
+  },
+
+  createPolicy(input: AccessPolicyInput): Promise<AccessPolicy> {
+    return request<AccessPolicy>('/v1/admin/policies', { method: 'POST', body: input });
+  },
+
+  updatePolicy(policyId: string, input: AccessPolicyInput & { revision: number }): Promise<AccessPolicy> {
+    return request<AccessPolicy>(`/v1/admin/policies/${encodeURIComponent(policyId)}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+
+  deletePolicy(policyId: string, revision: number): Promise<void> {
+    return request<void>(`/v1/admin/policies/${encodeURIComponent(policyId)}`, {
+      method: 'DELETE',
+      query: { revision },
+    });
+  },
+
+  accessPreview(userId: string, signal?: AbortSignal): Promise<UserAccessPreview> {
+    return request<UserAccessPreview>(`/v1/admin/users/${encodeURIComponent(userId)}/access-preview`, { signal });
   },
 
   async devices(signal?: AbortSignal): Promise<Device[]> {

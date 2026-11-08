@@ -86,12 +86,17 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | POST | `/v1/admin/mobile/pairing-codes` | 已登录 | 为用户生成手机配对码；bootstrap 必须显式传 `userId`，成员只能为自己生成 |
 | GET | `/v1/admin/mobile-devices` | owner/admin/auditor | 手机设备列表，永不返回令牌 |
 | POST | `/v1/admin/mobile-devices/{id}/revoke` | owner/admin | 吊销手机及其访问/刷新令牌 |
+| GET/POST | `/v1/admin/policies` | 读含 auditor；写 owner/admin | 访问策略列表/创建 |
+| PATCH/DELETE | `/v1/admin/policies/{id}` | owner/admin | 按 revision 更新/删除策略，冲突返回 `conflict` |
+| GET | `/v1/admin/users/{id}/access-preview` | owner/admin/auditor | 按用户预览策略可见桌面、工作区和 scopes，不含路径 |
 
 安全约束：
 
 - 最后一位 **active** Owner 不能被降级、禁用或删除（返回 `conflict`）。Store 在事务内锁定 active Owner 集合并完成检查与写入，避免并发请求同时移除不同 Owner；删除用户及其依赖清理也在同一事务内完成。
 - Admin 只能维护非 Owner 账号；Owner 的显示名、角色、状态和密码只能由 Owner 修改，防止通过重置 Owner 密码提权。
 - Member 不能通过概览或设备列表读取全局账号、审计、工作区路径或设备指纹。
+- 手机有效权限为“用户所有启用策略按工作区求并集 ∩ 手机 active grant ∩ 桌面当前工作区/scopes”。无策略默认拒绝，已有 grant 不绕过策略；策略、桌面授权或 grant 收窄会关闭相关移动事件流并要求重新鉴权。
+- 策略更新和删除使用 revision 乐观锁；策略创建、更新、删除审计的 `details` 记录 before/after 策略内容，不包含密码、Token 或会话正文。
 - 登录失败对“邮箱不存在”和“密码错误”返回同一响应，且都会写审计，便于发现暴力破解。
 - 已吊销设备不会被断线回调改写回 `offline`（`revoked` 是终态）。
 - 配对码属于授权动作，只有 owner/admin 能生成；列表只暴露 `active/used/expired` 状态，明文码不可回读。
@@ -188,7 +193,8 @@ M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/�
 | `pairing_codes` | 一次性配对码 hash 与消费状态 |
 | `devices` | 设备身份、授权工作区/scope、令牌 hash、在线状态 |
 | `idempotency_records` | `session.create` / `session.prompt` / `session.model.select` 持久幂等结果 |
-| `audit_entries` | 只追加审计，按 `occurred_at`/`device_id`/`action` 建索引 |
+| `audit_entries` | 只追加审计，按 `occurred_at`/`device_id`/`action` 建索引；可选 details 保存策略 before/after |
+| `access_policies` | 用户关联、启用状态、桌面×工作区×scope 规则与 revision |
 | `users` | 管理账号（owner/admin/member/auditor） |
 | `admin_sessions` | 浏览器登录会话 token hash |
 | `mobile_pairing_codes` | 手机一次性配对码 hash、目标用户与消费状态 |

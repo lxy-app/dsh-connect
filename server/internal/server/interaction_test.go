@@ -29,6 +29,7 @@ func interactionEvent(t *testing.T, deviceID, sessionID string, data protocol.In
 
 func approveMobileAccess(t *testing.T, environment *adminEnvironment, connector pairedConnector, phone protocol.MobileSessionResponse, scopes []string) {
 	t.Helper()
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, scopes)
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
 		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": scopes,
 	})

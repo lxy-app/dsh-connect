@@ -13,9 +13,23 @@ interface MockUser {
   updatedAt: string;
 }
 
+interface MockPolicy {
+  policyId: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  memberIds: string[];
+  rules: Array<{ deviceId: string; workspaceIds: string[]; scopes: string[] }>;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Scenario {
   pairingState: 'active' | 'waiting_desktop_authorization' | 'used' | 'expired';
   deviceLoads: number;
+  policies: MockPolicy[];
+  createdPolicies: Array<Omit<MockPolicy, 'policyId' | 'revision' | 'createdAt' | 'updatedAt'>>;
   unexpectedRequests: string[];
 }
 
@@ -30,7 +44,13 @@ const owner: MockUser = {
 };
 
 async function mockAdminApi(page: Page, user: MockUser = owner): Promise<Scenario> {
-  const scenario: Scenario = { pairingState: 'active', deviceLoads: 0, unexpectedRequests: [] };
+  const scenario: Scenario = {
+    pairingState: 'active',
+    deviceLoads: 0,
+    policies: [],
+    createdPolicies: [],
+    unexpectedRequests: [],
+  };
   await page.addInitScript(() => {
     localStorage.setItem('dsh-connect.admin.session', 'e2e-browser-session');
   });
@@ -49,6 +69,20 @@ async function mockAdminApi(page: Page, user: MockUser = owner): Promise<Scenari
       return json({ devices: {}, users: {}, auditEntries: 0, recentActivity: [] });
     }
     if (path === '/v1/admin/users') return json({ users: [user] });
+    if (path === '/v1/admin/policies' && method === 'GET') return json({ policies: scenario.policies });
+    if (path === '/v1/admin/policies' && method === 'POST') {
+      const input = request.postDataJSON() as Scenario['createdPolicies'][number];
+      scenario.createdPolicies.push(input);
+      const created: MockPolicy = {
+        ...input,
+        policyId: `policy-e2e-${scenario.createdPolicies.length}`,
+        revision: 1,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+      scenario.policies.push(created);
+      return json(created, 201);
+    }
     if (path === '/v1/admin/devices' && method === 'GET') {
       scenario.deviceLoads += 1;
       return json({
@@ -146,6 +180,39 @@ test('tracks the real pairing lifecycle and refreshes devices after completion',
   await page.locator('.ant-modal-footer').getByRole('button', { name: /关\s*闭/ }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('DC-TEST-1234', { exact: true })).toHaveCount(0);
+  expect(scenario.unexpectedRequests).toEqual([]);
+});
+
+test('creates an access policy with members, desktop workspaces and scopes', async ({ page }) => {
+  const scenario = await mockAdminApi(page);
+  await page.goto('/policies');
+  await expect(page.getByRole('heading', { name: '访问策略' })).toBeVisible();
+  await page.getByRole('button', { name: '新建策略' }).click();
+  const drawer = page.getByRole('dialog');
+  await drawer.getByLabel('策略名称').fill('E2E Engineering Policy');
+  await drawer.getByLabel('策略描述').fill('Created through the mocked Admin API');
+  await drawer.getByRole('combobox', { name: '关联成员' }).click();
+  await page.getByText('E2E Owner (owner@example.com)', { exact: true }).click();
+  await drawer.getByRole('combobox', { name: '关联成员' }).press('Escape');
+  await drawer.getByRole('button', { name: '添加规则' }).click();
+  await drawer.getByRole('combobox', { name: '规则 1 桌面' }).click();
+  await page.getByText('E2E MacBook (dev-e2e-1)', { exact: true }).click();
+  await drawer.getByRole('combobox', { name: '规则 1 工作区' }).click();
+  await page.getByText('dsh-connect (/tmp/dsh-connect)', { exact: true }).click();
+  await drawer.getByRole('combobox', { name: '规则 1 工作区' }).press('Escape');
+  await drawer.getByRole('checkbox', { name: 'read', exact: true }).check();
+  await drawer.getByRole('checkbox', { name: 'prompt', exact: true }).check();
+  await drawer.getByRole('button', { name: '保存策略' }).click();
+
+  await expect(drawer).toHaveCount(0);
+  await expect(page.getByText('E2E Engineering Policy', { exact: true })).toBeVisible();
+  expect(scenario.createdPolicies).toEqual([{
+    name: 'E2E Engineering Policy',
+    description: 'Created through the mocked Admin API',
+    enabled: true,
+    memberIds: [owner.id],
+    rules: [{ deviceId: 'dev-e2e-1', workspaceIds: ['ws-1'], scopes: ['read', 'prompt'] }],
+  }]);
   expect(scenario.unexpectedRequests).toEqual([]);
 });
 

@@ -22,6 +22,12 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateUser))
 	mux.HandleFunc("PATCH /v1/admin/users/{userId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateUser))
 	mux.HandleFunc("DELETE /v1/admin/users/{userId}", s.requireRole(store.RoleOwner)(s.handleAdminDeleteUser))
+	mux.HandleFunc("GET /v1/admin/users/{userId}/access-preview", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminAccessPreview))
+
+	mux.HandleFunc("GET /v1/admin/policies", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminAccessPolicies))
+	mux.HandleFunc("POST /v1/admin/policies", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateAccessPolicy))
+	mux.HandleFunc("PATCH /v1/admin/policies/{policyId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateAccessPolicy))
+	mux.HandleFunc("DELETE /v1/admin/policies/{policyId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminDeleteAccessPolicy))
 
 	mux.HandleFunc("GET /v1/admin/devices", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminDevices))
 	mux.HandleFunc("PATCH /v1/admin/devices/{deviceId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateDevice))
@@ -475,6 +481,7 @@ func (s *Server) handleAdminRevokeDevice(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
 		return
 	}
+	s.events.CloseDevice(deviceID)
 	s.recordAdminAudit(r, "admin.device.revoke", "success", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
@@ -500,6 +507,7 @@ func (s *Server) handleAdminDeleteDevice(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not delete device", true))
 		return
 	}
+	s.events.CloseDevice(deviceID)
 	s.recordAdminAudit(r, "admin.device.delete", "success", "")
 	w.WriteHeader(http.StatusNoContent)
 }

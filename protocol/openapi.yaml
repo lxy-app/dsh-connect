@@ -415,6 +415,32 @@ paths:
             application/json:
               schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
         "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/users/{userId}/access-preview:
+    get:
+      tags: [admin]
+      operationId: getAdminUserAccessPreview
+      summary: Preview a user's effective desktop access
+      description: |
+        Available to owner, admin and auditor roles. Only enabled policies assigned
+        to the user contribute. Effective scopes are intersected with current desktop
+        grants; revoked and waiting desktops are omitted. Workspace paths, tokens,
+        password material and hashes are never returned.
+      parameters:
+        - {$ref: "#/components/parameters/UserId"}
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Effective user access without filesystem paths.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPreviewResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
   /v1/admin/devices:
     get:
       tags: [admin]
@@ -556,6 +582,130 @@ paths:
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/policies:
+    get:
+      tags: [admin]
+      operationId: listAccessPolicies
+      summary: List access policies
+      description: Available to owner, admin and auditor roles. Policies are ordered by creation time, oldest first.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Access policy projections with normalized arrays and optimistic-concurrency revisions.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicyListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    post:
+      tags: [admin]
+      operationId: createAccessPolicy
+      summary: Create an access policy
+      description: |
+        Available to owner and admin roles. The JSON body is strictly decoded and
+        rejects unknown fields, including unknown rule fields. `enabled` defaults
+        to true; omitted description, memberIds and rules default to empty values.
+        Member ids must identify existing users. Rules may only select existing
+        desktops and their currently authorized workspaces and scopes. A duplicate
+        policy name returns 409.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicyCreateRequest}
+      responses:
+        "201":
+          description: Access policy created with revision 1.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicy}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The access policy name is already registered.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/policies/{policyId}:
+    parameters:
+      - {$ref: "#/components/parameters/PolicyId"}
+    patch:
+      tags: [admin]
+      operationId: updateAccessPolicy
+      summary: Partially update an access policy
+      description: |
+        Available to owner and admin roles. The JSON body is strictly decoded and
+        rejects unknown fields, including unknown rule fields. All policy fields
+        are optional, but a positive `revision` is required for optimistic
+        concurrency. A stale revision or duplicate name returns 409; a successful
+        update increments the revision.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicyUpdateRequest}
+      responses:
+        "200":
+          description: Updated access policy with its incremented revision.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicy}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: The access policy does not exist.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "409":
+          description: The supplied revision is stale or the requested name is already registered.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+    delete:
+      tags: [admin]
+      operationId: deleteAccessPolicy
+      summary: Delete an access policy at an expected revision
+      description: Available to owner and admin roles. A positive revision query parameter is required; a stale revision returns 409.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      parameters:
+        - name: revision
+          in: query
+          required: true
+          description: Current policy revision; deletion fails if it is stale.
+          schema: {type: integer, format: int64, minimum: 1}
+      responses:
+        "204":
+          description: Access policy deleted.
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: The access policy does not exist.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "409":
+          description: The supplied revision is stale.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
         "500": {$ref: "#/components/responses/InternalError"}
   /v1/admin/pairing-codes:
     post:
@@ -1263,6 +1413,11 @@ components:
       schema: {type: string, minLength: 1, maxLength: 128}
     AdminDeviceId:
       name: deviceId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    PolicyId:
+      name: policyId
       in: path
       required: true
       schema: {type: string, minLength: 1, maxLength: 128}

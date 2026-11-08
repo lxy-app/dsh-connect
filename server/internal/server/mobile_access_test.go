@@ -9,6 +9,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
+	"github.com/deepseek/dsh-connect/server/internal/store"
 )
 
 type connectorCommandFrame struct {
@@ -84,6 +85,50 @@ func connectorRequest(t *testing.T, connection *websocket.Conn, method string, p
 	return frame.Result
 }
 
+func allowUserAccess(t *testing.T, environment *adminEnvironment, userID, deviceID string, workspaces, scopes []string) store.AccessPolicyRecord {
+	t.Helper()
+	policyID, err := randomToken("pol_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := environment.server.store.CreateAccessPolicy(context.Background(), store.AccessPolicyRecord{
+		PolicyID:  policyID,
+		Name:      "Test policy " + policyID,
+		Enabled:   true,
+		MemberIDs: []string{userID},
+		Rules: []store.AccessPolicyRule{{
+			DeviceID: deviceID, WorkspaceIDs: workspaces, Scopes: scopes,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("create test access policy: %v", err)
+	}
+	return created
+}
+
+func createActiveGrantForTest(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse, connector pairedConnector, scopes []string) store.MobileAccessGrantRecord {
+	t.Helper()
+	grantID, err := randomToken("mag_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := nowUTC()
+	record, err := environment.server.store.RequestMobileAccess(context.Background(), store.MobileAccessGrantRecord{
+		ID: grantID, MobileDeviceID: phone.MobileDeviceID, DeviceID: connector.deviceID, UserID: phone.User.ID,
+		Workspaces: []protocol.Workspace{{ID: "ws-1", Name: "Project"}}, Scopes: scopes,
+	}, now)
+	if err != nil {
+		t.Fatalf("request test grant: %v", err)
+	}
+	active, err := environment.server.store.DecideMobileAccessGrant(
+		context.Background(), phone.MobileDeviceID, connector.deviceID, "active", record.Workspaces, scopes, now,
+	)
+	if err != nil {
+		t.Fatalf("activate test grant: %v", err)
+	}
+	return active
+}
+
 func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 	environment := newAdminEnvironment(t)
 	ownerToken, ownerID := environment.login(t, testOwnerEmail, testOwnerPassword)
@@ -91,6 +136,7 @@ func TestMobileAccessGrantControlsSessionsWorkspacesAndPrompt(t *testing.T) {
 
 	mobileCode := issueMobilePairingCode(t, environment, ownerToken, "")
 	phone := pairMobile(t, environment, mobileCode.Code, "Owner iPhone")
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read", "prompt"})
 
 	// Before the desktop grant, the phone sees the desktop but no access.
 	status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/access", phone.AccessToken, nil)
@@ -336,6 +382,7 @@ func TestDesktopCanDenyAndRevokeMobileAccess(t *testing.T) {
 	connector := pairConnector(t, environment.testEnvironment)
 	code := issueMobilePairingCode(t, environment, ownerToken, "")
 	phone := pairMobile(t, environment, code.Code, "Panel iPhone")
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
 
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
 		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
@@ -404,12 +451,80 @@ func TestDesktopCanDenyAndRevokeMobileAccess(t *testing.T) {
 	}
 }
 
+func TestActiveGrantDoesNotBypassMissingPolicy(t *testing.T) {
+	environment := newAdminEnvironment(t)
+	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
+	connector := pairConnector(t, environment.testEnvironment)
+	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Policy-less iPhone")
+	createActiveGrantForTest(t, environment, phone, connector, []string{"read", "prompt"})
+
+	status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/access", phone.AccessToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("access overview status=%d body=%s", status, body)
+	}
+	var overview protocol.MobileAccessOverviewResponse
+	decodeTestJSON(t, body, &overview)
+	if len(overview.Desktops) != 0 {
+		t.Fatalf("policy-less user received desktops: %+v", overview.Desktops)
+	}
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions", phone.AccessToken, map[string]any{
+		"requestId": "policy-less-create", "deviceId": connector.deviceID, "workspaceId": "ws-1",
+	})
+	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
+		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
+	})
+	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+}
+
+func TestPolicyNarrowingImmediatelyInvalidatesActiveGrant(t *testing.T) {
+	environment := newAdminEnvironment(t)
+	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
+	connector := pairConnector(t, environment.testEnvironment)
+	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Narrowed iPhone")
+	createActiveGrantForTest(t, environment, phone, connector, []string{"read", "prompt"})
+	policy := allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read", "prompt"})
+
+	rules := []store.AccessPolicyRule{{DeviceID: connector.deviceID, WorkspaceIDs: []string{"ws-1"}, Scopes: []string{"read"}}}
+	updated, err := environment.server.store.UpdateAccessPolicy(context.Background(), policy.PolicyID, policy.Revision, store.AccessPolicyUpdate{Rules: &rules})
+	if err != nil {
+		t.Fatalf("narrow policy: %v", err)
+	}
+	if updated.Revision <= policy.Revision {
+		t.Fatalf("policy revision did not advance: %d -> %d", policy.Revision, updated.Revision)
+	}
+	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions/sess-1/prompt", phone.AccessToken, map[string]any{
+		"requestId": "narrowed-prompt", "deviceId": connector.deviceID, "workspaceId": "ws-1", "mode": "queue", "text": "must not run",
+	})
+	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/access", phone.AccessToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("access after narrowing status=%d body=%s", status, body)
+	}
+	var overview protocol.MobileAccessOverviewResponse
+	decodeTestJSON(t, body, &overview)
+	if len(overview.Desktops) != 1 || overview.Desktops[0].Grant == nil || len(overview.Desktops[0].Grant.Scopes) != 1 || overview.Desktops[0].Grant.Scopes[0] != "read" {
+		t.Fatalf("grant was not narrowed by policy: %+v", overview.Desktops)
+	}
+
+	emptyRules := []store.AccessPolicyRule{}
+	if _, err := environment.server.store.UpdateAccessPolicy(context.Background(), policy.PolicyID, updated.Revision, store.AccessPolicyUpdate{Rules: &emptyRules}); err != nil {
+		t.Fatalf("remove policy rules: %v", err)
+	}
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/workspaces", phone.AccessToken, nil)
+	if status != http.StatusOK || string(body) != "{\"workspaces\":[]}\n" {
+		t.Fatalf("workspaces after policy removal status=%d body=%s", status, body)
+	}
+}
+
 func TestMobileLogoutRevokesAccessGrants(t *testing.T) {
 	environment := newAdminEnvironment(t)
 	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
 	code := issueMobilePairingCode(t, environment, ownerToken, "")
 	phone := pairMobile(t, environment, code.Code, "Logout iPhone")
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
 
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
 		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},

@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// AccessPolicy is the predicate function for accesspolicy builders.
+type AccessPolicy func(*sql.Selector)
+
 // AdminSession is the predicate function for adminsession builders.
 type AdminSession func(*sql.Selector)
 

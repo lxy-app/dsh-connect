@@ -34,7 +34,9 @@ type AuditEntry struct {
 	// ErrorCode holds the value of the "error_code" field.
 	ErrorCode string `json:"error_code,omitempty"`
 	// SourceIP holds the value of the "source_ip" field.
-	SourceIP     string `json:"source_ip,omitempty"`
+	SourceIP string `json:"source_ip,omitempty"`
+	// Optional JSON metadata such as access-policy before/after changes
+	Details      []byte `json:"details,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -43,6 +45,8 @@ func (*AuditEntry) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case auditentry.FieldDetails:
+			values[i] = new([]byte)
 		case auditentry.FieldID:
 			values[i] = new(sql.NullInt64)
 		case auditentry.FieldActor, auditentry.FieldAction, auditentry.FieldRequestID, auditentry.FieldDeviceID, auditentry.FieldSessionID, auditentry.FieldResult, auditentry.FieldErrorCode, auditentry.FieldSourceIP:
@@ -124,6 +128,12 @@ func (_m *AuditEntry) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SourceIP = value.String
 			}
+		case auditentry.FieldDetails:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field details", values[i])
+			} else if value != nil {
+				_m.Details = *value
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -186,6 +196,9 @@ func (_m *AuditEntry) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("source_ip=")
 	builder.WriteString(_m.SourceIP)
+	builder.WriteString(", ")
+	builder.WriteString("details=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Details))
 	builder.WriteByte(')')
 	return builder.String()
 }

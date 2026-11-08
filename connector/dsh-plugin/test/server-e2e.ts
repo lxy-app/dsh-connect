@@ -196,6 +196,14 @@ async function main(): Promise<void> {
     const users = await request<{ readonly users: readonly { readonly id: string; readonly role: string }[] }>('/v1/admin/users');
     const owner = users.users.find((user) => user.role === 'owner');
     assert.ok(owner, 'e2e owner account');
+    await request('/v1/admin/policies', {
+      method: 'POST',
+      body: {
+        name: `E2E mobile policy ${Date.now()}-${process.pid}`,
+        memberIds: [owner.id],
+        rules: [{ deviceId, workspaceIds: ['ws-1'], scopes: ['read', 'prompt', 'cancel'] }],
+      },
+    });
     const mobileCode = await request<{ readonly code: string }>('/v1/admin/mobile/pairing-codes', {
       method: 'POST', body: { userId: owner.id },
     });

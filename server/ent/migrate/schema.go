@@ -8,6 +8,24 @@ import (
 )
 
 var (
+	// AccessPoliciesColumns holds the columns for the "access_policies" table.
+	AccessPoliciesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true},
+		{Name: "name", Type: field.TypeString, Unique: true},
+		{Name: "description", Type: field.TypeString, Nullable: true},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "member_ids", Type: field.TypeJSON},
+		{Name: "rules", Type: field.TypeJSON},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// AccessPoliciesTable holds the schema information for the "access_policies" table.
+	AccessPoliciesTable = &schema.Table{
+		Name:       "access_policies",
+		Columns:    AccessPoliciesColumns,
+		PrimaryKey: []*schema.Column{AccessPoliciesColumns[0]},
+	}
 	// AdminSessionsColumns holds the columns for the "admin_sessions" table.
 	AdminSessionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true},
@@ -71,6 +89,7 @@ var (
 		{Name: "result", Type: field.TypeString},
 		{Name: "error_code", Type: field.TypeString, Nullable: true},
 		{Name: "source_ip", Type: field.TypeString, Nullable: true},
+		{Name: "details", Type: field.TypeBytes, Nullable: true},
 	}
 	// AuditEntriesTable holds the schema information for the "audit_entries" table.
 	AuditEntriesTable = &schema.Table{
@@ -364,6 +383,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AccessPoliciesTable,
 		AdminSessionsTable,
 		AttachmentBlobsTable,
 		AuditEntriesTable,

@@ -170,6 +170,29 @@ export function AuditPage() {
           loading={loading}
           columns={columns}
           dataSource={entries}
+          expandable={{
+            rowExpandable: (entry) => Boolean(entry.details?.before || entry.details?.after),
+            expandedRowRender: (entry) => (
+              <div style={{ display: 'grid', gap: 16 }}>
+                {entry.details?.before ? (
+                  <div>
+                    <Text strong>变更前</Text>
+                    <pre aria-label="策略变更前 JSON" style={{ overflow: 'auto', marginBottom: 0 }}>
+                      {JSON.stringify(entry.details.before, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
+                {entry.details?.after ? (
+                  <div>
+                    <Text strong>变更后</Text>
+                    <pre aria-label="策略变更后 JSON" style={{ overflow: 'auto', marginBottom: 0 }}>
+                      {JSON.stringify(entry.details.after, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
+              </div>
+            ),
+          }}
           scroll={{ x: 1270 }}
           locale={{ emptyText: <Empty description="没有匹配的审计记录" /> }}
           pagination={{

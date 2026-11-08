@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -413,7 +414,7 @@ func TestAuditListingFiltersAndPaginates(t *testing.T) {
 	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
 
 	entries := []store.AuditEntry{
-		{OccurredAt: base, Actor: "bootstrap", Action: "pairing_code.create", Result: "success"},
+		{OccurredAt: base, Actor: "bootstrap", Action: "pairing_code.create", Result: "success", Details: json.RawMessage(`{"before":null,"after":{"revision":1}}`)},
 		{OccurredAt: base.Add(time.Minute), Actor: "connector", Action: "pair.start", DeviceID: "dev-1", Result: "success"},
 		{OccurredAt: base.Add(2 * time.Minute), Actor: "connector", Action: "pair.start", DeviceID: "dev-2", Result: "error", ErrorCode: "pairing_code_invalid"},
 	}
@@ -433,6 +434,9 @@ func TestAuditListingFiltersAndPaginates(t *testing.T) {
 	// Newest first.
 	if all[0].DeviceID != "dev-2" {
 		t.Fatalf("audit not newest-first: %+v", all[0])
+	}
+	if !bytes.Contains(all[2].Details, []byte(`"revision":1`)) {
+		t.Fatalf("audit details were not preserved: %+v", all[2])
 	}
 
 	filtered, filteredTotal, err := persistent.Audit(ctx, store.AuditQuery{Result: "error", Limit: 10})

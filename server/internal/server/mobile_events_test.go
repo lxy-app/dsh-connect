@@ -19,6 +19,7 @@ func TestMobileEventsWebSocketStreamsAssistantDeltas(t *testing.T) {
 	connector := pairConnector(t, environment.testEnvironment)
 	code := issueMobilePairingCode(t, environment, ownerToken, "")
 	phone := pairMobile(t, environment, code.Code, "Stream iPhone")
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
 
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
 		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
@@ -190,6 +191,38 @@ func TestMobileEventsCloseWhenAccessIsRevoked(t *testing.T) {
 	}
 }
 
+func TestMobileEventsCloseWhenPolicyIsNarrowed(t *testing.T) {
+	environment := newAdminEnvironment(t)
+	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
+	code := issueMobilePairingCode(t, environment, ownerToken, "")
+	phone := pairMobile(t, environment, code.Code, "Policy Update iPhone")
+	connection := openMobileEventStream(t, environment, phone)
+
+	status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/policies", ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("list policies status=%d body=%s", status, body)
+	}
+	var listed struct {
+		Policies []struct {
+			PolicyID string `json:"policyId"`
+			Revision int64  `json:"revision"`
+		} `json:"policies"`
+	}
+	decodeTestJSON(t, body, &listed)
+	if len(listed.Policies) != 1 {
+		t.Fatalf("expected one policy, got %+v", listed.Policies)
+	}
+	policy := listed.Policies[0]
+	status, body = testRequest(t, http.MethodPatch, environment.http.URL+"/v1/admin/policies/"+policy.PolicyID, ownerToken, map[string]any{
+		"revision": policy.Revision,
+		"rules":    []any{},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("narrow policy status=%d body=%s", status, body)
+	}
+	assertWebSocketClosed(t, connection)
+}
+
 func TestMobileEventsRevocationCancelsPendingFollow(t *testing.T) {
 	environment := &adminEnvironment{testEnvironment: newTestEnvironment(t, func(config *Config) {
 		config.BootstrapOwnerEmail = testOwnerEmail
@@ -311,6 +344,7 @@ func TestMobileEventReauthorizationUsesCurrentIdentityState(t *testing.T) {
 func grantMobileReadAccess(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse) pairedConnector {
 	t.Helper()
 	connector := pairConnector(t, environment.testEnvironment)
+	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
 	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
 		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
 	})

@@ -8,6 +8,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  SafetyCertificateOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -22,6 +23,7 @@ import { roleColors, roleLabels } from './utils/format';
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })));
 const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const DevicesPage = lazy(() => import('./pages/DevicesPage').then((m) => ({ default: m.DevicesPage })));
+const PoliciesPage = lazy(() => import('./pages/PoliciesPage').then((m) => ({ default: m.PoliciesPage })));
 const AuditPage = lazy(() => import('./pages/AuditPage').then((m) => ({ default: m.AuditPage })));
 
 const { Header, Sider, Content } = Layout;
@@ -33,6 +35,7 @@ const NAV = [
   { key: '/overview', icon: <DashboardOutlined />, label: '概览' },
   { key: '/users', icon: <TeamOutlined />, label: '用户与角色' },
   { key: '/devices', icon: <CloudServerOutlined />, label: '设备管理' },
+  { key: '/policies', icon: <SafetyCertificateOutlined />, label: '访问策略' },
   { key: '/audit', icon: <AuditOutlined />, label: '审计日志' },
 ];
 
@@ -171,6 +174,7 @@ export function App() {
               <Route path="/overview" element={guardManagementPage(<OverviewPage />)} />
               <Route path="/users" element={guardManagementPage(<UsersPage />)} />
               <Route path="/devices" element={guardManagementPage(<DevicesPage />)} />
+              <Route path="/policies" element={guardManagementPage(<PoliciesPage />)} />
               <Route path="/pairing" element={<Navigate to="/devices" replace />} />
               <Route path="/mobile" element={<Navigate to="/devices?tab=mobile" replace />} />
               <Route path="/audit" element={guardManagementPage(<AuditPage />)} />

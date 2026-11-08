@@ -99,6 +99,11 @@ func SourceIP(v string) predicate.AuditEntry {
 	return predicate.AuditEntry(sql.FieldEQ(FieldSourceIP, v))
 }
 
+// Details applies equality check predicate on the "details" field. It's identical to DetailsEQ.
+func Details(v []byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldEQ(FieldDetails, v))
+}
+
 // OccurredAtEQ applies the EQ predicate on the "occurred_at" field.
 func OccurredAtEQ(v time.Time) predicate.AuditEntry {
 	return predicate.AuditEntry(sql.FieldEQ(FieldOccurredAt, v))
@@ -707,6 +712,56 @@ func SourceIPEqualFold(v string) predicate.AuditEntry {
 // SourceIPContainsFold applies the ContainsFold predicate on the "source_ip" field.
 func SourceIPContainsFold(v string) predicate.AuditEntry {
 	return predicate.AuditEntry(sql.FieldContainsFold(FieldSourceIP, v))
+}
+
+// DetailsEQ applies the EQ predicate on the "details" field.
+func DetailsEQ(v []byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldEQ(FieldDetails, v))
+}
+
+// DetailsNEQ applies the NEQ predicate on the "details" field.
+func DetailsNEQ(v []byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldNEQ(FieldDetails, v))
+}
+
+// DetailsIn applies the In predicate on the "details" field.
+func DetailsIn(vs ...[]byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldIn(FieldDetails, vs...))
+}
+
+// DetailsNotIn applies the NotIn predicate on the "details" field.
+func DetailsNotIn(vs ...[]byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldNotIn(FieldDetails, vs...))
+}
+
+// DetailsGT applies the GT predicate on the "details" field.
+func DetailsGT(v []byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldGT(FieldDetails, v))
+}
+
+// DetailsGTE applies the GTE predicate on the "details" field.
+func DetailsGTE(v []byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldGTE(FieldDetails, v))
+}
+
+// DetailsLT applies the LT predicate on the "details" field.
+func DetailsLT(v []byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldLT(FieldDetails, v))
+}
+
+// DetailsLTE applies the LTE predicate on the "details" field.
+func DetailsLTE(v []byte) predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldLTE(FieldDetails, v))
+}
+
+// DetailsIsNil applies the IsNil predicate on the "details" field.
+func DetailsIsNil() predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldIsNull(FieldDetails))
+}
+
+// DetailsNotNil applies the NotNil predicate on the "details" field.
+func DetailsNotNil() predicate.AuditEntry {
+	return predicate.AuditEntry(sql.FieldNotNull(FieldDetails))
 }
 
 // And groups predicates with the AND operator between them.
