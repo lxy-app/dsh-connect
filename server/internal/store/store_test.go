@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	entsqlschema "entgo.io/ent/dialect/sql/schema"
+	entmigrate "github.com/deepseek/dsh-connect/server/ent/migrate"
+	"github.com/deepseek/dsh-connect/server/internal/dbtest"
 	"github.com/deepseek/dsh-connect/server/internal/pgtest"
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
 	"github.com/deepseek/dsh-connect/server/internal/store"
@@ -23,7 +26,7 @@ func TestMain(m *testing.M) {
 // newStore opens a migrated store on a fresh, isolated database.
 func newStore(t *testing.T) *store.Store {
 	t.Helper()
-	dsn := pgtest.NewDatabase(t)
+	dsn := dbtest.NewDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	persistent, err := store.Open(ctx, dsn)
@@ -38,7 +41,7 @@ func newStore(t *testing.T) *store.Store {
 }
 
 func TestStorePersistsAcrossReopen(t *testing.T) {
-	dsn := pgtest.NewDatabase(t)
+	dsn := dbtest.NewDatabase(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
@@ -76,6 +79,60 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	}
 	if !found || string(persisted.Result) != `{"status":"accepted"}` {
 		t.Fatalf("persisted idempotency=%+v, found=%v", persisted, found)
+	}
+}
+
+func TestMigrateUpgradesAdditiveSchema(t *testing.T) {
+	dsn := dbtest.NewDatabase(t)
+	ctx := context.Background()
+	persistent, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer persistent.Close()
+
+	// Simulate an older installation with only the devices table and without
+	// last_seen_at. Ent must add the new column and all other current tables
+	// without discarding the existing device row on either dialect.
+	columns := entmigrate.DevicesTable.Columns
+	lastColumn := columns[len(columns)-1].Name
+	if lastColumn != "last_seen_at" {
+		t.Fatalf("unexpected devices schema fixture tail: %s", lastColumn)
+	}
+	legacyDevices := entsqlschema.NewTable(entmigrate.DevicesTable.Name)
+	for _, column := range columns[:len(columns)-1] {
+		legacyDevices.AddColumn(column)
+	}
+	legacyDevices.PrimaryKey = entmigrate.DevicesTable.PrimaryKey
+	legacyDevices.Indexes = entmigrate.DevicesTable.Indexes
+	if err := entmigrate.Create(ctx, persistent.Client().Schema, []*entsqlschema.Table{legacyDevices}); err != nil {
+		t.Fatalf("create legacy schema: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	record := store.DeviceRecord{Device: protocol.Device{
+		DeviceID: "dev-legacy", DeviceName: "Legacy", Status: "offline",
+		CreatedAt: now, UpdatedAt: now,
+	}}
+	if err := persistent.CreateDevice(ctx, record); err != nil {
+		t.Fatalf("seed legacy device: %v", err)
+	}
+	if err := persistent.Migrate(ctx); err != nil {
+		t.Fatalf("upgrade legacy schema: %v", err)
+	}
+	if err := persistent.SetDeviceStatus(ctx, record.Device.DeviceID, "online", now); err != nil {
+		t.Fatalf("use added last_seen_at column: %v", err)
+	}
+	loaded, err := persistent.Device(ctx, record.Device.DeviceID)
+	if err != nil {
+		t.Fatalf("load migrated device: %v", err)
+	}
+	if loaded.Device.LastSeenAt == nil || !loaded.Device.LastSeenAt.Equal(now) {
+		t.Fatalf("migrated device lastSeenAt=%v; want %v", loaded.Device.LastSeenAt, now)
+	}
+	if err := persistent.AppendAudit(ctx, store.AuditEntry{
+		OccurredAt: now, Actor: "test", Action: "schema.upgrade", Result: "success",
+	}); err != nil {
+		t.Fatalf("use table created by upgrade: %v", err)
 	}
 }
 

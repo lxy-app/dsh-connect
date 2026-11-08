@@ -16,7 +16,7 @@ protocol/                    v1 OpenAPI、AsyncAPI 与 JSON Schema 契约
 server/cmd/server/           Go Server 入口
 server/internal/protocol/    版本化 wire DTO 与错误模型
 server/internal/server/      REST/WSS、Hub、认证、授权与事件中继
-server/internal/store/       PostgreSQL 持久化
+server/internal/store/       PostgreSQL/SQLite + ent 持久化
 server/ent/schema/           ent schema（手写）
 server/ent/                  ent 生成代码（除 schema 外不要手改）
 docs/                        架构、产品、实施路线与验收说明
@@ -30,7 +30,7 @@ prototype/                   独立 HTML 交互原型（产品 + 官网），不
 - Go 版本以 `server/go.mod` 为准，当前为 **Go 1.26.0**。
 - `entgo.io/ent` 当前指向含 Go 1.27 代码生成修复的 master 伪版本；升级与退场条件见 `server/README.md` 的 ent schema 小节，改动 `ent/schema/` 前先确认生成器版本与 go.mod 一致。
 - 使用 **Node.js 24**；Connector 的 `engines.node` 明确要求 `>=24`。
-- 本地集成测试和数据库需要 Docker；数据库为 **PostgreSQL 18**。
+- 默认数据库为 **PostgreSQL 18**，单实例可选择 **SQLite**；PostgreSQL 集成测试需要 Docker，SQLite 测试使用临时文件。
 - Connector 精确适配 **DSH `0.2.2-rc.1`**。升级 DSH 后必须核对 Host 方法签名、事件 DTO、插件生命周期和真实 Agent 闭环，不能只改版本号。
 - 各 npm 工程有独立 `package-lock.json`。在对应目录使用 `npm ci` 或 `npm install`，不要假设根目录能执行 npm 脚本。
 - 新增或升级 Expo 原生模块时，在 `apps/mobile/` 使用 `npx expo install <package>`，不要直接用普通 `npm install <package>` 选择版本。
@@ -42,7 +42,7 @@ prototype/                   独立 HTML 交互原型（产品 + 官网），不
 
 ```sh
 # 本地运行
-make db-up                 # 启动 PostgreSQL 18，保留数据卷
+make db-up                 # 启动默认 PostgreSQL 18，保留数据卷（SQLite 不需要）
 make run-server            # 自动迁移并引导 Owner，默认 127.0.0.1:8787
 make admin-install
 make run-admin             # Vite：http://127.0.0.1:5173
@@ -76,7 +76,7 @@ npm --prefix apps/admin run build
 npm --prefix apps/mobile run check
 ```
 
-Server 测试会通过 `internal/pgtest` 自动启动临时 PostgreSQL 18 容器，并为每个测试使用独立数据库。没有 Docker 时相关测试可能跳过；CI 或必须执行数据库测试时设置 `DSH_CONNECT_REQUIRE_PG=1`。可用 `DSH_CONNECT_TEST_DATABASE_URL` 复用已有实例。
+Server 测试由 `internal/dbtest` 选择数据库，`make test-server` 会用同一套用例分别运行 PostgreSQL 和 SQLite。PostgreSQL 通过 `internal/pgtest` 自动启动临时 18 容器，每个测试使用独立数据库；没有 Docker 时相关测试可能跳过，CI 或必须执行时设置 `DSH_CONNECT_REQUIRE_PG=1`，可用 `DSH_CONNECT_TEST_DATABASE_URL` 复用已有实例。SQLite 使用独立临时文件，不需要 Docker。
 
 `make db-reset` 会删除数据库数据卷，属于破坏性操作；未经用户明确确认不要执行。
 
@@ -93,7 +93,7 @@ Server 测试会通过 `internal/pgtest` 自动启动临时 PostgreSQL 18 容器
 
 - 修改 Go 文件后运行 `gofmt`；至少执行相关包测试，提交前按影响范围运行 `make vet` 和 `make test-server`。
 - DSH 相关类型放在 Connector，稳定线上协议 DTO 放在 `server/internal/protocol/`，不要把 Host API 泄漏进 Server。
-- 数据持久化使用 PostgreSQL/ent。只手改 `server/ent/schema/`，随后运行 `make ent-gen`；不要手改其余 `server/ent/` 生成文件。
+- 数据持久化使用 PostgreSQL（默认）或单实例 SQLite + ent，共用同一套 schema 和 Store；SQLite 不启用多副本或网络文件系统。只手改 `server/ent/schema/`，随后运行 `make ent-gen`；不要手改其余 `server/ent/` 生成文件。
 - Server 不直接读取 DSH 文件，也不保存会话正文。
 - 新增 REST 输入时保持严格解码：未定义字段应被拒绝，而不是静默忽略。
 

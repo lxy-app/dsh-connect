@@ -28,7 +28,15 @@ import { ConnectorRuntime } from '../src/lib/runtime.js';
 const pluginDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const root = resolve(pluginDir, '../..');
 const serverDir = join(root, 'server');
+const databaseDialect = process.env.DSH_CONNECT_TEST_DATABASE_DIALECT ?? 'postgres';
+if (databaseDialect !== 'postgres' && databaseDialect !== 'sqlite') {
+  throw new Error('DSH_CONNECT_TEST_DATABASE_DIALECT must be postgres or sqlite');
+}
+const configuredDatabaseURL = process.env.DSH_CONNECT_E2E_DATABASE_URL ?? process.env.DSH_CONNECT_DATABASE_URL ?? '';
 const temp = await mkdtemp(join(tmpdir(), 'dsh-connect-e2e-'));
+const databaseURL = databaseDialect === 'sqlite'
+  ? `sqlite://${join(temp, 'server.db')}`
+  : /^postgres(?:ql)?:\/\//.test(configuredDatabaseURL) ? configuredDatabaseURL : '';
 const port = await availablePort();
 const serverUrl = `http://127.0.0.1:${port}`;
 const token = 'e2e-bootstrap-token-that-is-not-for-production';
@@ -71,6 +79,7 @@ async function main(): Promise<void> {
       env: {
         ...process.env,
         DSH_CONNECT_BOOTSTRAP_TOKEN: token,
+        DSH_CONNECT_DATABASE_URL: databaseURL,
         DSH_CONNECT_LISTEN_ADDR: `127.0.0.1:${port}`,
         DSH_CONNECT_SERVER_URL: serverUrl,
         DSH_CONNECT_ATTACHMENT_DIR: join(temp, 'attachments'),

@@ -25,7 +25,7 @@ FROM docker.m.daocloud.io/library/alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app \
-    && mkdir -p /data/attachments \
+    && mkdir -p /data/attachments /data/sqlite \
     && chown -R app:app /data
 WORKDIR /app
 COPY --from=server-build /out/dsh-connect-server /usr/local/bin/dsh-connect-server

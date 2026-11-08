@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -511,19 +512,39 @@ func dumpTable(t *testing.T, dsn, table string) string {
 	t.Helper()
 	db := openTestDB(t, dsn)
 	defer db.Close()
-	rows, err := db.QueryContext(context.Background(),
-		fmt.Sprintf(`SELECT coalesce(string_agg(t::text, ' '), '') FROM %s t`, table))
+	rows, err := db.QueryContext(context.Background(), fmt.Sprintf(`SELECT * FROM %s`, table))
 	if err != nil {
 		t.Fatalf("dump %s: %v", table, err)
 	}
 	defer rows.Close()
-	var dumped string
-	if rows.Next() {
-		if err := rows.Scan(&dumped); err != nil {
+	columns, err := rows.Columns()
+	if err != nil {
+		t.Fatalf("columns %s: %v", table, err)
+	}
+	var dumped strings.Builder
+	for rows.Next() {
+		values := make([]any, len(columns))
+		pointers := make([]any, len(columns))
+		for index := range values {
+			pointers[index] = &values[index]
+		}
+		if err := rows.Scan(pointers...); err != nil {
 			t.Fatalf("scan %s: %v", table, err)
 		}
+		for _, value := range values {
+			switch typed := value.(type) {
+			case []byte:
+				dumped.Write(typed)
+			default:
+				fmt.Fprint(&dumped, typed)
+			}
+			dumped.WriteByte(' ')
+		}
 	}
-	return dumped
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate %s: %v", table, err)
+	}
+	return dumped.String()
 }
 
 // waitClosed blocks until the Connector observes the server closing the socket.
@@ -570,7 +591,12 @@ func assertUpgradeRejected(t *testing.T, baseURL, deviceToken string) {
 // openTestDB opens a direct database connection for assertions.
 func openTestDB(t *testing.T, dsn string) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("pgx", dsn)
+	driverName := "pgx"
+	if strings.HasPrefix(dsn, "sqlite://") {
+		driverName = "sqlite"
+		dsn = strings.TrimPrefix(dsn, "sqlite://")
+	}
+	db, err := sql.Open(driverName, dsn)
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}

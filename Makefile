@@ -20,7 +20,8 @@ export DSH_CONNECT_BOOTSTRAP_TOKEN DSH_CONNECT_LISTEN_ADDR \
 	DSH_CONNECT_URL DSH_CONNECT_TOKEN DSH_CONNECT_STATE_FILE \
 	DSH_CONNECT_DATABASE_URL DSH_CONNECT_ADMIN_ORIGIN \
 	DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD \
-	DSH_CONNECT_BOOTSTRAP_OWNER_NAME
+	DSH_CONNECT_BOOTSTRAP_OWNER_NAME DSH_CONNECT_TEST_DATABASE_DIALECT \
+	DSH_CONNECT_TEST_DATABASE_URL DSH_CONNECT_E2E_DATABASE_URL DSH_CONNECT_REQUIRE_PG
 endif
 
 .PHONY: help db-up db-down db-reset test test-server test-connector test-e2e \
@@ -59,17 +60,19 @@ db-reset:
 
 test: test-server test-connector
 
-# Server 测试会自行拉起临时 PostgreSQL 容器；设置
-# DSH_CONNECT_TEST_DATABASE_URL 可复用已有实例，DSH_CONNECT_REQUIRE_PG=1 让
-# 缺少 Docker 时失败而不是跳过。
+# Server 测试分别以 PostgreSQL 和 SQLite 运行同一套用例。PostgreSQL 测试会
+# 自行拉起临时容器；DSH_CONNECT_TEST_DATABASE_URL 可复用已有实例，
+# DSH_CONNECT_REQUIRE_PG=1 让缺少 Docker 时失败而不是跳过。
 test-server:
-	go -C server test ./...
+	DSH_CONNECT_TEST_DATABASE_DIALECT=postgres go -C server test ./...
+	DSH_CONNECT_TEST_DATABASE_DIALECT=sqlite go -C server test ./...
 
 test-connector:
 	npm --prefix connector/dsh-plugin test
 
 test-e2e:
-	npm --prefix connector/dsh-plugin run test:e2e
+	DSH_CONNECT_TEST_DATABASE_DIALECT=postgres npm --prefix connector/dsh-plugin run test:e2e
+	DSH_CONNECT_TEST_DATABASE_DIALECT=sqlite npm --prefix connector/dsh-plugin run test:e2e
 
 test-admin:
 	npm --prefix apps/admin run typecheck

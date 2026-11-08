@@ -2,14 +2,15 @@
 
 单实例 Go 中继 Server。它只通过 Connector 调用 `session.*` 方法并中继事件，**不读取 DSH 文件、不直接调用 DSH Service，也不保存会话正文**。
 
-持久层为 **PostgreSQL 18 + ent ORM**：配对码、设备凭据 hash、create/prompt/model.select 幂等结果、审计、管理账号与浏览器会话、手机设备与移动令牌、手机访问授权。所有密钥只以 SHA-256 存储。
+持久层为 **PostgreSQL 18（默认）或 SQLite + ent ORM**：配对码、设备凭据 hash、create/prompt/model.select 幂等结果、审计、管理账号与浏览器会话、手机设备与移动令牌、手机访问授权。所有密钥只以 SHA-256 存储。两种数据库共用同一套 ent schema 和 Store 业务代码，由 `DSH_CONNECT_DATABASE_URL` 的 scheme 选择。
 
 ## 运行
 
-要求 Go 1.25+、PostgreSQL 18。
+要求 Go 1.26+。默认使用 PostgreSQL 18；单实例可选择 SQLite，无需独立数据库服务。
 
 ```sh
-# 1. 起数据库（docker-compose，数据卷持久化）
+# 1. PostgreSQL 默认路径：起数据库（docker-compose，数据卷持久化）
+#    SQLite 路径无需执行此步
 make db-up
 
 # 2. 配置
@@ -19,12 +20,21 @@ cp .env.example .env   # 填入 DSH_CONNECT_BOOTSTRAP_TOKEN 与 Owner 账号
 make run-server
 ```
 
-默认监听 `127.0.0.1:8787`。启动时会执行 ent schema 迁移（只建缺失表/列/索引，不删数据），并把残留的 `online` 设备置为 `offline`。
+默认监听 `127.0.0.1:8787`。启动时通过 ent 集成的 Atlas 执行 schema 自动迁移（不启用主动删列/删索引选项），并把残留的 `online` 设备置为 `offline`。
+
+SQLite 使用文件路径形式的 URL。先在 `.env` 中配置，再照常执行 `make run-server`：
+
+```dotenv
+# 相对路径以 Server 工作目录为基准；父目录必须已存在。
+DSH_CONNECT_DATABASE_URL=sqlite://./data/dsh-connect.db
+```
+
+绝对路径使用三个斜杠，例如 `sqlite:///data/sqlite/dsh-connect.db`。SQLite 连接固定启用 WAL、5 秒 busy timeout、外键检查和 `synchronous=FULL`，Server 内使用单连接避免写事务升级竞争。
 
 | 变量 | 默认值 | 用途 |
 |---|---|---|
 | `DSH_CONNECT_BOOTSTRAP_TOKEN` | 无，必填 | 管理/调试 REST+WSS 的 Bearer |
-| `DSH_CONNECT_DATABASE_URL` | `postgres://dsh:dsh@127.0.0.1:5432/dsh_connect?sslmode=disable` | PostgreSQL 18 连接串 |
+| `DSH_CONNECT_DATABASE_URL` | `postgres://dsh:dsh@127.0.0.1:5432/dsh_connect?sslmode=disable` | `postgres://` / `postgresql://` 或 `sqlite://`；未知 scheme 拒绝启动 |
 | `DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL` | 空 | 首次启动创建的 Owner 邮箱 |
 | `DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD` | 空 | Owner 初始密码（≥8 位） |
 | `DSH_CONNECT_BOOTSTRAP_OWNER_NAME` | `Owner` | Owner 显示名 |
@@ -38,6 +48,14 @@ make run-server
 | `DSH_CONNECT_TLS_CERT_FILE` / `_KEY_FILE` | 空 | 同时设置后对外为 https/wss |
 
 Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不会被覆盖或重置密码。
+
+### SQLite 单实例边界
+
+- 仅支持单个 Server 实例和本机磁盘；不要让多个副本共享数据库文件，也不要把 WAL 数据库放在 NFS 等网络文件系统上。高并发写入或多实例部署继续使用 PostgreSQL。
+- Docker 使用 `sqlite:///data/sqlite/dsh-connect.db` 时必须持久化 `/data/sqlite`；附件字节仍单独持久化 `/data/attachments`。
+- 运行中备份使用 SQLite Online Backup API 或 `VACUUM INTO`，不要直接复制可能尚未包含 WAL 内容的主 DB 文件。停止 Server 后备份则应包含仍然存在的 `-wal` 文件。
+- ent 的 SQLite 迁移可能通过临时表完成列修改，因此 schema 升级测试必须覆盖旧版本数据库，不能只验证全新建库。
+- 当前不提供 PostgreSQL ↔ SQLite 自动数据迁移、双写或同步；切换已有部署需要单独的导出/导入与回滚验证。
 
 ## 管理后台 API
 
@@ -95,7 +113,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 
 Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start received/waiting_desktop_authorization`、`pair.authorize received/completed` 及错误码日志。日志只包含 requestId、deviceId、数量与错误等白名单字段，不记录配对码、token/hash、Authorization、原始帧或工作区路径。配对数据库操作受 `CommandTimeout`（默认 15 秒）约束，内部错误返回 `internal_error`，不会误报为配对码无效。
 
-`session.create`、`session.prompt` 与 `session.model.select` 的 `requestId` 都是持久幂等键，由 PostgreSQL 唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。不同命令必须使用不同 requestId；模型选择的 sessionId/workspaceId/provider/model/reasoningEffort 都进入请求哈希。
+`session.create`、`session.prompt` 与 `session.model.select` 的 `requestId` 都是持久幂等键，由数据库唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。不同命令必须使用不同 requestId；模型选择的 sessionId/workspaceId/provider/model/reasoningEffort 都进入请求哈希。
 
 ## 手机配对 API
 
@@ -198,13 +216,17 @@ go -C server get entgo.io/ent@<正式版本>
 
 ```sh
 gofmt -w ./cmd ./internal
-go test ./...        # 或用 make test-server
+make test-server   # 同一套用例依次运行 PostgreSQL 与 SQLite
+
+# 直接运行单项测试时默认 PostgreSQL，也可显式选择：
+DSH_CONNECT_TEST_DATABASE_DIALECT=sqlite go test ./...
 ```
 
-测试会通过 `internal/pgtest` 自动拉起一个临时 PostgreSQL 18 容器（整个测试二进制共享一个容器，每个测试拿到独立数据库），结束后清理。
+`internal/dbtest` 按 `DSH_CONNECT_TEST_DATABASE_DIALECT` 选择数据库。PostgreSQL 通过 `internal/pgtest` 自动拉起一个临时 PostgreSQL 18 容器（整个测试二进制共享一个容器，每个测试拿到独立数据库），结束后清理；SQLite 为每个测试创建独立临时文件，不需要 Docker。
 
-- 复用已有实例：设置 `DSH_CONNECT_TEST_DATABASE_URL`。
-- CI 中要求必须跑数据库测试：设置 `DSH_CONNECT_REQUIRE_PG=1`，缺少 Docker 时失败而非跳过。
+- 复用已有 PostgreSQL 实例：设置 `DSH_CONNECT_TEST_DATABASE_URL`。
+- CI 中要求必须跑 PostgreSQL 测试：设置 `DSH_CONNECT_REQUIRE_PG=1`，缺少 Docker 时失败而非跳过；SQLite 测试始终需要执行。
+- `make test-e2e` 也会分别运行 PostgreSQL 与 SQLite。SQLite E2E 使用独立临时文件；PostgreSQL 可用 `DSH_CONNECT_E2E_DATABASE_URL` 指定独立业务数据库，不能使用共享开发库或 pgtest 维护库。
 
 集成测试覆盖：配对码一次性消费与过期、显式桌面授权、设备令牌重连、工作区越权拒绝、七类会话命令、create/prompt 并发与持久幂等、持久事件与临时流、慢消费者、离线快速失败、数据库重开后的持久性、**明文令牌不落库**，以及管理 API 的登录、角色隔离、最后 Owner 保护、设备吊销断连与审计记录。手机链路额外覆盖配对码单次消费与过期、令牌轮换、手机登出、管理员吊销、用户删除清理、移动角色隔离，以及访问申请、桌面批准/拒绝/撤销、工作区过滤、移动创建与 prompt 幂等、模型目录与会话级选择、模型选择持久重放、Server 重启恢复、撤销后失败关闭、transcript 和跨手机越权撤销。
 
