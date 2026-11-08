@@ -30,7 +30,7 @@ import { ChatIcon } from '@/components/chat-icon';
 import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { PLAYBACK_AUDIO_MODE, RECORDING_AUDIO_MODE } from '@/lib/audio-session';
+import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
 import { groupTurns } from '@/lib/turn-grouping';
 import {
   cancelMobileSession,
@@ -78,7 +78,7 @@ function ChatScreenContent() {
   // Attachment images need a live bearer token in their request headers, so the
   // screen resolves one connection snapshot and refreshes it with the session.
   const [attachmentAuth, setAttachmentAuth] = useState<AttachmentAuth | null>(null);
-  const { settings: voiceSettings, hydrated: voiceHydrated, speak, pauseSpeaking } = useVoice();
+  const { settings: voiceSettings, hydrated: voiceHydrated, speak, pauseSpeaking, restorePlaybackAudioMode } = useVoice();
   const { interactions, busyId, decide } = useInteractions();
   const params = useLocalSearchParams<{
     sessionId: string;
@@ -186,8 +186,8 @@ function ChatScreenContent() {
     if (expectedGeneration !== undefined && owner !== null && owner !== expectedGeneration) return;
     audioStreamStopRef.current();
     if (expectedGeneration === undefined || owner === expectedGeneration) audioStreamOwnerRef.current = null;
-    void setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => undefined);
-  }, []);
+    void restorePlaybackAudioMode().catch(() => undefined);
+  }, [restorePlaybackAudioMode]);
   const finishCloudVoice = useCallback((text: string) => {
     clearVoiceFinishTimer();
     cloudSessionRef.current = null;

@@ -41,7 +41,7 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - `expo-local-authentication`：后续用于应用解锁和敏感操作确认。
 - `expo-camera`：扫描配对二维码，不启用 Android 录音权限。
 - `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。
-- `expo-file-system`：在缓存目录写入 TTS MP3；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
+- `expo-file-system`：在缓存目录写入 TTS MP3 / PCM；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
 - `expo-sqlite`：后续保存草稿、游标和可重建缓存。
 - `expo-notifications`：后续接入原生 APNs/FCM token 与通知深链。
 - 聊天 Markdown 由 `src/lib/markdown.ts` 本地解析、`src/components/markdown.tsx` 按主题渲染，不引入第三方 Markdown 运行时依赖。
@@ -141,7 +141,9 @@ npm install --registry=https://registry.npmjs.org
 “我的 → 语音与模型服务”可分别选择 ASR / TTS 的服务提供方。默认优先使用火山 Agent Plan，也可独立切回系统语音；旧版单一 `provider` 设置会在读取时迁移到两个独立选项。
 
 - ASR Resource-Id：`volc.seedasr.sauc.duration`。双向流式使用 `wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async`，完成后返回使用 `bigmodel_nostream`。麦克风音频按 16 kHz、单声道、Int16 PCM、gzip 二进制帧发送，松开时以负序号标记最后一包，收到服务器最终包后才回填文本。
-- TTS Resource-Id：`seed-tts-2.0`。使用 `POST https://openspeech.bytedance.com/api/v3/plan/tts/unidirectional`，合并分块 MP3 数据并确认终端码 `20000000` 后播放。音色通过内置列表单选，不提供手填入口；默认音色为高冷御姐（`zh_female_gaolengyujie_uranus_bigtts`），试听与保存后的自动播报共用所选音色，列表外的旧配置回退到默认音色。
+- TTS Resource-Id：`seed-tts-2.0`。使用 `POST https://openspeech.bytedance.com/api/v3/plan/tts/unidirectional`，每个音频片段合并分块 MP3 并确认终端码 `20000000` 后播放。音色通过内置列表单选，不提供手填入口；默认音色为高冷御姐（`zh_female_gaolengyujie_uranus_bigtts`），试听与保存后的自动播报共用所选音色，列表外的旧配置回退到默认音色。
+- 云端长回复按句子和长度分段：首段就绪即开始播放，播放当前段时最多预取下一段；段间未就绪会显示可取消的准备状态并保持后台音频会话；主动暂停切换为混音以释放独占音频，保留锁屏恢复，暂停跨越分段时不会自动出声；录音结束按实际播放/暂停状态恢复对应音频模式。音频文件以文本哈希、音色、服务地址和音频参数为缓存身份，不保存 API Key；缓存最多保留 100 个 MP3 / 32 MiB，超出后按最近写入时间清理。停止或切换消息会中止后续合成。
+- 第三阶段在原生端使用 Agent Plan `wss://openspeech.bytedance.com/api/v3/plan/tts/unidirectional/stream` 一次性发送全文，以 PCM / 24 kHz 流式接收音频，再按 1 秒封装为 WAV 缓冲片段，通过 `expo-audio` 的 `AudioPlaylist` 原生连续队列增量播放，支持暂停/恢复、后台和锁屏控制。首音频等待 60 秒、后续帧空闲 30 秒会明确报错，不会在后台无限等待。完整 PCM 才会原子写入缓存供重播，取消或断流不发布部分缓存；首音频前失败会回退到第二阶段 HTTP 文件队列，Web 端仍使用 HTTP。
 - 必须配置 Agent Plan 个人版专属 Key 或企业版席位 Key，不能使用按量平台普通 Key 代替。密钥只写入 SecureStore，不进入日志、SQLite、导航参数或 `EXPO_PUBLIC_*`。
 - 浏览器 WebSocket 不能设置 ASR 握手鉴权头，因此 Web 端应选择系统 ASR；火山 ASR 的 Web 中继尚未实现。iOS / Android Development Build 可直接连接 Agent Plan。
 - 云端合成或识别失败会显示真实错误。缺少最终包、只有部分音频或采样率不符合要求都不会被包装成成功。
@@ -186,9 +188,10 @@ npm test              # ASR/TTS、Mobile API 与模型选择纯函数单元测�
 npm run check         # lint + typecheck
 npx expo-doctor       # SDK 依赖与配置诊断
 npm run build:bundles # 生成 iOS / Android 生产 JS bundle
+npx expo export --platform web # 验证 Expo Router 服务端/静态导出不会执行原生对象初始化
 ```
 
-`build:bundles` 只验证 JavaScript/Hermes 打包，不等同于 Xcode/Gradle 原生构建或真机验收。
+`build:bundles` 只验证 JavaScript/Hermes 打包，不等同于 Xcode/Gradle 原生构建或真机验收。原生 Release 流程还会执行 Expo Router 静态导出，因此原生模块路径、目录等对象应在实际功能调用时初始化，不要在模块顶层实例化。
 
 ## 配置与安全
 
