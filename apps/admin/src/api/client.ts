@@ -40,6 +40,11 @@ export interface Device {
   hasToken: boolean;
 }
 
+export interface AccessPolicyAuditDetails {
+  before?: AccessPolicy;
+  after?: AccessPolicy;
+}
+
 export interface AuditEntry {
   occurredAt: string;
   actor: string;
@@ -50,6 +55,106 @@ export interface AuditEntry {
   result: string;
   errorCode?: string;
   sourceIp?: string;
+  details?: AccessPolicyAuditDetails;
+}
+
+export interface AdminSession {
+  sessionId: string;
+  title: string;
+  deviceId: string;
+  deviceName: string;
+  workspaceId: string;
+  workspaceName: string;
+  status: string;
+  updatedAt: string;
+}
+
+export interface AdminSessionWarning {
+  deviceId: string;
+  deviceName: string;
+  code: string;
+  message: string;
+}
+
+export interface SessionsResponse {
+  sessions: AdminSession[];
+  warnings: AdminSessionWarning[];
+}
+
+export interface PendingRequest {
+  interactionId: string;
+  kind: string;
+  title: string;
+  toolName: string;
+  deviceId: string;
+  deviceName: string;
+  sessionId: string;
+  workspaceId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** Display-safe question shape shared with the v1 interaction protocol. */
+export interface InteractionQuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface InteractionQuestion {
+  id: string;
+  question: string;
+  detail?: string;
+  header?: string;
+  options?: InteractionQuestionOption[];
+  multiSelect?: boolean;
+}
+
+/** Full pending context is read-only in Admin; decisions stay on mobile/desktop. */
+export interface AdminInteraction {
+  interactionId: string;
+  kind: 'approval' | 'question' | string;
+  title: string;
+  toolName?: string;
+  reason?: string;
+  callId?: string;
+  questions?: InteractionQuestion[];
+  deviceId: string;
+  deviceName: string;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface ApprovalPolicy {
+  remoteEnabled: boolean;
+  ttlSeconds: number;
+  revision: number;
+  createdAt?: string;
+  updatedAt: string;
+}
+
+export interface ApprovalPolicyPatch {
+  remoteEnabled?: boolean;
+  ttlSeconds?: number;
+  revision: number;
+}
+
+/** Runtime-only, non-secret server configuration returned by GET /v1/admin/settings. */
+export interface AdminSettings {
+  serverUrl: string;
+  pairingCodeTTLSeconds: number;
+  mobileAccessTokenTTLSeconds: number;
+  adminSessionTTLSeconds: number;
+  commandTimeoutSeconds: number;
+  attachmentsMode: string;
+  maxAttachmentBytes: number;
+  attachmentTTLSeconds: number;
+  goVersion: string;
+  databaseDialect: string;
+  databaseConnected: boolean;
+  generatedAt: string;
 }
 
 export interface Overview {
@@ -57,6 +162,13 @@ export interface Overview {
   users: Record<string, number>;
   auditEntries: number;
   recentActivity: AuditEntry[];
+  activeSessions: number;
+  todayPrompts: number;
+  pendingInteractions: number;
+  promptTrend: Array<{ date: string; count: number }>;
+  sessions: AdminSession[];
+  pendingRequests: PendingRequest[];
+  warnings: AdminSessionWarning[];
 }
 
 export interface LoginResponse {
@@ -85,6 +197,7 @@ export interface AuditPage {
 
 /** A freshly issued desktop pairing code. The plaintext is shown only once. */
 export interface PairingCode {
+  pairingId: number;
   code: string;
   expiresAt: string;
   serverUrl: string;
@@ -92,6 +205,7 @@ export interface PairingCode {
 
 /** Lifecycle metadata for a previously issued pairing code. */
 export interface PairingCodeState {
+  pairingId: number;
   state: 'active' | 'waiting_desktop_authorization' | 'used' | 'expired';
   createdAt: string;
   expiresAt: string;
@@ -118,6 +232,46 @@ export interface MobileDevice {
   updatedAt: string;
   lastSeenAt?: string;
   revokedAt?: string;
+}
+
+export interface AccessPolicyRule {
+  deviceId: string;
+  workspaceIds: string[];
+  scopes: string[];
+}
+
+export interface AccessPolicy {
+  policyId: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  memberIds: string[];
+  rules: AccessPolicyRule[];
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccessPolicyInput {
+  name: string;
+  description: string;
+  enabled: boolean;
+  memberIds: string[];
+  rules: AccessPolicyRule[];
+}
+
+export interface AccessPreviewDesktop {
+  deviceId: string;
+  deviceName: string;
+  online: boolean;
+  workspaces: Array<{ id: string; name: string; scopes: string[] }>;
+  scopes: string[];
+}
+
+export interface UserAccessPreview {
+  userId: string;
+  policyIds: string[];
+  desktops: AccessPreviewDesktop[];
 }
 
 /** API error carrying the server's protocol error code. */
@@ -275,8 +429,29 @@ export const adminApi = {
     return request<AdminUser>('/v1/admin/auth/me', { signal });
   },
 
-  overview(signal?: AbortSignal): Promise<Overview> {
-    return request<Overview>('/v1/admin/overview', { signal });
+  overview(signal?: AbortSignal, timeZone?: string): Promise<Overview> {
+    return request<Overview>('/v1/admin/overview', { signal, query: { tz: timeZone } });
+  },
+
+  sessions(signal?: AbortSignal): Promise<SessionsResponse> {
+    return request<SessionsResponse>('/v1/admin/sessions', { signal });
+  },
+
+  async interactions(signal?: AbortSignal): Promise<AdminInteraction[]> {
+    const response = await request<{ interactions: AdminInteraction[] }>('/v1/admin/interactions', { signal });
+    return response.interactions ?? [];
+  },
+
+  approvalPolicy(signal?: AbortSignal): Promise<ApprovalPolicy> {
+    return request<ApprovalPolicy>('/v1/admin/approval-policy', { signal });
+  },
+
+  updateApprovalPolicy(input: ApprovalPolicyPatch): Promise<ApprovalPolicy> {
+    return request<ApprovalPolicy>('/v1/admin/approval-policy', { method: 'PATCH', body: input });
+  },
+
+  settings(signal?: AbortSignal): Promise<AdminSettings> {
+    return request<AdminSettings>('/v1/admin/settings', { signal });
   },
 
   async users(signal?: AbortSignal): Promise<AdminUser[]> {
@@ -300,6 +475,33 @@ export const adminApi = {
 
   deleteUser(userId: string): Promise<void> {
     return request<void>(`/v1/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+  },
+
+  async policies(signal?: AbortSignal): Promise<AccessPolicy[]> {
+    const response = await request<{ policies: AccessPolicy[] }>('/v1/admin/policies', { signal });
+    return response.policies ?? [];
+  },
+
+  createPolicy(input: AccessPolicyInput): Promise<AccessPolicy> {
+    return request<AccessPolicy>('/v1/admin/policies', { method: 'POST', body: input });
+  },
+
+  updatePolicy(policyId: string, input: AccessPolicyInput & { revision: number }): Promise<AccessPolicy> {
+    return request<AccessPolicy>(`/v1/admin/policies/${encodeURIComponent(policyId)}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+
+  deletePolicy(policyId: string, revision: number): Promise<void> {
+    return request<void>(`/v1/admin/policies/${encodeURIComponent(policyId)}`, {
+      method: 'DELETE',
+      query: { revision },
+    });
+  },
+
+  accessPreview(userId: string, signal?: AbortSignal): Promise<UserAccessPreview> {
+    return request<UserAccessPreview>(`/v1/admin/users/${encodeURIComponent(userId)}/access-preview`, { signal });
   },
 
   async devices(signal?: AbortSignal): Promise<Device[]> {

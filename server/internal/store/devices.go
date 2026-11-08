@@ -12,8 +12,9 @@ import (
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
 )
 
-// CreatePairingCode inserts a new one-time pairing code hash.
-func (s *Store) CreatePairingCode(ctx context.Context, code PairingCode) error {
+// CreatePairingCode inserts a new one-time pairing code hash and returns its
+// stable administrative record ID for lifecycle tracking.
+func (s *Store) CreatePairingCode(ctx context.Context, code PairingCode) (int, error) {
 	builder := s.client.PairingCode.Create().
 		SetCodeHash(code.CodeHash).
 		SetCreatedAt(code.CreatedAt).
@@ -21,15 +22,17 @@ func (s *Store) CreatePairingCode(ctx context.Context, code PairingCode) error {
 	if code.DeviceID != "" {
 		builder.SetDeviceID(code.DeviceID)
 	}
-	if _, err := builder.Save(ctx); err != nil {
-		return fmt.Errorf("create pairing code: %w", err)
+	created, err := builder.Save(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("create pairing code: %w", err)
 	}
-	return nil
+	return created.ID, nil
 }
 
 // PairingCodeRecord exposes pairing code metadata for administrative listing.
 // The plaintext code is never recoverable: only its hash is stored.
 type PairingCodeRecord struct {
+	ID        int
 	CreatedAt time.Time
 	ExpiresAt time.Time
 	UsedAt    *time.Time
@@ -51,6 +54,7 @@ func (s *Store) PairingCodes(ctx context.Context, limit int) ([]PairingCodeRecor
 	result := make([]PairingCodeRecord, 0, len(records))
 	for _, record := range records {
 		result = append(result, PairingCodeRecord{
+			ID:        record.ID,
 			CreatedAt: record.CreatedAt,
 			ExpiresAt: record.ExpiresAt,
 			UsedAt:    record.UsedAt,

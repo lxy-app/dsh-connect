@@ -17,11 +17,22 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/admin/auth/me", s.adminAuth(s.handleAdminMe))
 
 	mux.HandleFunc("GET /v1/admin/overview", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminOverview))
+	mux.HandleFunc("GET /v1/admin/sessions", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminSessions))
+	mux.HandleFunc("GET /v1/admin/interactions", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminInteractions))
+	mux.HandleFunc("GET /v1/admin/approval-policy", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminApprovalPolicy))
+	mux.HandleFunc("PATCH /v1/admin/approval-policy", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateApprovalPolicy))
+	mux.HandleFunc("GET /v1/admin/settings", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminSettings))
 
 	mux.HandleFunc("GET /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminUsers))
 	mux.HandleFunc("POST /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateUser))
 	mux.HandleFunc("PATCH /v1/admin/users/{userId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateUser))
 	mux.HandleFunc("DELETE /v1/admin/users/{userId}", s.requireRole(store.RoleOwner)(s.handleAdminDeleteUser))
+	mux.HandleFunc("GET /v1/admin/users/{userId}/access-preview", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminAccessPreview))
+
+	mux.HandleFunc("GET /v1/admin/policies", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminAccessPolicies))
+	mux.HandleFunc("POST /v1/admin/policies", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateAccessPolicy))
+	mux.HandleFunc("PATCH /v1/admin/policies/{policyId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateAccessPolicy))
+	mux.HandleFunc("DELETE /v1/admin/policies/{policyId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminDeleteAccessPolicy))
 
 	mux.HandleFunc("GET /v1/admin/devices", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminDevices))
 	mux.HandleFunc("PATCH /v1/admin/devices/{deviceId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateDevice))
@@ -141,13 +152,30 @@ func (s *Server) handleAdminMe(w http.ResponseWriter, r *http.Request) {
 // ---------- overview ----------
 
 type overviewResponse struct {
-	Devices map[string]int     `json:"devices"`
-	Users   map[string]int     `json:"users"`
-	Audit   int                `json:"auditEntries"`
-	Recent  []store.AuditEntry `json:"recentActivity"`
+	Devices             map[string]int                 `json:"devices"`
+	Users               map[string]int                 `json:"users"`
+	Audit               int                            `json:"auditEntries"`
+	Recent              []store.AuditEntry             `json:"recentActivity"`
+	ActiveSessions      int                            `json:"activeSessions"`
+	TodayPrompts        int                            `json:"todayPrompts"`
+	PendingInteractions int                            `json:"pendingInteractions"`
+	PromptTrend         []promptTrendPoint             `json:"promptTrend"`
+	Sessions            []adminSession                 `json:"sessions"`
+	PendingRequests     []adminPendingRequest          `json:"pendingRequests"`
+	Warnings            []protocol.MobileAccessWarning `json:"warnings"`
 }
 
 func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
+	location := time.UTC
+	if raw := r.URL.Query().Get("tz"); raw != "" {
+		loaded, err := time.LoadLocation(raw)
+		if err != nil || raw == "Local" {
+			writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "tz must be a valid IANA time zone", false))
+			return
+		}
+		location = loaded
+	}
+
 	devices, err := s.store.Devices(r.Context())
 	if err != nil {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load devices", true))
@@ -189,11 +217,37 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 	if recent == nil {
 		recent = []store.AuditEntry{}
 	}
+
+	now := nowUTC()
+	localNow := now.In(location)
+	today := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, location)
+	promptCompletions, err := s.store.PromptCompletions(r.Context(), today.AddDate(0, 0, -6))
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load prompt completions", true))
+		return
+	}
+	trend := buildPromptTrend(promptCompletions, now, location)
+	sessions, warnings := s.aggregateAdminSessions(r.Context(), devices)
+	activeSessions := 0
+	for _, session := range sessions {
+		if session.Status == "running" {
+			activeSessions++
+		}
+	}
+	recentSessions := sessions
+	if len(recentSessions) > 5 {
+		recentSessions = recentSessions[:5]
+	}
+	pending := s.interactions.list(now)
 	writeJSON(w, http.StatusOK, overviewResponse{
-		Devices: deviceCounts,
-		Users:   userCounts,
-		Audit:   total,
-		Recent:  recent,
+		Devices: deviceCounts, Users: userCounts, Audit: total, Recent: recent,
+		ActiveSessions:      activeSessions,
+		TodayPrompts:        trend[len(trend)-1].Count,
+		PendingInteractions: len(pending),
+		PromptTrend:         trend,
+		Sessions:            recentSessions,
+		PendingRequests:     adminPendingRequests(pending, devices),
+		Warnings:            warnings,
 	})
 }
 
@@ -475,6 +529,7 @@ func (s *Server) handleAdminRevokeDevice(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
 		return
 	}
+	s.events.CloseDevice(deviceID)
 	s.recordAdminAudit(r, "admin.device.revoke", "success", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
@@ -500,6 +555,7 @@ func (s *Server) handleAdminDeleteDevice(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not delete device", true))
 		return
 	}
+	s.events.CloseDevice(deviceID)
 	s.recordAdminAudit(r, "admin.device.delete", "success", "")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -576,6 +632,7 @@ func (s *Server) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 // ---------- pairing codes ----------
 
 type createPairingCodeResponse struct {
+	PairingID int       `json:"pairingId"`
 	Code      string    `json:"code"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	ServerURL string    `json:"serverUrl"`
@@ -603,14 +660,16 @@ func (s *Server) issuePairingCode(r *http.Request) (string, createPairingCodeRes
 	}
 	now := nowUTC()
 	expiresAt := now.Add(s.config.PairingCodeTTL)
-	if err := s.store.CreatePairingCode(r.Context(), store.PairingCode{
+	pairingID, err := s.store.CreatePairingCode(r.Context(), store.PairingCode{
 		CodeHash:  store.HashToken(code),
 		CreatedAt: now,
 		ExpiresAt: expiresAt,
-	}); err != nil {
+	})
+	if err != nil {
 		return "", createPairingCodeResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not persist pairing code", true))
 	}
 	return code, createPairingCodeResponse{
+		PairingID: pairingID,
 		Code:      code,
 		ExpiresAt: expiresAt,
 		ServerURL: s.config.ServerURL,
@@ -618,6 +677,7 @@ func (s *Server) issuePairingCode(r *http.Request) (string, createPairingCodeRes
 }
 
 type pairingCodeView struct {
+	PairingID int        `json:"pairingId"`
 	State     string     `json:"state"`
 	CreatedAt time.Time  `json:"createdAt"`
 	ExpiresAt time.Time  `json:"expiresAt"`
@@ -658,6 +718,7 @@ func (s *Server) handleAdminListPairingCodes(w http.ResponseWriter, r *http.Requ
 			state = "expired"
 		}
 		codes = append(codes, pairingCodeView{
+			PairingID: record.ID,
 			State:     state,
 			CreatedAt: record.CreatedAt,
 			ExpiresAt: record.ExpiresAt,

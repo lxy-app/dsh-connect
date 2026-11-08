@@ -184,6 +184,18 @@ func (_u *AuditEntryUpdate) ClearSourceIP() *AuditEntryUpdate {
 	return _u
 }
 
+// SetDetails sets the "details" field.
+func (_u *AuditEntryUpdate) SetDetails(v []byte) *AuditEntryUpdate {
+	_u.mutation.SetDetails(v)
+	return _u
+}
+
+// ClearDetails clears the value of the "details" field.
+func (_u *AuditEntryUpdate) ClearDetails() *AuditEntryUpdate {
+	_u.mutation.ClearDetails()
+	return _u
+}
+
 // Mutation returns the AuditEntryMutation object of the builder.
 func (_u *AuditEntryUpdate) Mutation() *AuditEntryMutation {
 	return _u.mutation
@@ -266,6 +278,12 @@ func (_u *AuditEntryUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if _u.mutation.SourceIPCleared() {
 		_spec.ClearField(auditentry.FieldSourceIP, field.TypeString)
+	}
+	if value, ok := _u.mutation.Details(); ok {
+		_spec.SetField(auditentry.FieldDetails, field.TypeBytes, value)
+	}
+	if _u.mutation.DetailsCleared() {
+		_spec.ClearField(auditentry.FieldDetails, field.TypeBytes)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -443,6 +461,18 @@ func (_u *AuditEntryUpdateOne) ClearSourceIP() *AuditEntryUpdateOne {
 	return _u
 }
 
+// SetDetails sets the "details" field.
+func (_u *AuditEntryUpdateOne) SetDetails(v []byte) *AuditEntryUpdateOne {
+	_u.mutation.SetDetails(v)
+	return _u
+}
+
+// ClearDetails clears the value of the "details" field.
+func (_u *AuditEntryUpdateOne) ClearDetails() *AuditEntryUpdateOne {
+	_u.mutation.ClearDetails()
+	return _u
+}
+
 // Mutation returns the AuditEntryMutation object of the builder.
 func (_u *AuditEntryUpdateOne) Mutation() *AuditEntryMutation {
 	return _u.mutation
@@ -555,6 +585,12 @@ func (_u *AuditEntryUpdateOne) sqlSave(ctx context.Context) (_node *AuditEntry, 
 	}
 	if _u.mutation.SourceIPCleared() {
 		_spec.ClearField(auditentry.FieldSourceIP, field.TypeString)
+	}
+	if value, ok := _u.mutation.Details(); ok {
+		_spec.SetField(auditentry.FieldDetails, field.TypeBytes, value)
+	}
+	if _u.mutation.DetailsCleared() {
+		_spec.ClearField(auditentry.FieldDetails, field.TypeBytes)
 	}
 	_node = &AuditEntry{config: _u.config}
 	_spec.Assign = _node.assignValues

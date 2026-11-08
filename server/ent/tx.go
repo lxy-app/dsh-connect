@@ -14,8 +14,12 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// AccessPolicy is the client for interacting with the AccessPolicy builders.
+	AccessPolicy *AccessPolicyClient
 	// AdminSession is the client for interacting with the AdminSession builders.
 	AdminSession *AdminSessionClient
+	// ApprovalPolicy is the client for interacting with the ApprovalPolicy builders.
+	ApprovalPolicy *ApprovalPolicyClient
 	// AttachmentBlob is the client for interacting with the AttachmentBlob builders.
 	AttachmentBlob *AttachmentBlobClient
 	// AuditEntry is the client for interacting with the AuditEntry builders.
@@ -167,7 +171,9 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.AccessPolicy = NewAccessPolicyClient(tx.config)
 	tx.AdminSession = NewAdminSessionClient(tx.config)
+	tx.ApprovalPolicy = NewApprovalPolicyClient(tx.config)
 	tx.AttachmentBlob = NewAttachmentBlobClient(tx.config)
 	tx.AuditEntry = NewAuditEntryClient(tx.config)
 	tx.Device = NewDeviceClient(tx.config)
@@ -187,7 +193,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: AdminSession.QueryXXX(), the query will be executed
+// applies a query, for example: AccessPolicy.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

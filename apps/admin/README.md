@@ -22,16 +22,29 @@ Vite 开发服务器把 `/v1` 代理到 `http://127.0.0.1:8787`（可用 `DSH_CO
 
 | 路由 | 功能 |
 |---|---|
-| `/overview` | 设备在线/离线、账号统计、最近 8 条审计 |
+| `/overview` | 在线桌面、活跃会话、今日指令、待处理交互、7 日趋势、最近会话与审计；支持手动刷新 |
 | `/users` | 用户列表、创建、改名/改角色/重置密码、启用禁用、删除 |
-| `/devices` | 设备列表、详情（授权工作区/scope/指纹）、改名、吊销、删除 |
-| `/pairing` | 生成一次性桌面配对码（明文只显示一次）、查看最近配对码状态 |
-| `/mobile` | 按用户生成手机配对二维码、复制配对码/链接、查看和吊销手机 |
-| `/audit` | 审计日志，支持动作/操作者/结果/时间范围过滤与分页 |
+| `/devices` | 桌面/手机 Tab；桌面详情、改名、吊销、删除；添加桌面向导与配对记录；手机二维码配对与吊销 |
+| `/pairing` | 兼容旧深链，重定向到 `/devices` |
+| `/mobile` | 兼容旧深链，重定向到 `/devices?tab=mobile` |
+| `/policies` | 访问策略 CRUD、启停、成员关联、按桌面×工作区×scope 配置与 revision 冲突处理 |
+| `/running` | 只读会话元数据，按设备、状态、工作区筛选；单桌面异常以 warning 展示 |
+| `/approvals` | 只读待处理审批/提问与完整详情；Owner/Admin 可用 revision 更新远程审批开关与 TTL |
+| `/settings` | Owner/Admin 只读查看 Server 运行配置、数据库健康与未接入能力状态 |
+| `/audit` | 审计日志，支持动作/操作者/结果/时间范围过滤与分页；策略变更可展开 before/after 差异 |
+
+## 桌面配对
+
+在 `/devices` 的“桌面 Connector”页点击“添加桌面”：
+
+1. 生成一次性配对码，明文仅保留在当前向导中，关闭后清除且不能回读。
+2. 在目标桌面的 Connector 面板中输入 Server 地址与配对码。
+3. 向导按稳定 `pairingId` 每 2 秒读取状态，依次展示等待 Connector、等待桌面授权和设备上线。
+4. 桌面明确确认指纹、工作区和 scopes 后才完成；接入桌面不会隐式授予手机权限。
 
 ## 手机配对
 
-`/mobile` 使用本地 `qrcode.react` 渲染二维码，不依赖外部二维码服务：
+`/devices?tab=mobile` 使用本地 `qrcode.react` 渲染二维码，不依赖外部二维码服务：
 
 1. 选择要绑定的用户。
 2. 生成一次性手机配对码。
@@ -40,13 +53,35 @@ Vite 开发服务器把 `/v1` 代理到 `http://127.0.0.1:8787`（可用 `DSH_CO
 
 Server 返回的 `serverUrl` 必须能被手机访问。若页面提示回环地址或 `0.0.0.0` 不可达，请在 Server 配置中将 `DSH_CONNECT_SERVER_URL` 改为局域网 IP 或 HTTPS 域名后重启并重新生成。
 
+## 访问策略与用户预览
+
+`/policies` 按“成员 → 桌面 → 工作区 → read/prompt/cancel/approve”配置真实权限。多个启用策略按工作区求并集，无策略默认拒绝；手机 active grant 和桌面当前授权仍会进一步收窄结果。
+
+用户与角色页可查看关联策略并打开 Server 计算的策略预览。预览只表示策略允许范围，不代表某台手机已经获得 grant；实际控制仍需桌面单独确认。
+
+## 运行会话与指标口径
+
+`/running` 只展示 Connector 经 `session.list` 返回的 sessionId、标题、桌面、工作区、running/idle 状态和更新时间，不读取正文，也不提供取消或审批操作。单桌面离线、超时或协议异常不会阻塞其他桌面，页面会标明当前为部分快照。
+
+概览中的“今日指令”和近 7 日趋势按幂等记录中的唯一 `session.prompt` 准入计算，即 Connector 已成功响应的请求；同一 requestId 重试不重复计数，未提交请求不计入，也不代表 Turn 已完成。日期桶使用浏览器提供的 IANA 时区，默认 UTC。
+
+## 远程审批与运行配置
+
+`/approvals` 的待处理列表和详情对 owner/admin/auditor 均为只读，不提供审批决定操作。交互只能明确决定一次，超时、离线、撤回或协议错误均失败关闭；Connector 未处理时保留桌面审批链。Owner/Admin 可修改远程审批开关和 TTL，PATCH 必须携带 revision；冲突时保留当前草稿。生物识别仅显示“移动端待接入”。
+
+`/settings` 仅 owner/admin 可访问，展示 Server 地址、各类 TTL、附件限制、Go 版本、数据库连接状态和配置生成时间。APNs/FCM 与锁屏通知隐私明确标为未接入，由部署配置管理；页面不读取或展示配对码、Token、数据库凭据或推送密钥。
+
+## 视觉与响应式
+
+Admin 使用与移动 App 相同的正式应用图标。明暗主题由顶部按钮切换，使用 Ant Design token/算法，支持系统初始偏好并保存到 `dsh-connect.admin.theme`。窄屏下侧栏保持收缩、内容缩小留白，数据表在自身容器内横向滚动，不造成页面整体横向溢出。
+
 ## 权限模型
 
 前端只做体验层隐藏，真正的权限由 Server 强制：
 
 - `owner`：全部操作，含角色变更、启用禁用、删除用户；必须保留至少一位 active Owner。
 - `admin`：可创建/编辑非 Owner 账号资料、重置其密码、管理设备；不能修改 Owner 资料或凭据、不能改角色、不能创建 Owner。
-- `auditor`：只读概览、用户、设备、配对状态与审计。
+- `auditor`：只读概览、用户、设备、策略、运行会话、审批与审计；不能访问系统设置或修改数据。
 - `member`：仅保留本人身份，不加载全局概览、用户、设备、配对或审计页面。
 
 手机设备页：owner/admin 可生成配对码并吊销手机；auditor 只读；member 无权访问该页面。后端同样强制这些权限。Member 本人自助配对 API 的既有能力不变，但当前 Web Admin 不提供对应页面。
@@ -70,5 +105,17 @@ make admin-build     # 产出 apps/admin/dist
 ## 检查
 
 ```sh
-make test-admin      # tsc --noEmit
+make test-admin           # TypeScript + Vitest 组件测试
+make test-admin-e2e       # Playwright Chromium 浏览器测试
 ```
+
+首次运行浏览器测试前安装匹配版本的 Chromium：
+
+```sh
+cd apps/admin
+npx playwright install chromium
+```
+
+已有系统 Chrome 时也可执行 `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e`，无需下载独立 Chromium。
+
+浏览器测试由 Playwright 启动 Vite，并通过 `page.route` 模拟 Admin API，覆盖设备 Tab、旧深链、配对状态轮询和 Member 路由拦截；不连接真实 Server。真实权限与协议行为由 Go Server 集成测试及跨端 E2E 验证。

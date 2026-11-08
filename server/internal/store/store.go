@@ -42,6 +42,11 @@ var (
 	ErrLastActiveOwner         = errors.New("the last active owner is required")
 	ErrOwnerUpdateForbidden    = errors.New("owner update is forbidden")
 	ErrSessionInvalid          = errors.New("admin session is invalid or expired")
+	ErrAccessPolicyNotFound    = errors.New("access policy not found")
+	ErrAccessPolicyConflict    = errors.New("access policy revision conflict")
+	ErrAccessPolicyNameTaken   = errors.New("access policy name is already registered")
+	ErrApprovalPolicyNotFound  = errors.New("approval policy not found")
+	ErrApprovalPolicyConflict  = errors.New("approval policy revision conflict")
 )
 
 // PairingCode is a one-time desktop pairing code. Only CodeHash is persisted.
@@ -75,15 +80,16 @@ type IdempotencyRecord struct {
 
 // AuditEntry is an append-only record of an administrative or Connector action.
 type AuditEntry struct {
-	OccurredAt time.Time `json:"occurredAt"`
-	Actor      string    `json:"actor"`
-	Action     string    `json:"action"`
-	RequestID  string    `json:"requestId,omitempty"`
-	DeviceID   string    `json:"deviceId,omitempty"`
-	SessionID  string    `json:"sessionId,omitempty"`
-	Result     string    `json:"result"`
-	ErrorCode  string    `json:"errorCode,omitempty"`
-	SourceIP   string    `json:"sourceIp,omitempty"`
+	OccurredAt time.Time       `json:"occurredAt"`
+	Actor      string          `json:"actor"`
+	Action     string          `json:"action"`
+	RequestID  string          `json:"requestId,omitempty"`
+	DeviceID   string          `json:"deviceId,omitempty"`
+	SessionID  string          `json:"sessionId,omitempty"`
+	Result     string          `json:"result"`
+	ErrorCode  string          `json:"errorCode,omitempty"`
+	SourceIP   string          `json:"sourceIp,omitempty"`
+	Details    json.RawMessage `json:"details,omitempty"`
 }
 
 // Store owns the ent client and the underlying database handle.
@@ -176,6 +182,22 @@ func (s *Store) Client() *ent.Client {
 	return s.client
 }
 
+// Ping verifies that the configured database is currently reachable.
+func (s *Store) Ping(ctx context.Context) error {
+	if err := s.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	return nil
+}
+
+// DatabaseDialect returns the public SQL dialect name without exposing the DSN.
+func (s *Store) DatabaseDialect() string {
+	if s.databaseDialect == dialect.SQLite {
+		return "sqlite"
+	}
+	return s.databaseDialect
+}
+
 // Migrate creates missing tables, columns and indexes. It never drops data.
 func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.client.Schema.Create(ctx); err != nil {
@@ -261,7 +283,7 @@ func toIdempotencyRecord(record *ent.IdempotencyRecord) IdempotencyRecord {
 }
 
 func toAuditEntry(entry *ent.AuditEntry) AuditEntry {
-	return AuditEntry{
+	result := AuditEntry{
 		OccurredAt: entry.OccurredAt,
 		Actor:      entry.Actor,
 		Action:     entry.Action,
@@ -272,4 +294,8 @@ func toAuditEntry(entry *ent.AuditEntry) AuditEntry {
 		ErrorCode:  entry.ErrorCode,
 		SourceIP:   entry.SourceIP,
 	}
+	if len(entry.Details) > 0 {
+		result.Details = json.RawMessage(append([]byte(nil), entry.Details...))
+	}
+	return result
 }

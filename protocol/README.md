@@ -3,6 +3,7 @@
 - `openapi.yaml`：Admin/App debug REST 与事件 WebSocket Upgrade 接口。
 - `asyncapi.yaml`：Connector 配对/命令/事件和 App 事件帧。
 - `schemas/v1/`：JSON Schema 2020-12 版本化 DTO 与 P0 错误码。
+- `schemas/v1/admin.schema.json`：Web Admin 登录、用户、设备、访问策略、运行会话、概览指标、审计与桌面配对生命周期 DTO；Admin 配对通过稳定 `pairingId` 跟踪，明文 code 仅在创建响应出现。
 - `schemas/v1/mobile.schema.json`：手机配对码、设备身份、移动会话与令牌轮换 DTO。
 - `schemas/v1/interaction.schema.json`：远程审批/提问事件、一次性决定与手机投影 DTO。
 

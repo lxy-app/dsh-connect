@@ -5,7 +5,9 @@ package ent
 import (
 	"time"
 
+	"github.com/deepseek/dsh-connect/server/ent/accesspolicy"
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
+	"github.com/deepseek/dsh-connect/server/ent/approvalpolicy"
 	"github.com/deepseek/dsh-connect/server/ent/attachmentblob"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/device"
@@ -23,6 +25,34 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	accesspolicyFields := schema.AccessPolicy{}.Fields()
+	_ = accesspolicyFields
+	// accesspolicyDescName is the schema descriptor for name field.
+	accesspolicyDescName := accesspolicyFields[1].Descriptor()
+	// accesspolicy.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	accesspolicy.NameValidator = accesspolicyDescName.Validators[0].(func(string) error)
+	// accesspolicyDescEnabled is the schema descriptor for enabled field.
+	accesspolicyDescEnabled := accesspolicyFields[3].Descriptor()
+	// accesspolicy.DefaultEnabled holds the default value on creation for the enabled field.
+	accesspolicy.DefaultEnabled = accesspolicyDescEnabled.Default.(bool)
+	// accesspolicyDescRevision is the schema descriptor for revision field.
+	accesspolicyDescRevision := accesspolicyFields[6].Descriptor()
+	// accesspolicy.DefaultRevision holds the default value on creation for the revision field.
+	accesspolicy.DefaultRevision = accesspolicyDescRevision.Default.(int64)
+	// accesspolicyDescCreatedAt is the schema descriptor for created_at field.
+	accesspolicyDescCreatedAt := accesspolicyFields[7].Descriptor()
+	// accesspolicy.DefaultCreatedAt holds the default value on creation for the created_at field.
+	accesspolicy.DefaultCreatedAt = accesspolicyDescCreatedAt.Default.(func() time.Time)
+	// accesspolicyDescUpdatedAt is the schema descriptor for updated_at field.
+	accesspolicyDescUpdatedAt := accesspolicyFields[8].Descriptor()
+	// accesspolicy.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	accesspolicy.DefaultUpdatedAt = accesspolicyDescUpdatedAt.Default.(func() time.Time)
+	// accesspolicy.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	accesspolicy.UpdateDefaultUpdatedAt = accesspolicyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// accesspolicyDescID is the schema descriptor for id field.
+	accesspolicyDescID := accesspolicyFields[0].Descriptor()
+	// accesspolicy.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	accesspolicy.IDValidator = accesspolicyDescID.Validators[0].(func(string) error)
 	adminsessionFields := schema.AdminSession{}.Fields()
 	_ = adminsessionFields
 	// adminsessionDescTokenHash is the schema descriptor for token_hash field.
@@ -41,6 +71,50 @@ func init() {
 	adminsessionDescID := adminsessionFields[0].Descriptor()
 	// adminsession.IDValidator is a validator for the "id" field. It is called by the builders before save.
 	adminsession.IDValidator = adminsessionDescID.Validators[0].(func(string) error)
+	approvalpolicyFields := schema.ApprovalPolicy{}.Fields()
+	_ = approvalpolicyFields
+	// approvalpolicyDescRemoteEnabled is the schema descriptor for remote_enabled field.
+	approvalpolicyDescRemoteEnabled := approvalpolicyFields[1].Descriptor()
+	// approvalpolicy.DefaultRemoteEnabled holds the default value on creation for the remote_enabled field.
+	approvalpolicy.DefaultRemoteEnabled = approvalpolicyDescRemoteEnabled.Default.(bool)
+	// approvalpolicyDescTTLSeconds is the schema descriptor for ttl_seconds field.
+	approvalpolicyDescTTLSeconds := approvalpolicyFields[2].Descriptor()
+	// approvalpolicy.DefaultTTLSeconds holds the default value on creation for the ttl_seconds field.
+	approvalpolicy.DefaultTTLSeconds = approvalpolicyDescTTLSeconds.Default.(int)
+	// approvalpolicy.TTLSecondsValidator is a validator for the "ttl_seconds" field. It is called by the builders before save.
+	approvalpolicy.TTLSecondsValidator = func() func(int) error {
+		validators := approvalpolicyDescTTLSeconds.Validators
+		fns := [...]func(int) error{
+			validators[0].(func(int) error),
+			validators[1].(func(int) error),
+		}
+		return func(ttl_seconds int) error {
+			for _, fn := range fns {
+				if err := fn(ttl_seconds); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// approvalpolicyDescRevision is the schema descriptor for revision field.
+	approvalpolicyDescRevision := approvalpolicyFields[3].Descriptor()
+	// approvalpolicy.DefaultRevision holds the default value on creation for the revision field.
+	approvalpolicy.DefaultRevision = approvalpolicyDescRevision.Default.(int64)
+	// approvalpolicyDescCreatedAt is the schema descriptor for created_at field.
+	approvalpolicyDescCreatedAt := approvalpolicyFields[4].Descriptor()
+	// approvalpolicy.DefaultCreatedAt holds the default value on creation for the created_at field.
+	approvalpolicy.DefaultCreatedAt = approvalpolicyDescCreatedAt.Default.(func() time.Time)
+	// approvalpolicyDescUpdatedAt is the schema descriptor for updated_at field.
+	approvalpolicyDescUpdatedAt := approvalpolicyFields[5].Descriptor()
+	// approvalpolicy.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	approvalpolicy.DefaultUpdatedAt = approvalpolicyDescUpdatedAt.Default.(func() time.Time)
+	// approvalpolicy.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	approvalpolicy.UpdateDefaultUpdatedAt = approvalpolicyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// approvalpolicyDescID is the schema descriptor for id field.
+	approvalpolicyDescID := approvalpolicyFields[0].Descriptor()
+	// approvalpolicy.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	approvalpolicy.IDValidator = approvalpolicyDescID.Validators[0].(func(string) error)
 	attachmentblobFields := schema.AttachmentBlob{}.Fields()
 	_ = attachmentblobFields
 	// attachmentblobDescMime is the schema descriptor for mime field.

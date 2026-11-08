@@ -71,7 +71,8 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | POST | `/v1/admin/auth/login` | 无 | 邮箱密码登录，返回 `token/expiresAt/user` |
 | POST | `/v1/admin/auth/logout` | 已登录 | 吊销当前会话 |
 | GET | `/v1/admin/auth/me` | 已登录 | 当前操作者 |
-| GET | `/v1/admin/overview` | owner/admin/auditor | 设备/账号计数与最近 8 条审计 |
+| GET | `/v1/admin/overview` | owner/admin/auditor | 设备/账号计数、活跃会话、prompt 准入趋势、待处理交互与最近 8 条审计；可选 IANA `tz` |
+| GET | `/v1/admin/sessions` | owner/admin/auditor | 并发聚合桌面会话元数据与部分失败 warning，不含正文或路径 |
 | GET | `/v1/admin/users` | owner/admin/auditor | 用户列表 |
 | POST | `/v1/admin/users` | owner/admin | 创建用户（仅 owner 可建 owner） |
 | PATCH | `/v1/admin/users/{id}` | owner/admin | 改非 Owner 账号显示名/密码；角色与状态仅 owner；admin 不能修改 owner |
@@ -81,17 +82,25 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | POST | `/v1/admin/devices/{id}/revoke` | owner/admin | 吊销凭据并断开在线 Connector |
 | DELETE | `/v1/admin/devices/{id}` | owner/admin | 删除设备记录 |
 | GET | `/v1/admin/audit` | owner/admin/auditor | 审计查询：`action/actor/deviceId/result/from/to/limit/offset` |
-| POST | `/v1/admin/pairing-codes` | owner/admin | 生成一次性桌面配对码（明文仅返回一次） |
-| GET | `/v1/admin/pairing-codes` | owner/admin/auditor | 最近 20 个配对码的生命周期状态 |
+| POST | `/v1/admin/pairing-codes` | owner/admin | 生成一次性桌面配对码，返回稳定 `pairingId`；明文仅返回一次 |
+| GET | `/v1/admin/pairing-codes` | owner/admin/auditor | 最近 20 个配对码的 `pairingId` 与生命周期状态 |
 | POST | `/v1/admin/mobile/pairing-codes` | 已登录 | 为用户生成手机配对码；bootstrap 必须显式传 `userId`，成员只能为自己生成 |
 | GET | `/v1/admin/mobile-devices` | owner/admin/auditor | 手机设备列表，永不返回令牌 |
 | POST | `/v1/admin/mobile-devices/{id}/revoke` | owner/admin | 吊销手机及其访问/刷新令牌 |
+| GET/POST | `/v1/admin/policies` | 读含 auditor；写 owner/admin | 访问策略列表/创建 |
+| PATCH/DELETE | `/v1/admin/policies/{id}` | owner/admin | 按 revision 更新/删除策略，冲突返回 `conflict` |
+| GET | `/v1/admin/users/{id}/access-preview` | owner/admin/auditor | 按用户预览策略可见桌面、工作区和 scopes，不含路径 |
+| GET | `/v1/admin/interactions` | owner/admin/auditor | 只读待处理审批/提问及完整核对上下文，不提供 Admin 决定 |
+| GET/PATCH | `/v1/admin/approval-policy` | 读含 auditor；写 owner/admin | 远程审批开关、30–600 秒 TTL 与 revision 乐观锁 |
+| GET | `/v1/admin/settings` | owner/admin | 只读运行配置、数据库方言/健康与生成时间，不含秘密 |
 
 安全约束：
 
 - 最后一位 **active** Owner 不能被降级、禁用或删除（返回 `conflict`）。Store 在事务内锁定 active Owner 集合并完成检查与写入，避免并发请求同时移除不同 Owner；删除用户及其依赖清理也在同一事务内完成。
 - Admin 只能维护非 Owner 账号；Owner 的显示名、角色、状态和密码只能由 Owner 修改，防止通过重置 Owner 密码提权。
 - Member 不能通过概览或设备列表读取全局账号、审计、工作区路径或设备指纹。
+- 手机有效权限为“用户所有启用策略按工作区求并集 ∩ 手机 active grant ∩ 桌面当前工作区/scopes”。无策略默认拒绝，已有 grant 不绕过策略；策略、桌面授权或 grant 收窄会关闭相关移动事件流并要求重新鉴权。
+- 策略更新和删除使用 revision 乐观锁；策略创建、更新、删除审计的 `details` 记录 before/after 策略内容，不包含密码、Token 或会话正文。
 - 登录失败对“邮箱不存在”和“密码错误”返回同一响应，且都会写审计，便于发现暴力破解。
 - 已吊销设备不会被断线回调改写回 `offline`（`revoked` 是终态）。
 - 配对码属于授权动作，只有 owner/admin 能生成；列表只暴露 `active/used/expired` 状态，明文码不可回读。
@@ -116,6 +125,8 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start received/waiting_desktop_authorization`、`pair.authorize received/completed` 及错误码日志。日志只包含 requestId、deviceId、数量与错误等白名单字段，不记录配对码、token/hash、Authorization、原始帧或工作区路径。配对数据库操作受 `CommandTimeout`（默认 15 秒）约束，内部错误返回 `internal_error`，不会误报为配对码无效。
 
 `session.create`、`session.prompt` 与 `session.model.select` 的 `requestId` 都是持久幂等键，由数据库唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。不同命令必须使用不同 requestId；模型选择的 sessionId/workspaceId/provider/model/reasoningEffort 都进入请求哈希。
+
+Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无错误且已完成准入的唯一记录；同一 requestId 重试不重复计数，未提交的离线请求不落记录。该指标表示 Connector 成功响应的唯一 prompt 准入数，不表示 Turn 已完成。
 
 ## 手机配对 API
 
@@ -155,6 +166,7 @@ Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start r
 - `pair.updateGrants` 允许桌面 Connector 在面板显式确认后更新自己的 workspace/scope（例如追加 `approve`），无需重新配对；Server 校验动作词汇并写审计 `pair.grants.update`，手机 grant 仍需单独申请和桌面确认。
 - 会话列表、create、transcript、模型读取/选择、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验工作区授权、会话真实归属或审批答案，形成双重 fail-closed。
 - 待处理审批只存在内存中，Server 重启或 Connector 断连即清空；同一 interaction 在 Server 内用 CAS 预留，避免两台手机重复消费。
+- 远程审批策略持久化在 `approval_policies`。关闭远程审批会停止新副本、清空待处理手机副本和在线状态，决定失败关闭；桌面原生审批链不受影响。TTL 变更立即收窄现有项，更新使用 revision 防止并发覆盖。
 - 手机 logout、管理员吊销手机、桌面吊销都会撤销相关 grant。
 - 手机 logout、管理员吊销手机、手机或桌面撤销 grant、用户被禁用或删除时，Server 会关闭该手机/用户已建立的 `/v1/mobile/events/ws`。事件订阅登记后会重新读取当前手机、用户和 grant 状态，避免旧握手身份在吊销竞态中继续建立连接。
 - **移动 Access Token 不能访问 `/v1/devices`、`/v1/sessions` 或 `/v1/events/ws` 等调试接口。** 移动端仅使用受 grant 约束的 `/v1/mobile/*` API；`/v1/mobile/events/ws` 先校验 grant，再以 compact follow 推送 assistant 增量，原始工具 payload 由 Server 过滤。
@@ -188,7 +200,9 @@ M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/�
 | `pairing_codes` | 一次性配对码 hash 与消费状态 |
 | `devices` | 设备身份、授权工作区/scope、令牌 hash、在线状态 |
 | `idempotency_records` | `session.create` / `session.prompt` / `session.model.select` 持久幂等结果 |
-| `audit_entries` | 只追加审计，按 `occurred_at`/`device_id`/`action` 建索引 |
+| `audit_entries` | 只追加审计，按 `occurred_at`/`device_id`/`action` 建索引；可选 details 保存策略 before/after |
+| `access_policies` | 用户关联、启用状态、桌面×工作区×scope 规则与 revision |
+| `approval_policies` | 单例远程审批开关、TTL 与 revision |
 | `users` | 管理账号（owner/admin/member/auditor） |
 | `admin_sessions` | 浏览器登录会话 token hash |
 | `mobile_pairing_codes` | 手机一次性配对码 hash、目标用户与消费状态 |

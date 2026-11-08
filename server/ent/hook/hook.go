@@ -9,6 +9,18 @@ import (
 	"github.com/deepseek/dsh-connect/server/ent"
 )
 
+// The AccessPolicyFunc type is an adapter to allow the use of ordinary
+// function as AccessPolicy mutator.
+type AccessPolicyFunc func(context.Context, *ent.AccessPolicyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccessPolicyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccessPolicyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccessPolicyMutation", m)
+}
+
 // The AdminSessionFunc type is an adapter to allow the use of ordinary
 // function as AdminSession mutator.
 type AdminSessionFunc func(context.Context, *ent.AdminSessionMutation) (ent.Value, error)
@@ -19,6 +31,18 @@ func (f AdminSessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AdminSessionMutation", m)
+}
+
+// The ApprovalPolicyFunc type is an adapter to allow the use of ordinary
+// function as ApprovalPolicy mutator.
+type ApprovalPolicyFunc func(context.Context, *ent.ApprovalPolicyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ApprovalPolicyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ApprovalPolicyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ApprovalPolicyMutation", m)
 }
 
 // The AttachmentBlobFunc type is an adapter to allow the use of ordinary

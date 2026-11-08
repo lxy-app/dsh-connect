@@ -13,6 +13,8 @@ bin/
 dist/
 .test-build/
 coverage/
+test-results/
+playwright-report/
 *.tsbuildinfo
 
 # Package artifacts (npm pack / publish)

@@ -1,0 +1,766 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/admin.schema.json",
+  "title": "DSH Connect Web Admin DTOs v1",
+  "$defs": {
+    "AdminRole": {
+      "type": "string",
+      "enum": ["owner", "admin", "member", "auditor"]
+    },
+    "AdminUserStatus": {
+      "type": "string",
+      "enum": ["active", "disabled"]
+    },
+    "AdminUser": {
+      "type": "object",
+      "description": "Public administrative user projection. Passwords and password hashes are never returned.",
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "role",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "email": {"type": "string", "format": "email", "maxLength": 254},
+        "displayName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "role": {"$ref": "#/$defs/AdminRole"},
+        "status": {"$ref": "#/$defs/AdminUserStatus"},
+        "lastLoginAt": {"type": "string", "format": "date-time"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AdminLoginRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected.",
+      "required": ["email", "password"],
+      "properties": {
+        "email": {"type": "string", "minLength": 1},
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "writeOnly": true,
+          "description": "Plaintext credential accepted only for authentication; it is never returned."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminLoginResponse": {
+      "type": "object",
+      "required": ["token", "expiresAt", "user"],
+      "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque Admin session token returned at login; only its hash is persisted."
+        },
+        "expiresAt": {"type": "string", "format": "date-time"},
+        "user": {"$ref": "#/$defs/AdminUser"}
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceCounts": {
+      "type": "object",
+      "required": ["total", "online", "offline", "waiting", "revoked"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "online": {"type": "integer", "minimum": 0},
+        "offline": {"type": "integer", "minimum": 0},
+        "waiting": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of devices in waiting_desktop_authorization state."
+        },
+        "revoked": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminUserCounts": {
+      "type": "object",
+      "required": ["total", "active", "disabled"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "active": {"type": "integer", "minimum": 0},
+        "disabled": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminOverviewResponse": {
+      "type": "object",
+      "required": [
+        "devices",
+        "users",
+        "auditEntries",
+        "recentActivity",
+        "activeSessions",
+        "todayPrompts",
+        "pendingInteractions",
+        "promptTrend",
+        "sessions",
+        "pendingRequests",
+        "warnings"
+      ],
+      "properties": {
+        "devices": {"$ref": "#/$defs/AdminDeviceCounts"},
+        "users": {"$ref": "#/$defs/AdminUserCounts"},
+        "auditEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of persisted audit entries."
+        },
+        "recentActivity": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "Up to eight newest audit entries.",
+          "items": {"$ref": "#/$defs/AdminAuditEntry"}
+        },
+        "activeSessions": {"type": "integer", "minimum": 0},
+        "todayPrompts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Prompts submitted on the current calendar date in the requested IANA time zone."
+        },
+        "pendingInteractions": {"type": "integer", "minimum": 0},
+        "promptTrend": {
+          "type": "array",
+          "description": "Prompt counts grouped by calendar date in the requested IANA time zone.",
+          "items": {"$ref": "#/$defs/AdminPromptTrendPoint"}
+        },
+        "sessions": {
+          "type": "array",
+          "maxItems": 5,
+          "description": "Up to five session metadata projections; no session content is included.",
+          "items": {"$ref": "#/$defs/AdminSessionMetadata"}
+        },
+        "pendingRequests": {
+          "type": "array",
+          "description": "Display-safe pending approval and question metadata without reasons, questions or answers.",
+          "items": {"$ref": "#/$defs/AdminPendingRequest"}
+        },
+        "warnings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminAccessWarning"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminUserListResponse": {
+      "type": "object",
+      "required": ["users"],
+      "properties": {
+        "users": {
+          "type": "array",
+          "description": "Users ordered by creation time, oldest first.",
+          "items": {"$ref": "#/$defs/AdminUser"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminCreateUserRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected. Only an owner may assign the owner role.",
+      "required": ["email", "displayName", "password"],
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254,
+          "description": "Normalized to lowercase and trimmed before storage."
+        },
+        "displayName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "password": {
+          "type": "string",
+          "minLength": 8,
+          "writeOnly": true,
+          "description": "Initial plaintext password; only a one-way hash is persisted and neither form is returned."
+        },
+        "role": {"$ref": "#/$defs/AdminRole", "default": "member"}
+      },
+      "additionalProperties": false
+    },
+    "AdminUpdateUserRequest": {
+      "type": "object",
+      "description": "Strictly decoded partial update; omitted fields remain unchanged. Unknown JSON fields are rejected. An empty object is a valid no-op.",
+      "properties": {
+        "displayName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "role": {
+          "$ref": "#/$defs/AdminRole",
+          "description": "Only an owner may change roles."
+        },
+        "status": {
+          "$ref": "#/$defs/AdminUserStatus",
+          "description": "Only an owner may enable or disable accounts."
+        },
+        "password": {
+          "type": "string",
+          "minLength": 8,
+          "writeOnly": true,
+          "description": "Replacement plaintext password; only a one-way hash is persisted and neither form is returned."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDevice": {
+      "type": "object",
+      "description": "Desktop device projection with credential-presence metadata only; token and pairing hashes are never returned.",
+      "required": [
+        "deviceId",
+        "deviceName",
+        "fingerprint",
+        "connectorVersion",
+        "status",
+        "workspaces",
+        "scopes",
+        "createdAt",
+        "updatedAt",
+        "hasToken"
+      ],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "fingerprint": {"type": "string", "minLength": 1},
+        "connectorVersion": {"type": "string"},
+        "status": {
+          "type": "string",
+          "enum": ["waiting_desktop_authorization", "online", "offline", "revoked"]
+        },
+        "workspaces": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/Workspace"}
+        },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"},
+        "lastSeenAt": {"type": "string", "format": "date-time"},
+        "hasToken": {
+          "type": "boolean",
+          "description": "Whether a device token hash is currently stored; never exposes the hash or plaintext token."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceListResponse": {
+      "type": "object",
+      "required": ["devices"],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminDevice"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceUpdateRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected.",
+      "required": ["deviceName"],
+      "properties": {
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256}
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceRevokeResponse": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"const": "revoked"}
+      },
+      "additionalProperties": false
+    },
+    "AdminAuditEntry": {
+      "type": "object",
+      "description": "Append-only action metadata; audit entries do not contain session content or credential material.",
+      "required": ["occurredAt", "actor", "action", "result"],
+      "properties": {
+        "occurredAt": {"type": "string", "format": "date-time"},
+        "actor": {"type": "string", "minLength": 1},
+        "action": {"type": "string", "minLength": 1},
+        "requestId": {"type": "string", "minLength": 1},
+        "deviceId": {"type": "string", "minLength": 1},
+        "sessionId": {"type": "string", "minLength": 1},
+        "result": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stored result such as success, error, waiting_desktop_authorization, started, or failed."
+        },
+        "errorCode": {"type": "string", "minLength": 1},
+        "sourceIp": {"type": "string", "minLength": 1},
+        "details": {
+          "type": "object",
+          "description": "Optional access-policy audit snapshots. Policy mutations may include before and/or after; no credential material is present.",
+          "properties": {
+            "before": {"$ref": "#/$defs/AccessPolicy"},
+            "after": {"$ref": "#/$defs/AccessPolicy"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminAuditListResponse": {
+      "type": "object",
+      "required": ["entries", "total", "limit", "offset"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "description": "Matching entries ordered by occurredAt and internal id, newest first.",
+          "items": {"$ref": "#/$defs/AdminAuditEntry"}
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total matching entries before limit and offset are applied."
+        },
+        "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+        "offset": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminAccessWarning": {
+      "type": "object",
+      "required": ["deviceId", "deviceName", "code", "message"],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1},
+        "deviceName": {"type": "string", "minLength": 1},
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "AdminSessionMetadata": {
+      "type": "object",
+      "description": "Display-safe session metadata only. Session bodies, messages, content, paths, working directories and operator details are never exposed.",
+      "required": [
+        "sessionId",
+        "title",
+        "deviceId",
+        "deviceName",
+        "workspaceId",
+        "workspaceName",
+        "status",
+        "updatedAt"
+      ],
+      "properties": {
+        "sessionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "title": {"type": "string"},
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "workspaceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "status": {"type": "string", "minLength": 1},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AdminSessionListResponse": {
+      "type": "object",
+      "required": ["sessions", "warnings"],
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminSessionMetadata"}
+        },
+        "warnings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminAccessWarning"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminPromptTrendPoint": {
+      "type": "object",
+      "required": ["date", "count"],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Calendar date in the requested IANA time zone."
+        },
+        "count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminPendingRequest": {
+      "type": "object",
+      "description": "Display-safe pending interaction metadata. Reasons, question forms and answers are never exposed.",
+      "required": [
+        "interactionId",
+        "kind",
+        "title",
+        "toolName",
+        "deviceId",
+        "deviceName",
+        "sessionId",
+        "workspaceId",
+        "createdAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"type": "string", "enum": ["approval", "question"]},
+        "title": {"type": "string"},
+        "toolName": {"type": "string"},
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "maxLength": 256},
+        "sessionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyRule": {
+      "type": "object",
+      "description": "Workspace and scope grants for one desktop. Each device may appear in at most one rule per policy; duplicate workspace ids and scopes are normalized away.",
+      "required": ["deviceId", "workspaceIds", "scopes"],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicy": {
+      "type": "object",
+      "required": [
+        "policyId",
+        "name",
+        "description",
+        "enabled",
+        "memberIds",
+        "rules",
+        "revision",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "policyId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "description": {"type": "string", "maxLength": 1024},
+        "enabled": {"type": "boolean"},
+        "memberIds": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "rules": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPolicyRule"}
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1,
+          "description": "Optimistic-concurrency revision; every successful update increments it."
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyCreateRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected, including inside rules. Omitted description, memberIds and rules default to empty values; enabled defaults to true.",
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "description": {"type": "string", "maxLength": 1024, "default": ""},
+        "enabled": {"type": "boolean", "default": true},
+        "memberIds": {
+          "type": "array",
+          "default": [],
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "rules": {
+          "type": "array",
+          "default": [],
+          "items": {"$ref": "#/$defs/AccessPolicyRule"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyUpdateRequest": {
+      "type": "object",
+      "description": "Strictly decoded partial update: unknown JSON fields are rejected, including inside rules. All policy fields are optional; revision is required and must match the current revision.",
+      "required": ["revision"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "description": {"type": "string", "maxLength": 1024},
+        "enabled": {"type": "boolean"},
+        "memberIds": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "rules": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPolicyRule"}
+        },
+        "revision": {"type": "integer", "format": "int64", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "AccessPolicyListResponse": {
+      "type": "object",
+      "required": ["policies"],
+      "properties": {
+        "policies": {
+          "type": "array",
+          "description": "Access policies ordered by creation time, oldest first.",
+          "items": {"$ref": "#/$defs/AccessPolicy"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPreviewWorkspace": {
+      "type": "object",
+      "description": "Display-safe workspace projection. Scopes may be empty when desktop grants no longer permit policy scopes; filesystem paths are never exposed.",
+      "required": ["id", "name", "scopes"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "scopes": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPreviewDesktop": {
+      "type": "object",
+      "description": "Effective desktop access after intersecting enabled policies with current desktop grants. No workspace paths or credential material are included.",
+      "required": ["deviceId", "deviceName", "online", "workspaces", "scopes"],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "online": {"type": "boolean"},
+        "workspaces": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPreviewWorkspace"}
+        },
+        "scopes": {
+          "type": "array",
+          "description": "Union of effective scopes across the listed workspaces.",
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessPreviewResponse": {
+      "type": "object",
+      "description": "Effective access for one user. Only enabled policies assigned to the user contribute; revoked and waiting desktops are omitted. Filesystem paths are never returned.",
+      "required": ["userId", "policyIds", "desktops"],
+      "properties": {
+        "userId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "policyIds": {
+          "type": "array",
+          "description": "Sorted ids of enabled policies assigned to this user.",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "desktops": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AccessPreviewDesktop"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDesktopPairingCodeResponse": {
+      "type": "object",
+      "description": "Freshly issued desktop pairing code. The plaintext code is returned only by this creation response; only its hash is persisted.",
+      "required": ["pairingId", "code", "expiresAt", "serverUrl"],
+      "properties": {
+        "pairingId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Stable administrative pairing record identifier."
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "One-time plaintext pairing code; never included in pairing-code listings or other read responses."
+        },
+        "expiresAt": {"type": "string", "format": "date-time"},
+        "serverUrl": {"type": "string", "format": "uri"}
+      },
+      "additionalProperties": false
+    },
+    "AdminDesktopPairingCodeState": {
+      "type": "object",
+      "description": "Pairing lifecycle metadata only. Neither the plaintext code nor its hash is exposed.",
+      "required": ["pairingId", "state", "createdAt", "expiresAt"],
+      "properties": {
+        "pairingId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Stable administrative pairing record identifier."
+        },
+        "state": {
+          "type": "string",
+          "enum": ["active", "waiting_desktop_authorization", "used", "expired"]
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"},
+        "usedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Present once the code has been consumed, including while desktop authorization is still waiting."
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Device created by consuming the code, when available."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDesktopPairingCodeListResponse": {
+      "type": "object",
+      "required": ["codes"],
+      "properties": {
+        "codes": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "Up to twenty most recently created pairing-code records, newest first; plaintext codes are never returned.",
+          "items": {"$ref": "#/$defs/AdminDesktopPairingCodeState"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminInteractionDetail": {
+      "type": "object",
+      "description": "Read-only pending approval or question detail for an authorized Admin operator. Optional tool, reason, call and question fields may be omitted when empty. It never includes answers, decisions, session content or credential material.",
+      "required": [
+        "interactionId",
+        "kind",
+        "title",
+        "deviceId",
+        "deviceName",
+        "sessionId",
+        "workspaceId",
+        "workspaceName",
+        "createdAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"type": "string", "enum": ["approval", "question"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 512},
+        "toolName": {"type": "string", "maxLength": 512},
+        "reason": {"type": "string", "maxLength": 4096},
+        "callId": {"type": "string", "maxLength": 256},
+        "questions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {"$ref": "interaction.schema.json#/$defs/InteractionQuestion"}
+        },
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "maxLength": 256},
+        "sessionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceName": {"type": "string", "maxLength": 512},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AdminInteractionListResponse": {
+      "type": "object",
+      "required": ["interactions"],
+      "properties": {
+        "interactions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminInteractionDetail"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalPolicy": {
+      "type": "object",
+      "description": "Singleton remote-approval policy with an optimistic-concurrency revision.",
+      "required": ["remoteEnabled", "ttlSeconds", "revision", "createdAt", "updatedAt"],
+      "properties": {
+        "remoteEnabled": {"type": "boolean"},
+        "ttlSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 600,
+          "description": "Maximum time a remote interaction remains answerable, from 30 through 600 seconds."
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1,
+          "description": "Optimistic-concurrency revision; every successful update increments it."
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "ApprovalPolicyUpdateRequest": {
+      "type": "object",
+      "description": "Strictly decoded partial update: unknown JSON fields are rejected. remoteEnabled and ttlSeconds are optional; revision is required and must match the current revision.",
+      "required": ["revision"],
+      "properties": {
+        "remoteEnabled": {"type": "boolean"},
+        "ttlSeconds": {"type": "integer", "minimum": 30, "maximum": 600},
+        "revision": {"type": "integer", "format": "int64", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "AdminRuntimeSettings": {
+      "type": "object",
+      "description": "Display-safe runtime configuration and health metadata. Token values, passwords, APNs/FCM credentials, database URLs and local storage paths are never returned.",
+      "required": [
+        "serverUrl",
+        "pairingCodeTTLSeconds",
+        "mobileAccessTokenTTLSeconds",
+        "adminSessionTTLSeconds",
+        "commandTimeoutSeconds",
+        "attachmentsMode",
+        "maxAttachmentBytes",
+        "attachmentTTLSeconds",
+        "goVersion",
+        "databaseDialect",
+        "databaseConnected",
+        "generatedAt"
+      ],
+      "properties": {
+        "serverUrl": {"type": "string", "format": "uri"},
+        "pairingCodeTTLSeconds": {"type": "integer", "minimum": 1},
+        "mobileAccessTokenTTLSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Lifetime configuration only; no mobile access token is returned."
+        },
+        "adminSessionTTLSeconds": {"type": "integer", "minimum": 1},
+        "commandTimeoutSeconds": {"type": "integer", "minimum": 1},
+        "attachmentsMode": {"type": "string", "enum": ["off", "read", "readwrite"]},
+        "maxAttachmentBytes": {"type": "integer", "format": "int64", "minimum": 1},
+        "attachmentTTLSeconds": {"type": "integer", "minimum": 1},
+        "goVersion": {"type": "string", "minLength": 1},
+        "databaseDialect": {"type": "string", "enum": ["postgres", "sqlite"]},
+        "databaseConnected": {"type": "boolean"},
+        "generatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

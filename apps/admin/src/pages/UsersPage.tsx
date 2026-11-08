@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   App as AntApp,
   Button,
   Card,
+  Drawer,
   Empty,
   Form,
   Input,
@@ -10,15 +12,16 @@ import {
   Popconfirm,
   Select,
   Space,
+  Spin,
   Switch,
   Table,
   Tag,
   Typography,
 } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { adminApi, ApiError } from '../api/client';
-import type { AdminUser, Role } from '../api/client';
+import type { AccessPolicy, AdminUser, Role, UserAccessPreview } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDateTime, formatRelative, roleColors, roleLabels } from '../utils/format';
 
@@ -35,8 +38,16 @@ export function UsersPage() {
   const { message } = AntApp.useApp();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [policies, setPolicies] = useState<AccessPolicy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [policyLoading, setPolicyLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [policyError, setPolicyError] = useState<string | null>(null);
+  const [previewUser, setPreviewUser] = useState<AdminUser | null>(null);
+  const [preview, setPreview] = useState<UserAccessPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewRetry, setPreviewRetry] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -58,9 +69,51 @@ export function UsersPage() {
     }
   }, []);
 
+  const loadPolicies = useCallback(async () => {
+    setPolicyLoading(true);
+    setPolicyError(null);
+    try {
+      setPolicies(await adminApi.policies());
+    } catch (cause) {
+      setPolicyError(cause instanceof ApiError ? cause.message : '加载关联策略失败');
+    } finally {
+      setPolicyLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadPolicies();
+  }, [load, loadPolicies]);
+
+  useEffect(() => {
+    if (!previewUser) return;
+    const controller = new AbortController();
+    setPreview(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    adminApi
+      .accessPreview(previewUser.id, controller.signal)
+      .then((response) => {
+        if (!controller.signal.aborted) setPreview(response);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setPreviewError(cause instanceof ApiError ? cause.message : '加载访问预览失败');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPreviewLoading(false);
+      });
+    return () => controller.abort();
+  }, [previewUser, previewRetry]);
+
+  const refresh = () => {
+    void load();
+    void loadPolicies();
+  };
+
+  const associatedPolicies = (userId: string) => policies.filter((policy) => policy.memberIds.includes(userId));
 
   const openCreate = () => {
     createForm.resetFields();
@@ -172,6 +225,35 @@ export function UsersPage() {
       ),
     },
     {
+      title: '关联策略',
+      key: 'policies',
+      width: 210,
+      render: (_, row) => {
+        if (policyLoading) return <Text type="secondary">加载中…</Text>;
+        const associated = associatedPolicies(row.id);
+        return associated.length ? (
+          <Space size={4} wrap>
+            {associated.map((policy) => (
+              <Tag key={policy.policyId} color={policy.enabled ? 'blue' : 'default'}>{policy.name}</Tag>
+            ))}
+          </Space>
+        ) : (
+          <Text type="secondary">未关联</Text>
+        );
+      },
+    },
+    {
+      title: '策略桌面数',
+      key: 'policyDesktops',
+      width: 110,
+      render: (_, row) => {
+        const deviceIds = associatedPolicies(row.id)
+          .filter((policy) => policy.enabled)
+          .flatMap((policy) => policy.rules.map((rule) => rule.deviceId));
+        return <Text>{new Set(deviceIds).size}</Text>;
+      },
+    },
+    {
       title: '最近登录',
       dataIndex: 'lastLoginAt',
       key: 'lastLoginAt',
@@ -192,9 +274,17 @@ export function UsersPage() {
     {
       title: '操作',
       key: 'actions',
-      width: 150,
+      width: 250,
       render: (_, row) => (
         <Space size={4}>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => setPreviewUser(row)}
+          >
+            访问预览
+          </Button>
           <Button
             type="link"
             size="small"
@@ -236,7 +326,7 @@ export function UsersPage() {
           <Text type="secondary">所有者可变更角色与状态；管理员可维护成员资料</Text>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading || policyLoading}>
             刷新
           </Button>
           <Button type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={openCreate}>
@@ -244,6 +334,17 @@ export function UsersPage() {
           </Button>
         </Space>
       </div>
+
+      {policyError ? (
+        <Alert
+          type="warning"
+          showIcon
+          title="关联策略加载失败"
+          description={policyError}
+          action={<Button size="small" onClick={() => void loadPolicies()}>重试</Button>}
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
 
       <Card>
         {error ? (
@@ -259,6 +360,97 @@ export function UsersPage() {
           />
         )}
       </Card>
+
+      <Drawer
+        open={previewUser !== null}
+        title={`访问预览：${previewUser?.displayName ?? ''}`}
+        size={620}
+        onClose={() => setPreviewUser(null)}
+        destroyOnHidden
+      >
+        <Text type="secondary">以下结果由 Server 按该用户当前关联策略实时计算。</Text>
+        <div style={{ marginTop: 16 }}>
+          {previewError ? (
+            <Alert
+              type="error"
+              showIcon
+              title="无法加载访问预览"
+              description={previewError}
+              action={<Button size="small" onClick={() => setPreviewRetry((value) => value + 1)}>重试</Button>}
+            />
+          ) : (
+            <Spin spinning={previewLoading}>
+              {preview ? (
+                <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+                  <div>
+                    <Text strong>命中策略</Text>
+                    <div style={{ marginTop: 8 }}>
+                      {preview.policyIds.length ? (
+                        <Space size={4} wrap>
+                          {preview.policyIds.map((policyId) => {
+                            const policy = policies.find((candidate) => candidate.policyId === policyId);
+                            return <Tag key={policyId} color="blue">{policy?.name ?? policyId}</Tag>;
+                          })}
+                        </Space>
+                      ) : (
+                        <Text type="secondary">无关联策略</Text>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Text strong>可访问桌面（{preview.desktops.length}）</Text>
+                  </div>
+                  {preview.desktops.length === 0 ? (
+                    <Empty description="该用户当前没有可访问的桌面" />
+                  ) : (
+                    preview.desktops.map((desktop) => (
+                      <Card
+                        key={desktop.deviceId}
+                        size="small"
+                        title={desktop.deviceName}
+                        extra={<Tag color={desktop.online ? 'green' : 'default'}>{desktop.online ? '在线' : '离线'}</Tag>}
+                      >
+                        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+                          <div><Text type="secondary">设备 ID：</Text><Text code>{desktop.deviceId}</Text></div>
+                          <div>
+                            <Text>工作区</Text>
+                            <div style={{ marginTop: 6 }}>
+                              {desktop.workspaces.length ? (
+                                <Space orientation="vertical" size={8}>
+                                  {desktop.workspaces.map((workspace) => (
+                                    <Space key={workspace.id} size={4} wrap>
+                                      <Tag>{workspace.name}</Tag>
+                                      {workspace.scopes.map((scope) => (
+                                        <Tag key={scope} color="blue">{scope}</Tag>
+                                      ))}
+                                    </Space>
+                                  ))}
+                                </Space>
+                              ) : <Text type="secondary">无</Text>}
+                            </div>
+                          </div>
+                          <div>
+                            <Text>桌面权限并集</Text>
+                            <div style={{ marginTop: 6 }}>
+                              {desktop.scopes.length ? (
+                                <Space size={4} wrap>
+                                  {desktop.scopes.map((scope) => <Tag key={scope} color="blue">{scope}</Tag>)}
+                                </Space>
+                              ) : <Text type="secondary">无</Text>}
+                            </div>
+                          </div>
+                        </Space>
+                      </Card>
+                    ))
+                  )}
+                </Space>
+              ) : (
+                <div style={{ minHeight: 180 }} />
+              )}
+            </Spin>
+          )}
+        </div>
+      </Drawer>
 
       <Modal
         open={createOpen}

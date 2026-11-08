@@ -124,6 +124,12 @@ func (_c *AuditEntryCreate) SetNillableSourceIP(v *string) *AuditEntryCreate {
 	return _c
 }
 
+// SetDetails sets the "details" field.
+func (_c *AuditEntryCreate) SetDetails(v []byte) *AuditEntryCreate {
+	_c.mutation.SetDetails(v)
+	return _c
+}
+
 // Mutation returns the AuditEntryMutation object of the builder.
 func (_c *AuditEntryCreate) Mutation() *AuditEntryMutation {
 	return _c.mutation
@@ -241,6 +247,10 @@ func (_c *AuditEntryCreate) createSpec() (*AuditEntry, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SourceIP(); ok {
 		_spec.SetField(auditentry.FieldSourceIP, field.TypeString, value)
 		_node.SourceIP = value
+	}
+	if value, ok := _c.mutation.Details(); ok {
+		_spec.SetField(auditentry.FieldDetails, field.TypeBytes, value)
+		_node.Details = value
 	}
 	return _node, _spec
 }
@@ -429,6 +439,24 @@ func (u *AuditEntryUpsert) UpdateSourceIP() *AuditEntryUpsert {
 // ClearSourceIP clears the value of the "source_ip" field.
 func (u *AuditEntryUpsert) ClearSourceIP() *AuditEntryUpsert {
 	u.SetNull(auditentry.FieldSourceIP)
+	return u
+}
+
+// SetDetails sets the "details" field.
+func (u *AuditEntryUpsert) SetDetails(v []byte) *AuditEntryUpsert {
+	u.Set(auditentry.FieldDetails, v)
+	return u
+}
+
+// UpdateDetails sets the "details" field to the value that was provided on create.
+func (u *AuditEntryUpsert) UpdateDetails() *AuditEntryUpsert {
+	u.SetExcluded(auditentry.FieldDetails)
+	return u
+}
+
+// ClearDetails clears the value of the "details" field.
+func (u *AuditEntryUpsert) ClearDetails() *AuditEntryUpsert {
+	u.SetNull(auditentry.FieldDetails)
 	return u
 }
 
@@ -630,6 +658,27 @@ func (u *AuditEntryUpsertOne) UpdateSourceIP() *AuditEntryUpsertOne {
 func (u *AuditEntryUpsertOne) ClearSourceIP() *AuditEntryUpsertOne {
 	return u.Update(func(s *AuditEntryUpsert) {
 		s.ClearSourceIP()
+	})
+}
+
+// SetDetails sets the "details" field.
+func (u *AuditEntryUpsertOne) SetDetails(v []byte) *AuditEntryUpsertOne {
+	return u.Update(func(s *AuditEntryUpsert) {
+		s.SetDetails(v)
+	})
+}
+
+// UpdateDetails sets the "details" field to the value that was provided on create.
+func (u *AuditEntryUpsertOne) UpdateDetails() *AuditEntryUpsertOne {
+	return u.Update(func(s *AuditEntryUpsert) {
+		s.UpdateDetails()
+	})
+}
+
+// ClearDetails clears the value of the "details" field.
+func (u *AuditEntryUpsertOne) ClearDetails() *AuditEntryUpsertOne {
+	return u.Update(func(s *AuditEntryUpsert) {
+		s.ClearDetails()
 	})
 }
 
@@ -995,6 +1044,27 @@ func (u *AuditEntryUpsertBulk) UpdateSourceIP() *AuditEntryUpsertBulk {
 func (u *AuditEntryUpsertBulk) ClearSourceIP() *AuditEntryUpsertBulk {
 	return u.Update(func(s *AuditEntryUpsert) {
 		s.ClearSourceIP()
+	})
+}
+
+// SetDetails sets the "details" field.
+func (u *AuditEntryUpsertBulk) SetDetails(v []byte) *AuditEntryUpsertBulk {
+	return u.Update(func(s *AuditEntryUpsert) {
+		s.SetDetails(v)
+	})
+}
+
+// UpdateDetails sets the "details" field to the value that was provided on create.
+func (u *AuditEntryUpsertBulk) UpdateDetails() *AuditEntryUpsertBulk {
+	return u.Update(func(s *AuditEntryUpsert) {
+		s.UpdateDetails()
+	})
+}
+
+// ClearDetails clears the value of the "details" field.
+func (u *AuditEntryUpsertBulk) ClearDetails() *AuditEntryUpsertBulk {
+	return u.Update(func(s *AuditEntryUpsert) {
+		s.ClearDetails()
 	})
 }
 

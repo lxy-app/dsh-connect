@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -157,12 +158,69 @@ func TestIdempotencyRejectsDuplicateRequestID(t *testing.T) {
 	}
 }
 
+func TestPromptCompletionsFiltersAndReturnsEveryAdmission(t *testing.T) {
+	persistent := newStore(t)
+	ctx := context.Background()
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
+
+	// Insert in reverse time order and exceed the Admin audit page ceiling to
+	// prove this operational metric is neither paginated nor implicitly capped.
+	for index := 0; index < 501; index++ {
+		completedAt := base.Add(time.Duration(500-index) * time.Second)
+		record := store.IdempotencyRecord{
+			RequestID: fmt.Sprintf("prompt-completion-%03d", index), Method: protocol.MethodSessionPrompt,
+			DeviceID: "dev-1", RequestHash: "not-needed-for-metrics", Result: json.RawMessage(`{"status":"accepted"}`),
+			CreatedAt: completedAt.Add(-time.Second), CompletedAt: completedAt,
+		}
+		if err := persistent.CompleteIdempotency(ctx, record); err != nil {
+			t.Fatalf("CompleteIdempotency %d: %v", index, err)
+		}
+	}
+	excluded := []store.IdempotencyRecord{
+		{RequestID: "prompt-before-since", Method: protocol.MethodSessionPrompt, DeviceID: "dev-1", RequestHash: "hash", CreatedAt: base.Add(-2 * time.Second), CompletedAt: base.Add(-time.Second)},
+		{RequestID: "prompt-create", Method: protocol.MethodSessionCreate, DeviceID: "dev-1", RequestHash: "hash", CreatedAt: base, CompletedAt: base.Add(time.Second)},
+		{RequestID: "prompt-error", Method: protocol.MethodSessionPrompt, DeviceID: "dev-1", RequestHash: "hash", CreatedAt: base, CompletedAt: base.Add(time.Second), Error: &protocol.Error{Code: protocol.CodeCommandTimeout, Message: "timeout", Retryable: true}},
+	}
+	for _, record := range excluded {
+		if err := persistent.CompleteIdempotency(ctx, record); err != nil {
+			t.Fatalf("CompleteIdempotency excluded %s: %v", record.RequestID, err)
+		}
+	}
+
+	completions, err := persistent.PromptCompletions(ctx, base)
+	if err != nil {
+		t.Fatalf("PromptCompletions: %v", err)
+	}
+	if len(completions) != 501 {
+		t.Fatalf("PromptCompletions len=%d; want all 501 successful prompt admissions", len(completions))
+	}
+	if !completions[0].Equal(base) || !completions[len(completions)-1].Equal(base.Add(500*time.Second)) {
+		t.Fatalf("PromptCompletions not sorted by completedAt: first=%s last=%s", completions[0], completions[len(completions)-1])
+	}
+	for index := 1; index < len(completions); index++ {
+		if completions[index].Before(completions[index-1]) {
+			t.Fatalf("PromptCompletions out of order at %d", index)
+		}
+	}
+
+	bounded, err := persistent.PromptCompletions(ctx, base.Add(250*time.Second))
+	if err != nil {
+		t.Fatalf("PromptCompletions bounded: %v", err)
+	}
+	if len(bounded) != 251 {
+		t.Fatalf("bounded PromptCompletions len=%d; want 251 inclusive rows", len(bounded))
+	}
+	if !bounded[0].Equal(base.Add(250 * time.Second)) {
+		t.Fatalf("bounded PromptCompletions first=%s; want inclusive since boundary", bounded[0])
+	}
+}
+
 func TestPairingCodeCanOnlyBeConsumedOnce(t *testing.T) {
 	persistent := newStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	code := "code"
-	if err := persistent.CreatePairingCode(ctx, store.PairingCode{
+	if _, err := persistent.CreatePairingCode(ctx, store.PairingCode{
 		CodeHash:  store.HashToken(code),
 		CreatedAt: now,
 		ExpiresAt: now.Add(time.Minute),
@@ -192,7 +250,7 @@ func TestPairingCodeExpiryAndAuthorization(t *testing.T) {
 	now := time.Now().UTC()
 
 	expired := "expired-code"
-	if err := persistent.CreatePairingCode(ctx, store.PairingCode{
+	if _, err := persistent.CreatePairingCode(ctx, store.PairingCode{
 		CodeHash:  store.HashToken(expired),
 		CreatedAt: now.Add(-time.Hour),
 		ExpiresAt: now.Add(-time.Minute),
@@ -207,7 +265,7 @@ func TestPairingCodeExpiryAndAuthorization(t *testing.T) {
 	}
 
 	code := "good-code"
-	if err := persistent.CreatePairingCode(ctx, store.PairingCode{
+	if _, err := persistent.CreatePairingCode(ctx, store.PairingCode{
 		CodeHash:  store.HashToken(code),
 		CreatedAt: now,
 		ExpiresAt: now.Add(10 * time.Minute),
@@ -413,7 +471,7 @@ func TestAuditListingFiltersAndPaginates(t *testing.T) {
 	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
 
 	entries := []store.AuditEntry{
-		{OccurredAt: base, Actor: "bootstrap", Action: "pairing_code.create", Result: "success"},
+		{OccurredAt: base, Actor: "bootstrap", Action: "pairing_code.create", Result: "success", Details: json.RawMessage(`{"before":null,"after":{"revision":1}}`)},
 		{OccurredAt: base.Add(time.Minute), Actor: "connector", Action: "pair.start", DeviceID: "dev-1", Result: "success"},
 		{OccurredAt: base.Add(2 * time.Minute), Actor: "connector", Action: "pair.start", DeviceID: "dev-2", Result: "error", ErrorCode: "pairing_code_invalid"},
 	}
@@ -433,6 +491,9 @@ func TestAuditListingFiltersAndPaginates(t *testing.T) {
 	// Newest first.
 	if all[0].DeviceID != "dev-2" {
 		t.Fatalf("audit not newest-first: %+v", all[0])
+	}
+	if !bytes.Contains(all[2].Details, []byte(`"revision":1`)) {
+		t.Fatalf("audit details were not preserved: %+v", all[2])
 	}
 
 	filtered, filteredTotal, err := persistent.Audit(ctx, store.AuditQuery{Result: "error", Limit: 10})

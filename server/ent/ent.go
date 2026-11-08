@@ -12,7 +12,9 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/deepseek/dsh-connect/server/ent/accesspolicy"
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
+	"github.com/deepseek/dsh-connect/server/ent/approvalpolicy"
 	"github.com/deepseek/dsh-connect/server/ent/attachmentblob"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/device"
@@ -83,7 +85,9 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			accesspolicy.Table:      accesspolicy.ValidColumn,
 			adminsession.Table:      adminsession.ValidColumn,
+			approvalpolicy.Table:    approvalpolicy.ValidColumn,
 			attachmentblob.Table:    attachmentblob.ValidColumn,
 			auditentry.Table:        auditentry.ValidColumn,
 			device.Table:            device.ValidColumn,

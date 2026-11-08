@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"github.com/deepseek/dsh-connect/server/ent/accesspolicy"
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
+	"github.com/deepseek/dsh-connect/server/ent/approvalpolicy"
 	"github.com/deepseek/dsh-connect/server/ent/attachmentblob"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/device"
@@ -33,7 +35,9 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
+	TypeAccessPolicy      = "AccessPolicy"
 	TypeAdminSession      = "AdminSession"
+	TypeApprovalPolicy    = "ApprovalPolicy"
 	TypeAttachmentBlob    = "AttachmentBlob"
 	TypeAuditEntry        = "AuditEntry"
 	TypeDevice            = "Device"
@@ -45,6 +49,278 @@ const (
 	TypeSessionAttachment = "SessionAttachment"
 	TypeUser              = "User"
 )
+
+// AccessPolicyMutation represents an operation that mutates the AccessPolicy nodes in the graph.
+type AccessPolicyMutation struct {
+	accesspolicy.Mutation
+	config
+	id       *string
+	done     bool
+	oldValue func(context.Context) (*AccessPolicy, error)
+}
+
+var _ ent.Mutation = (*AccessPolicyMutation)(nil)
+
+// accesspolicyOption allows management of the mutation configuration using functional options.
+type accesspolicyOption func(*AccessPolicyMutation)
+
+// newAccessPolicyMutation creates new mutation for the AccessPolicy entity.
+func newAccessPolicyMutation(c config, op Op, opts ...accesspolicyOption) *AccessPolicyMutation {
+	m := &AccessPolicyMutation{
+		Mutation: *accesspolicy.NewMutation(op),
+		config:   c,
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of AccessPolicy entities.
+func (m *AccessPolicyMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AccessPolicyMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// withAccessPolicyID sets the ID field of the mutation.
+func withAccessPolicyID(id string) accesspolicyOption {
+	return func(m *AccessPolicyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *AccessPolicy
+		)
+		m.oldValue = func(ctx context.Context) (*AccessPolicy, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().AccessPolicy.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAccessPolicy sets the old AccessPolicy of the mutation.
+func withAccessPolicy(node *AccessPolicy) accesspolicyOption {
+	return func(m *AccessPolicyMutation) {
+		m.oldValue = func(context.Context) (*AccessPolicy, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AccessPolicyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AccessPolicyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AccessPolicyMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.Op().Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.Op().Is(OpUpdate | OpDelete):
+		return m.Client().AccessPolicy.Query().Where(m.Predicates()...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.Op())
+	}
+}
+
+// OldName returns the old "name" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// OldDescription returns the old "description" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// OldEnabled returns the old "enabled" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldEnabled(ctx context.Context) (v bool, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldEnabled is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnabled: %w", err)
+	}
+	return oldValue.Enabled, nil
+}
+
+// OldMemberIds returns the old "member_ids" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldMemberIds(ctx context.Context) (v []string, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldMemberIds is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldMemberIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemberIds: %w", err)
+	}
+	return oldValue.MemberIds, nil
+}
+
+// OldRules returns the old "rules" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldRules(ctx context.Context) (v []schema.AccessPolicyRule, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldRules is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldRules requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRules: %w", err)
+	}
+	return oldValue.Rules, nil
+}
+
+// OldRevision returns the old "revision" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldRevision(ctx context.Context) (v int64, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldRevision is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevision: %w", err)
+	}
+	return oldValue.Revision, nil
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the AccessPolicy entity.
+// If the AccessPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccessPolicyMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AccessPolicyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case accesspolicy.FieldName:
+		return m.OldName(ctx)
+	case accesspolicy.FieldDescription:
+		return m.OldDescription(ctx)
+	case accesspolicy.FieldEnabled:
+		return m.OldEnabled(ctx)
+	case accesspolicy.FieldMemberIds:
+		return m.OldMemberIds(ctx)
+	case accesspolicy.FieldRules:
+		return m.OldRules(ctx)
+	case accesspolicy.FieldRevision:
+		return m.OldRevision(ctx)
+	case accesspolicy.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case accesspolicy.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown AccessPolicy field %s", name)
+}
 
 // AdminSessionMutation represents an operation that mutates the AdminSession nodes in the graph.
 type AdminSessionMutation struct {
@@ -297,6 +573,221 @@ func (m *AdminSessionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldUserAgent(ctx)
 	}
 	return nil, fmt.Errorf("unknown AdminSession field %s", name)
+}
+
+// ApprovalPolicyMutation represents an operation that mutates the ApprovalPolicy nodes in the graph.
+type ApprovalPolicyMutation struct {
+	approvalpolicy.Mutation
+	config
+	id       *string
+	done     bool
+	oldValue func(context.Context) (*ApprovalPolicy, error)
+}
+
+var _ ent.Mutation = (*ApprovalPolicyMutation)(nil)
+
+// approvalpolicyOption allows management of the mutation configuration using functional options.
+type approvalpolicyOption func(*ApprovalPolicyMutation)
+
+// newApprovalPolicyMutation creates new mutation for the ApprovalPolicy entity.
+func newApprovalPolicyMutation(c config, op Op, opts ...approvalpolicyOption) *ApprovalPolicyMutation {
+	m := &ApprovalPolicyMutation{
+		Mutation: *approvalpolicy.NewMutation(op),
+		config:   c,
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ApprovalPolicy entities.
+func (m *ApprovalPolicyMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ApprovalPolicyMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// withApprovalPolicyID sets the ID field of the mutation.
+func withApprovalPolicyID(id string) approvalpolicyOption {
+	return func(m *ApprovalPolicyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ApprovalPolicy
+		)
+		m.oldValue = func(ctx context.Context) (*ApprovalPolicy, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ApprovalPolicy.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withApprovalPolicy sets the old ApprovalPolicy of the mutation.
+func withApprovalPolicy(node *ApprovalPolicy) approvalpolicyOption {
+	return func(m *ApprovalPolicyMutation) {
+		m.oldValue = func(context.Context) (*ApprovalPolicy, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ApprovalPolicyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ApprovalPolicyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ApprovalPolicyMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.Op().Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.Op().Is(OpUpdate | OpDelete):
+		return m.Client().ApprovalPolicy.Query().Where(m.Predicates()...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.Op())
+	}
+}
+
+// OldRemoteEnabled returns the old "remote_enabled" field's value of the ApprovalPolicy entity.
+// If the ApprovalPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApprovalPolicyMutation) OldRemoteEnabled(ctx context.Context) (v bool, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldRemoteEnabled is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldRemoteEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemoteEnabled: %w", err)
+	}
+	return oldValue.RemoteEnabled, nil
+}
+
+// OldTTLSeconds returns the old "ttl_seconds" field's value of the ApprovalPolicy entity.
+// If the ApprovalPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApprovalPolicyMutation) OldTTLSeconds(ctx context.Context) (v int, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldTTLSeconds is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldTTLSeconds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTTLSeconds: %w", err)
+	}
+	return oldValue.TTLSeconds, nil
+}
+
+// OldRevision returns the old "revision" field's value of the ApprovalPolicy entity.
+// If the ApprovalPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApprovalPolicyMutation) OldRevision(ctx context.Context) (v int64, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldRevision is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevision: %w", err)
+	}
+	return oldValue.Revision, nil
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ApprovalPolicy entity.
+// If the ApprovalPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApprovalPolicyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ApprovalPolicy entity.
+// If the ApprovalPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApprovalPolicyMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ApprovalPolicyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case approvalpolicy.FieldRemoteEnabled:
+		return m.OldRemoteEnabled(ctx)
+	case approvalpolicy.FieldTTLSeconds:
+		return m.OldTTLSeconds(ctx)
+	case approvalpolicy.FieldRevision:
+		return m.OldRevision(ctx)
+	case approvalpolicy.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case approvalpolicy.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ApprovalPolicy field %s", name)
 }
 
 // AttachmentBlobMutation represents an operation that mutates the AttachmentBlob nodes in the graph.
@@ -772,6 +1263,23 @@ func (m *AuditEntryMutation) OldSourceIP(ctx context.Context) (v string, err err
 	return oldValue.SourceIP, nil
 }
 
+// OldDetails returns the old "details" field's value of the AuditEntry entity.
+// If the AuditEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AuditEntryMutation) OldDetails(ctx context.Context) (v []byte, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldDetails is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldDetails requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDetails: %w", err)
+	}
+	return oldValue.Details, nil
+}
+
 // OldField returns the old value of the field from the database. An error is
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
@@ -795,6 +1303,8 @@ func (m *AuditEntryMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldErrorCode(ctx)
 	case auditentry.FieldSourceIP:
 		return m.OldSourceIP(ctx)
+	case auditentry.FieldDetails:
+		return m.OldDetails(ctx)
 	}
 	return nil, fmt.Errorf("unknown AuditEntry field %s", name)
 }

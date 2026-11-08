@@ -27,6 +27,10 @@ tags:
     description: Session commands relayed through an authorized Connector.
   - name: events
     description: Persistent and ephemeral session event delivery.
+  - name: adminAuth
+    description: Web Admin login sessions and current-operator identity.
+  - name: admin
+    description: Role-enforced Web Admin management APIs.
   - name: mobile
     description: Mobile pairing, identity, token rotation and administrative revocation.
   - name: mobileAccess
@@ -229,6 +233,651 @@ paths:
           description: Switching Protocols to WebSocket (WSS in production).
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/admin/auth/login:
+    post:
+      tags: [adminAuth]
+      operationId: loginAdmin
+      summary: Create a Web Admin session
+      description: |
+        Public login endpoint. The JSON body is strictly decoded and rejects
+        unknown fields. Invalid email/password pairs return the same 401 response;
+        a valid but disabled account returns 403. The plaintext password is never
+        returned or persisted, and only a hash of the issued session token is stored.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminLoginRequest}
+      responses:
+        "200":
+          description: Admin session created. The opaque token is returned here for the client to store.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminLoginResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/auth/logout:
+    post:
+      tags: [adminAuth]
+      operationId: logoutAdmin
+      summary: Revoke the current Web Admin session
+      description: Requires an authenticated Admin actor; no request body is used. The client must discard its token even if the request fails.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "204":
+          description: Session revoked, or the supplied bootstrap credential has no server-side session to revoke.
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/auth/me:
+    get:
+      tags: [adminAuth]
+      operationId: getAdminMe
+      summary: Read the current Admin operator
+      description: Any authenticated Admin role may call this endpoint. Bootstrap authentication returns a synthetic active owner. Passwords and password hashes are never returned.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Current public user projection.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminUser}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/admin/overview:
+    get:
+      tags: [admin]
+      operationId: getAdminOverview
+      summary: Read management counts and operational activity
+      description: |
+        Available to owner, admin and auditor roles. Recent activity contains at most
+        eight newest audit entries, and sessions at most five metadata projections.
+        `tz` selects the IANA time zone for todayPrompts and promptTrend and defaults
+        to UTC; an invalid time zone returns 400. Session content, filesystem paths,
+        pending-request reasons, question forms and answers are never returned.
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: IANA time zone name used for calendar-day aggregation, for example Asia/Shanghai.
+          schema: {type: string, minLength: 1, default: UTC}
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Current management and operations overview.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminOverviewResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/sessions:
+    get:
+      tags: [admin]
+      operationId: listAdminSessions
+      summary: List display-safe session metadata
+      description: |
+        Available to owner, admin and auditor roles. Returns session metadata and
+        per-device warnings only; session bodies, messages, content, paths, working
+        directories and operator details are never returned.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Session metadata plus per-device aggregation warnings.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminSessionListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/interactions:
+    get:
+      tags: [admin]
+      operationId: listAdminInteractions
+      summary: List pending approval and question details
+      description: |
+        Available to owner, admin and auditor roles. Returns currently pending
+        interactions with display-safe device/workspace metadata, approval reasons
+        and question forms. Answers, session content and credentials are never
+        returned. This is a read-only Admin projection; no Admin decision endpoint
+        is provided, and only the existing mobile decision flow may answer one.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Pending interaction details.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminInteractionListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/approval-policy:
+    get:
+      tags: [admin]
+      operationId: getAdminApprovalPolicy
+      summary: Read the remote-approval policy
+      description: Available to owner, admin and auditor roles. Returns the singleton policy and its current optimistic-concurrency revision.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Current remote-approval policy.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/ApprovalPolicy}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    patch:
+      tags: [admin]
+      operationId: updateAdminApprovalPolicy
+      summary: Partially update the remote-approval policy
+      description: |
+        Available to owner and admin roles. The JSON body is strictly decoded and
+        rejects unknown fields. `remoteEnabled` and `ttlSeconds` are optional;
+        `ttlSeconds` must be from 30 through 600. A positive `revision` is required
+        for optimistic concurrency, a stale revision returns 409, and a successful
+        update increments the revision.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/ApprovalPolicyUpdateRequest}
+      responses:
+        "200":
+          description: Updated remote-approval policy with its incremented revision.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/ApprovalPolicy}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The supplied revision is stale.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/settings:
+    get:
+      tags: [admin]
+      operationId: getAdminSettings
+      summary: Read display-safe runtime settings and health
+      description: |
+        Available only to owner and admin roles. Returns selected runtime settings,
+        version and database health. Token values, passwords, APNs or FCM
+        credentials, database URLs and local storage paths are never returned;
+        TTL fields are numeric lifetime configuration only.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Display-safe runtime settings and health metadata.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminRuntimeSettings}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/users:
+    get:
+      tags: [admin]
+      operationId: listAdminUsers
+      summary: List administrative users
+      description: Available to owner, admin and auditor roles. Users are ordered by creation time; no password or password hash is exposed.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Public user projections.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminUserListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    post:
+      tags: [admin]
+      operationId: createAdminUser
+      summary: Create an administrative user
+      description: |
+        Available to owner and admin roles. `role` defaults to `member` when omitted;
+        only an owner may create another owner. The JSON body is strictly decoded
+        and rejects unknown fields. The password is write-only, stored only as a
+        one-way hash, and absent from the response.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminCreateUserRequest}
+      responses:
+        "201":
+          description: User created without returning password material.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminUser}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The normalized email address is already registered.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/users/{userId}:
+    parameters:
+      - {$ref: "#/components/parameters/UserId"}
+    patch:
+      tags: [admin]
+      operationId: updateAdminUser
+      summary: Partially update a user
+      description: |
+        Available to owner and admin roles. The JSON body is strictly decoded and
+        rejects unknown fields; omitted fields remain unchanged. Only an owner may
+        change `role` or `status`, and an admin may not update an owner, including
+        that owner's password. The last active owner cannot be demoted or disabled.
+        Passwords are write-only and neither plaintext nor hashes are returned.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminUpdateUserRequest}
+      responses:
+        "200":
+          description: Updated public user projection.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminUser}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The update would remove the last active owner.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+    delete:
+      tags: [admin]
+      operationId: deleteAdminUser
+      summary: Delete a user and revoke that user's sessions
+      description: Only an owner may delete users. The last active owner cannot be deleted; deletion also closes that user's active mobile event streams.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "204":
+          description: User deleted.
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The target is the last active owner.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/users/{userId}/access-preview:
+    get:
+      tags: [admin]
+      operationId: getAdminUserAccessPreview
+      summary: Preview a user's effective desktop access
+      description: |
+        Available to owner, admin and auditor roles. Only enabled policies assigned
+        to the user contribute. Effective scopes are intersected with current desktop
+        grants; revoked and waiting desktops are omitted. Workspace paths, tokens,
+        password material and hashes are never returned.
+      parameters:
+        - {$ref: "#/components/parameters/UserId"}
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Effective user access without filesystem paths.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPreviewResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/devices:
+    get:
+      tags: [admin]
+      operationId: listAdminDevices
+      summary: List desktop devices and credential-presence state
+      description: Available to owner, admin and auditor roles. `hasToken` is only a boolean; device tokens, pairing tokens and their hashes are never returned.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Desktop device projections, including revoked devices.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminDeviceListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/devices/{deviceId}:
+    parameters:
+      - {$ref: "#/components/parameters/AdminDeviceId"}
+    patch:
+      tags: [admin]
+      operationId: updateAdminDevice
+      summary: Rename a desktop device
+      description: Available to owner and admin roles. The JSON body is strictly decoded and rejects unknown fields.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminDeviceUpdateRequest}
+      responses:
+        "200":
+          description: Updated device projection without credential material.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminDevice}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    delete:
+      tags: [admin]
+      operationId: deleteAdminDevice
+      summary: Delete a desktop device record
+      description: Available to owner and admin roles. The Connector is disconnected, its mobile access grants are revoked, and the device record is deleted.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "204":
+          description: Device deleted.
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/devices/{deviceId}/revoke:
+    post:
+      tags: [admin]
+      operationId: revokeAdminDevice
+      summary: Revoke a desktop device credential
+      description: Available to owner and admin roles. The device row is retained as revoked, its Connector is disconnected, and dependent mobile access grants are revoked. No request body is used.
+      parameters:
+        - {$ref: "#/components/parameters/AdminDeviceId"}
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Device credential revoked.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminDeviceRevokeResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/audit:
+    get:
+      tags: [admin]
+      operationId: listAdminAudit
+      summary: Filter and paginate append-only audit entries
+      description: |
+        Available to owner, admin and auditor roles. Actor, action, device and result
+        filters are exact matches. `from` is an inclusive RFC3339 lower bound and
+        `to` is an exclusive RFC3339 upper bound on `occurredAt`. Results are newest
+        first; `total` counts all matches before pagination.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      parameters:
+        - name: actor
+          in: query
+          required: false
+          schema: {type: string, minLength: 1}
+        - name: action
+          in: query
+          required: false
+          schema: {type: string, minLength: 1}
+        - name: deviceId
+          in: query
+          required: false
+          schema: {type: string, minLength: 1}
+        - name: result
+          in: query
+          required: false
+          description: Exact stored result, for example success, error, waiting_desktop_authorization, started or failed.
+          schema: {type: string, minLength: 1}
+        - name: from
+          in: query
+          required: false
+          description: Inclusive occurredAt lower bound in RFC3339 format.
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          required: false
+          description: Exclusive occurredAt upper bound in RFC3339 format.
+          schema: {type: string, format: date-time}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        "200":
+          description: Filtered audit page and echoed pagination values.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminAuditListResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/policies:
+    get:
+      tags: [admin]
+      operationId: listAccessPolicies
+      summary: List access policies
+      description: Available to owner, admin and auditor roles. Policies are ordered by creation time, oldest first.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Access policy projections with normalized arrays and optimistic-concurrency revisions.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicyListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    post:
+      tags: [admin]
+      operationId: createAccessPolicy
+      summary: Create an access policy
+      description: |
+        Available to owner and admin roles. The JSON body is strictly decoded and
+        rejects unknown fields, including unknown rule fields. `enabled` defaults
+        to true; omitted description, memberIds and rules default to empty values.
+        Member ids must identify existing users. Rules may only select existing
+        desktops and their currently authorized workspaces and scopes. A duplicate
+        policy name returns 409.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicyCreateRequest}
+      responses:
+        "201":
+          description: Access policy created with revision 1.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicy}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The access policy name is already registered.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/policies/{policyId}:
+    parameters:
+      - {$ref: "#/components/parameters/PolicyId"}
+    patch:
+      tags: [admin]
+      operationId: updateAccessPolicy
+      summary: Partially update an access policy
+      description: |
+        Available to owner and admin roles. The JSON body is strictly decoded and
+        rejects unknown fields, including unknown rule fields. All policy fields
+        are optional, but a positive `revision` is required for optimistic
+        concurrency. A stale revision or duplicate name returns 409; a successful
+        update increments the revision.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicyUpdateRequest}
+      responses:
+        "200":
+          description: Updated access policy with its incremented revision.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AccessPolicy}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: The access policy does not exist.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "409":
+          description: The supplied revision is stale or the requested name is already registered.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+    delete:
+      tags: [admin]
+      operationId: deleteAccessPolicy
+      summary: Delete an access policy at an expected revision
+      description: Available to owner and admin roles. A positive revision query parameter is required; a stale revision returns 409.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      parameters:
+        - name: revision
+          in: query
+          required: true
+          description: Current policy revision; deletion fails if it is stale.
+          schema: {type: integer, format: int64, minimum: 1}
+      responses:
+        "204":
+          description: Access policy deleted.
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: The access policy does not exist.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "409":
+          description: The supplied revision is stale.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/pairing-codes:
+    post:
+      tags: [admin]
+      operationId: createAdminDesktopPairingCode
+      summary: Create a one-time desktop pairing code
+      description: |
+        Available to owner and admin roles; no request body is required. The response
+        includes the stable integer `pairingId` and the plaintext code exactly once.
+        Only the code hash is persisted; later reads cannot recover the plaintext.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "201":
+          description: Desktop pairing code created. This is the only desktop pairing-code response that contains plaintext `code`.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminDesktopPairingCodeResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    get:
+      tags: [admin]
+      operationId: listAdminDesktopPairingCodes
+      summary: List recent desktop pairing-code lifecycle state
+      description: |
+        Available to owner, admin and auditor roles. Returns up to twenty records,
+        newest first, with stable integer `pairingId` values. Neither plaintext
+        pairing codes nor code hashes are ever returned. A consumed code remains
+        `waiting_desktop_authorization` until explicit desktop authorization completes.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Pairing-code metadata without plaintext or hashes.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminDesktopPairingCodeListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
   /v1/admin/mobile/pairing-codes:
     post:
       tags: [mobile]
@@ -855,6 +1504,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
       description: Exact value of DSH_CONNECT_BOOTSTRAP_TOKEN; there is no unauthenticated default.
+    adminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Opaque Web Admin session token returned by /v1/admin/auth/login. Admin endpoints also accept the bootstrap token as a synthetic owner.
     mobileBearer:
       type: http
       scheme: bearer
@@ -881,6 +1535,21 @@ components:
       in: query
       required: true
       schema: {type: string, minLength: 1}
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    AdminDeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    PolicyId:
+      name: policyId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
     MobileDeviceId:
       name: mobileDeviceId
       in: path
@@ -918,7 +1587,7 @@ components:
         application/json:
           schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
     NotFound:
-      description: The referenced user or mobile device does not exist.
+      description: The referenced user, desktop device, or mobile device does not exist.
       content:
         application/json:
           schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}

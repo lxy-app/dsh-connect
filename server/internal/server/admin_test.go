@@ -419,7 +419,7 @@ func TestAdminPairingCodeLifecycle(t *testing.T) {
 	}
 	var created createPairingCodeResponse
 	decodeTestJSON(t, body, &created)
-	if created.Code == "" || created.ServerURL == "" || created.ExpiresAt.IsZero() {
+	if created.PairingID <= 0 || created.Code == "" || created.ServerURL == "" || created.ExpiresAt.IsZero() {
 		t.Fatalf("unexpected pairing code response: %+v", created)
 	}
 
@@ -451,7 +451,7 @@ func TestAdminPairingCodeLifecycle(t *testing.T) {
 	}
 	var listed pairingCodeListResponse
 	decodeTestJSON(t, body, &listed)
-	if len(listed.Codes) != 1 || listed.Codes[0].State != "waiting_desktop_authorization" || listed.Codes[0].DeviceID == "" {
+	if len(listed.Codes) != 1 || listed.Codes[0].PairingID != created.PairingID || listed.Codes[0].State != "waiting_desktop_authorization" || listed.Codes[0].DeviceID == "" {
 		t.Fatalf("unexpected waiting pairing code listing: %+v", listed.Codes)
 	}
 
