@@ -28,6 +28,7 @@ interface MockPolicy {
 interface Scenario {
   pairingState: 'active' | 'waiting_desktop_authorization' | 'used' | 'expired';
   deviceLoads: number;
+  sessionLoads: number;
   policies: MockPolicy[];
   createdPolicies: Array<Omit<MockPolicy, 'policyId' | 'revision' | 'createdAt' | 'updatedAt'>>;
   unexpectedRequests: string[];
@@ -47,6 +48,7 @@ async function mockAdminApi(page: Page, user: MockUser = owner): Promise<Scenari
   const scenario: Scenario = {
     pairingState: 'active',
     deviceLoads: 0,
+    sessionLoads: 0,
     policies: [],
     createdPolicies: [],
     unexpectedRequests: [],
@@ -69,6 +71,27 @@ async function mockAdminApi(page: Page, user: MockUser = owner): Promise<Scenari
       return json({ devices: {}, users: {}, auditEntries: 0, recentActivity: [] });
     }
     if (path === '/v1/admin/users') return json({ users: [user] });
+    if (path === '/v1/admin/sessions' && method === 'GET') {
+      scenario.sessionLoads += 1;
+      return json({
+        sessions: [{
+          sessionId: 'session-e2e-1',
+          title: 'E2E Running Session',
+          deviceId: 'dev-e2e-1',
+          deviceName: 'E2E MacBook',
+          workspaceId: 'ws-1',
+          workspaceName: 'dsh-connect',
+          status: 'running',
+          updatedAt: '2026-01-01T00:00:00Z',
+        }],
+        warnings: [{
+          deviceId: 'dev-e2e-2',
+          deviceName: 'E2E Windows',
+          code: 'snapshot_delayed',
+          message: 'Desktop snapshot is delayed',
+        }],
+      });
+    }
     if (path === '/v1/admin/policies' && method === 'GET') return json({ policies: scenario.policies });
     if (path === '/v1/admin/policies' && method === 'POST') {
       const input = request.postDataJSON() as Scenario['createdPolicies'][number];
@@ -213,6 +236,21 @@ test('creates an access policy with members, desktop workspaces and scopes', asy
     memberIds: [owner.id],
     rules: [{ deviceId: 'dev-e2e-1', workspaceIds: ['ws-1'], scopes: ['read', 'prompt'] }],
   }]);
+  expect(scenario.unexpectedRequests).toEqual([]);
+});
+
+test('loads running session metadata and warnings with manual refresh', async ({ page }) => {
+  const scenario = await mockAdminApi(page);
+  await page.goto('/running');
+  await expect(page.getByRole('heading', { name: '运行会话' })).toBeVisible();
+  await expect(page.getByText('E2E Running Session', { exact: true })).toBeVisible();
+  await expect(page.getByText('session-e2e-1', { exact: true })).toBeVisible();
+  await expect(page.getByText('dsh-connect', { exact: true })).toBeVisible();
+  await expect(page.getByText('部分桌面未返回，当前为部分快照', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Desktop snapshot is delayed/)).toBeVisible();
+
+  await page.getByRole('button', { name: /刷\s*新/ }).click();
+  await expect.poll(() => scenario.sessionLoads).toBeGreaterThanOrEqual(2);
   expect(scenario.unexpectedRequests).toEqual([]);
 });
 

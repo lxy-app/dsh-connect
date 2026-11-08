@@ -71,7 +71,8 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | POST | `/v1/admin/auth/login` | 无 | 邮箱密码登录，返回 `token/expiresAt/user` |
 | POST | `/v1/admin/auth/logout` | 已登录 | 吊销当前会话 |
 | GET | `/v1/admin/auth/me` | 已登录 | 当前操作者 |
-| GET | `/v1/admin/overview` | owner/admin/auditor | 设备/账号计数与最近 8 条审计 |
+| GET | `/v1/admin/overview` | owner/admin/auditor | 设备/账号计数、活跃会话、prompt 准入趋势、待处理交互与最近 8 条审计；可选 IANA `tz` |
+| GET | `/v1/admin/sessions` | owner/admin/auditor | 并发聚合桌面会话元数据与部分失败 warning，不含正文或路径 |
 | GET | `/v1/admin/users` | owner/admin/auditor | 用户列表 |
 | POST | `/v1/admin/users` | owner/admin | 创建用户（仅 owner 可建 owner） |
 | PATCH | `/v1/admin/users/{id}` | owner/admin | 改非 Owner 账号显示名/密码；角色与状态仅 owner；admin 不能修改 owner |
@@ -121,6 +122,8 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start received/waiting_desktop_authorization`、`pair.authorize received/completed` 及错误码日志。日志只包含 requestId、deviceId、数量与错误等白名单字段，不记录配对码、token/hash、Authorization、原始帧或工作区路径。配对数据库操作受 `CommandTimeout`（默认 15 秒）约束，内部错误返回 `internal_error`，不会误报为配对码无效。
 
 `session.create`、`session.prompt` 与 `session.model.select` 的 `requestId` 都是持久幂等键，由数据库唯一约束保证：并发重复等待同一执行，完成后的重复直接读取首次结果，不同 method/device/params 复用同一 key 返回 `idempotency_conflict`。不同命令必须使用不同 requestId；模型选择的 sessionId/workspaceId/provider/model/reasoningEffort 都进入请求哈希。
+
+Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无错误且已完成准入的唯一记录；同一 requestId 重试不重复计数，未提交的离线请求不落记录。该指标表示 Connector 成功响应的唯一 prompt 准入数，不表示 Turn 已完成。
 
 ## 手机配对 API
 

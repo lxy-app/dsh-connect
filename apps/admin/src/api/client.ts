@@ -58,11 +58,54 @@ export interface AuditEntry {
   details?: AccessPolicyAuditDetails;
 }
 
+export interface AdminSession {
+  sessionId: string;
+  title: string;
+  deviceId: string;
+  deviceName: string;
+  workspaceId: string;
+  workspaceName: string;
+  status: string;
+  updatedAt: string;
+}
+
+export interface AdminSessionWarning {
+  deviceId: string;
+  deviceName: string;
+  code: string;
+  message: string;
+}
+
+export interface SessionsResponse {
+  sessions: AdminSession[];
+  warnings: AdminSessionWarning[];
+}
+
+export interface PendingRequest {
+  interactionId: string;
+  kind: string;
+  title: string;
+  toolName: string;
+  deviceId: string;
+  deviceName: string;
+  sessionId: string;
+  workspaceId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface Overview {
   devices: Record<string, number>;
   users: Record<string, number>;
   auditEntries: number;
   recentActivity: AuditEntry[];
+  activeSessions: number;
+  todayPrompts: number;
+  pendingInteractions: number;
+  promptTrend: Array<{ date: string; count: number }>;
+  sessions: AdminSession[];
+  pendingRequests: PendingRequest[];
+  warnings: AdminSessionWarning[];
 }
 
 export interface LoginResponse {
@@ -323,8 +366,12 @@ export const adminApi = {
     return request<AdminUser>('/v1/admin/auth/me', { signal });
   },
 
-  overview(signal?: AbortSignal): Promise<Overview> {
-    return request<Overview>('/v1/admin/overview', { signal });
+  overview(signal?: AbortSignal, timeZone?: string): Promise<Overview> {
+    return request<Overview>('/v1/admin/overview', { signal, query: { tz: timeZone } });
+  },
+
+  sessions(signal?: AbortSignal): Promise<SessionsResponse> {
+    return request<SessionsResponse>('/v1/admin/sessions', { signal });
   },
 
   async users(signal?: AbortSignal): Promise<AdminUser[]> {

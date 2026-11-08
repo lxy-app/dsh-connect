@@ -293,17 +293,50 @@ paths:
     get:
       tags: [admin]
       operationId: getAdminOverview
-      summary: Read device, user and audit counts
-      description: Available to owner, admin and auditor roles. Recent activity contains at most eight newest audit entries and no session content.
+      summary: Read management counts and operational activity
+      description: |
+        Available to owner, admin and auditor roles. Recent activity contains at most
+        eight newest audit entries, and sessions at most five metadata projections.
+        `tz` selects the IANA time zone for todayPrompts and promptTrend and defaults
+        to UTC; an invalid time zone returns 400. Session content, filesystem paths,
+        pending-request reasons, question forms and answers are never returned.
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: IANA time zone name used for calendar-day aggregation, for example Asia/Shanghai.
+          schema: {type: string, minLength: 1, default: UTC}
       security:
         - bootstrapBearer: []
         - adminBearer: []
       responses:
         "200":
-          description: Current management overview.
+          description: Current management and operations overview.
           content:
             application/json:
               schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminOverviewResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/sessions:
+    get:
+      tags: [admin]
+      operationId: listAdminSessions
+      summary: List display-safe session metadata
+      description: |
+        Available to owner, admin and auditor roles. Returns session metadata and
+        per-device warnings only; session bodies, messages, content, paths, working
+        directories and operator details are never returned.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Session metadata plus per-device aggregation warnings.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminSessionListResponse}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "500": {$ref: "#/components/responses/InternalError"}

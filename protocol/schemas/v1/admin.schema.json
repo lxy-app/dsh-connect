@@ -92,7 +92,19 @@
     },
     "AdminOverviewResponse": {
       "type": "object",
-      "required": ["devices", "users", "auditEntries", "recentActivity"],
+      "required": [
+        "devices",
+        "users",
+        "auditEntries",
+        "recentActivity",
+        "activeSessions",
+        "todayPrompts",
+        "pendingInteractions",
+        "promptTrend",
+        "sessions",
+        "pendingRequests",
+        "warnings"
+      ],
       "properties": {
         "devices": {"$ref": "#/$defs/AdminDeviceCounts"},
         "users": {"$ref": "#/$defs/AdminUserCounts"},
@@ -106,6 +118,33 @@
           "maxItems": 8,
           "description": "Up to eight newest audit entries.",
           "items": {"$ref": "#/$defs/AdminAuditEntry"}
+        },
+        "activeSessions": {"type": "integer", "minimum": 0},
+        "todayPrompts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Prompts submitted on the current calendar date in the requested IANA time zone."
+        },
+        "pendingInteractions": {"type": "integer", "minimum": 0},
+        "promptTrend": {
+          "type": "array",
+          "description": "Prompt counts grouped by calendar date in the requested IANA time zone.",
+          "items": {"$ref": "#/$defs/AdminPromptTrendPoint"}
+        },
+        "sessions": {
+          "type": "array",
+          "maxItems": 5,
+          "description": "Up to five session metadata projections; no session content is included.",
+          "items": {"$ref": "#/$defs/AdminSessionMetadata"}
+        },
+        "pendingRequests": {
+          "type": "array",
+          "description": "Display-safe pending approval and question metadata without reasons, questions or answers.",
+          "items": {"$ref": "#/$defs/AdminPendingRequest"}
+        },
+        "warnings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminAccessWarning"}
         }
       },
       "additionalProperties": false
@@ -283,6 +322,99 @@
         },
         "limit": {"type": "integer", "minimum": 1, "maximum": 500},
         "offset": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminAccessWarning": {
+      "type": "object",
+      "required": ["deviceId", "deviceName", "code", "message"],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1},
+        "deviceName": {"type": "string", "minLength": 1},
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "AdminSessionMetadata": {
+      "type": "object",
+      "description": "Display-safe session metadata only. Session bodies, messages, content, paths, working directories and operator details are never exposed.",
+      "required": [
+        "sessionId",
+        "title",
+        "deviceId",
+        "deviceName",
+        "workspaceId",
+        "workspaceName",
+        "status",
+        "updatedAt"
+      ],
+      "properties": {
+        "sessionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "title": {"type": "string"},
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "workspaceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "status": {"type": "string", "minLength": 1},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AdminSessionListResponse": {
+      "type": "object",
+      "required": ["sessions", "warnings"],
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminSessionMetadata"}
+        },
+        "warnings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminAccessWarning"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminPromptTrendPoint": {
+      "type": "object",
+      "required": ["date", "count"],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Calendar date in the requested IANA time zone."
+        },
+        "count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminPendingRequest": {
+      "type": "object",
+      "description": "Display-safe pending interaction metadata. Reasons, question forms and answers are never exposed.",
+      "required": [
+        "interactionId",
+        "kind",
+        "title",
+        "toolName",
+        "deviceId",
+        "deviceName",
+        "sessionId",
+        "workspaceId",
+        "createdAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"type": "string", "enum": ["approval", "question"]},
+        "title": {"type": "string"},
+        "toolName": {"type": "string"},
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "maxLength": 256},
+        "sessionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"}
       },
       "additionalProperties": false
     },

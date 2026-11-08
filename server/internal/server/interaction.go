@@ -383,7 +383,7 @@ func (s *Server) handleMobileInteractionDecision(w http.ResponseWriter, r *http.
 	result, commandError := s.router.Execute(
 		r.Context(), protocol.MethodInteractionRespond, item.DeviceID, request.RequestID, params, s.config.CommandTimeout,
 	)
-	s.auditMobileSession(actor, r, "mobile.interaction.decide", item.DeviceID, item.SessionID, commandError)
+	s.auditMobileSession(actor, r, "mobile.interaction.decide", item.DeviceID, item.SessionID, request.RequestID, commandError)
 	if commandError != nil {
 		fail(commandError)
 		return

@@ -8,6 +8,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MonitorOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
   UserOutlined,
@@ -24,6 +25,7 @@ const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ de
 const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const DevicesPage = lazy(() => import('./pages/DevicesPage').then((m) => ({ default: m.DevicesPage })));
 const PoliciesPage = lazy(() => import('./pages/PoliciesPage').then((m) => ({ default: m.PoliciesPage })));
+const RunningPage = lazy(() => import('./pages/RunningPage').then((m) => ({ default: m.RunningPage })));
 const AuditPage = lazy(() => import('./pages/AuditPage').then((m) => ({ default: m.AuditPage })));
 
 const { Header, Sider, Content } = Layout;
@@ -36,6 +38,7 @@ const NAV = [
   { key: '/users', icon: <TeamOutlined />, label: '用户与角色' },
   { key: '/devices', icon: <CloudServerOutlined />, label: '设备管理' },
   { key: '/policies', icon: <SafetyCertificateOutlined />, label: '访问策略' },
+  { key: '/running', icon: <MonitorOutlined />, label: '运行会话' },
   { key: '/audit', icon: <AuditOutlined />, label: '审计日志' },
 ];
 
@@ -175,6 +178,7 @@ export function App() {
               <Route path="/users" element={guardManagementPage(<UsersPage />)} />
               <Route path="/devices" element={guardManagementPage(<DevicesPage />)} />
               <Route path="/policies" element={guardManagementPage(<PoliciesPage />)} />
+              <Route path="/running" element={guardManagementPage(<RunningPage />)} />
               <Route path="/pairing" element={<Navigate to="/devices" replace />} />
               <Route path="/mobile" element={<Navigate to="/devices?tab=mobile" replace />} />
               <Route path="/audit" element={guardManagementPage(<AuditPage />)} />

@@ -471,7 +471,7 @@ func (s *Server) handleMobileSessionCreate(w http.ResponseWriter, r *http.Reques
 			commandError = errorPtr(protocol.NewError(protocol.CodeInternalError, "desktop returned an invalid session creation result", false))
 		}
 	}
-	s.auditMobileSession(actor, r, "mobile.session.create", request.DeviceID, created.SessionID, commandError)
+	s.auditMobileSession(actor, r, "mobile.session.create", request.DeviceID, created.SessionID, request.RequestID, commandError)
 	if commandError != nil {
 		writeAPIError(w, *commandError)
 		return
@@ -633,7 +633,7 @@ func (s *Server) handleMobileSessionModelSelect(w http.ResponseWriter, r *http.R
 			commandError = errorPtr(protocol.NewError(protocol.CodeInternalError, "desktop returned an invalid model selection result", false))
 		}
 	}
-	s.auditMobileSession(actor, r, "mobile.session.model.select", request.DeviceID, sessionID, commandError)
+	s.auditMobileSession(actor, r, "mobile.session.model.select", request.DeviceID, sessionID, request.RequestID, commandError)
 	if commandError != nil {
 		writeAPIError(w, *commandError)
 		return
@@ -714,7 +714,7 @@ func (s *Server) handleMobileSessionPrompt(w http.ResponseWriter, r *http.Reques
 		r.Context(), protocol.MethodSessionPrompt, request.DeviceID, request.RequestID, params,
 		time.Duration(request.TimeoutMS)*time.Millisecond,
 	)
-	s.auditMobileSession(actor, r, "mobile.session.prompt", request.DeviceID, sessionID, commandError)
+	s.auditMobileSession(actor, r, "mobile.session.prompt", request.DeviceID, sessionID, request.RequestID, commandError)
 	if commandError != nil {
 		writeAPIError(w, *commandError)
 		return
@@ -743,7 +743,7 @@ func (s *Server) handleMobileSessionCancel(w http.ResponseWriter, r *http.Reques
 		r.Context(), protocol.MethodSessionCancel, request.DeviceID, request.RequestID, params,
 		time.Duration(request.TimeoutMS)*time.Millisecond,
 	)
-	s.auditMobileSession(actor, r, "mobile.session.cancel", request.DeviceID, sessionID, commandError)
+	s.auditMobileSession(actor, r, "mobile.session.cancel", request.DeviceID, sessionID, request.RequestID, commandError)
 	if commandError != nil {
 		writeAPIError(w, *commandError)
 		return
@@ -793,7 +793,7 @@ func (s *Server) authorizeMobileSession(r *http.Request, deviceID, workspaceID, 
 	return actor, nil
 }
 
-func (s *Server) auditMobileSession(actor mobileActor, r *http.Request, action, deviceID, sessionID string, commandError *protocol.Error) {
+func (s *Server) auditMobileSession(actor mobileActor, r *http.Request, action, deviceID, sessionID, requestID string, commandError *protocol.Error) {
 	auditResult := "success"
 	errorCode := ""
 	if commandError != nil {
@@ -804,6 +804,7 @@ func (s *Server) auditMobileSession(actor mobileActor, r *http.Request, action, 
 		OccurredAt: nowUTC(),
 		Actor:      "user:" + actor.User.ID,
 		Action:     action,
+		RequestID:  requestID,
 		DeviceID:   deviceID,
 		SessionID:  sessionID,
 		Result:     auditResult,

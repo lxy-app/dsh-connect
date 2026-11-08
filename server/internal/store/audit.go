@@ -9,6 +9,7 @@ import (
 	"github.com/deepseek/dsh-connect/server/ent"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/idempotencyrecord"
+	"github.com/deepseek/dsh-connect/server/internal/protocol"
 )
 
 // Idempotency loads a durable command outcome by request id.
@@ -85,6 +86,32 @@ func (s *Store) AppendAudit(ctx context.Context, entry AuditEntry) error {
 		return fmt.Errorf("append audit entry: %w", err)
 	}
 	return nil
+}
+
+// PromptCompletions returns the completion time of every unique prompt accepted
+// by a Connector at or after since. The idempotency primary key deduplicates
+// retries, and only successful command outcomes are counted. The minimal
+// projection deliberately avoids prompt results, request hashes and details.
+func (s *Store) PromptCompletions(ctx context.Context, since time.Time) ([]time.Time, error) {
+	records, err := s.client.IdempotencyRecord.Query().
+		Where(
+			idempotencyrecord.MethodEQ(protocol.MethodSessionPrompt),
+			// Successful rows written by CompleteIdempotency leave the optional
+			// error_code column NULL; accept an explicit empty string as well.
+			idempotencyrecord.Or(idempotencyrecord.ErrorCodeEQ(""), idempotencyrecord.ErrorCodeIsNil()),
+			idempotencyrecord.CompletedAtGTE(since),
+		).
+		Select(idempotencyrecord.FieldCompletedAt).
+		Order(ent.Asc(idempotencyrecord.FieldCompletedAt), ent.Asc(idempotencyrecord.FieldRequestID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list prompt completions since %s: %w", since.Format(time.RFC3339), err)
+	}
+	completions := make([]time.Time, 0, len(records))
+	for _, record := range records {
+		completions = append(completions, record.CompletedAt)
+	}
+	return completions, nil
 }
 
 // AuditQuery narrows an audit listing.

@@ -158,6 +158,63 @@ func TestIdempotencyRejectsDuplicateRequestID(t *testing.T) {
 	}
 }
 
+func TestPromptCompletionsFiltersAndReturnsEveryAdmission(t *testing.T) {
+	persistent := newStore(t)
+	ctx := context.Background()
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
+
+	// Insert in reverse time order and exceed the Admin audit page ceiling to
+	// prove this operational metric is neither paginated nor implicitly capped.
+	for index := 0; index < 501; index++ {
+		completedAt := base.Add(time.Duration(500-index) * time.Second)
+		record := store.IdempotencyRecord{
+			RequestID: fmt.Sprintf("prompt-completion-%03d", index), Method: protocol.MethodSessionPrompt,
+			DeviceID: "dev-1", RequestHash: "not-needed-for-metrics", Result: json.RawMessage(`{"status":"accepted"}`),
+			CreatedAt: completedAt.Add(-time.Second), CompletedAt: completedAt,
+		}
+		if err := persistent.CompleteIdempotency(ctx, record); err != nil {
+			t.Fatalf("CompleteIdempotency %d: %v", index, err)
+		}
+	}
+	excluded := []store.IdempotencyRecord{
+		{RequestID: "prompt-before-since", Method: protocol.MethodSessionPrompt, DeviceID: "dev-1", RequestHash: "hash", CreatedAt: base.Add(-2 * time.Second), CompletedAt: base.Add(-time.Second)},
+		{RequestID: "prompt-create", Method: protocol.MethodSessionCreate, DeviceID: "dev-1", RequestHash: "hash", CreatedAt: base, CompletedAt: base.Add(time.Second)},
+		{RequestID: "prompt-error", Method: protocol.MethodSessionPrompt, DeviceID: "dev-1", RequestHash: "hash", CreatedAt: base, CompletedAt: base.Add(time.Second), Error: &protocol.Error{Code: protocol.CodeCommandTimeout, Message: "timeout", Retryable: true}},
+	}
+	for _, record := range excluded {
+		if err := persistent.CompleteIdempotency(ctx, record); err != nil {
+			t.Fatalf("CompleteIdempotency excluded %s: %v", record.RequestID, err)
+		}
+	}
+
+	completions, err := persistent.PromptCompletions(ctx, base)
+	if err != nil {
+		t.Fatalf("PromptCompletions: %v", err)
+	}
+	if len(completions) != 501 {
+		t.Fatalf("PromptCompletions len=%d; want all 501 successful prompt admissions", len(completions))
+	}
+	if !completions[0].Equal(base) || !completions[len(completions)-1].Equal(base.Add(500*time.Second)) {
+		t.Fatalf("PromptCompletions not sorted by completedAt: first=%s last=%s", completions[0], completions[len(completions)-1])
+	}
+	for index := 1; index < len(completions); index++ {
+		if completions[index].Before(completions[index-1]) {
+			t.Fatalf("PromptCompletions out of order at %d", index)
+		}
+	}
+
+	bounded, err := persistent.PromptCompletions(ctx, base.Add(250*time.Second))
+	if err != nil {
+		t.Fatalf("PromptCompletions bounded: %v", err)
+	}
+	if len(bounded) != 251 {
+		t.Fatalf("bounded PromptCompletions len=%d; want 251 inclusive rows", len(bounded))
+	}
+	if !bounded[0].Equal(base.Add(250 * time.Second)) {
+		t.Fatalf("bounded PromptCompletions first=%s; want inclusive since boundary", bounded[0])
+	}
+}
+
 func TestPairingCodeCanOnlyBeConsumedOnce(t *testing.T) {
 	persistent := newStore(t)
 	ctx := context.Background()

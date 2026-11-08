@@ -7,16 +7,16 @@ export default defineConfig({
   timeout: 30_000,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:5174',
     headless: true,
     channel: process.env.PLAYWRIGHT_CHANNEL,
     viewport: { width: 1440, height: 960 },
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: !process.env.CI,
+    command: 'npm run dev -- --host 127.0.0.1 --port 5174 --strictPort',
+    url: 'http://127.0.0.1:5174',
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 });

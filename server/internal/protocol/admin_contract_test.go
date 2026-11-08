@@ -22,7 +22,8 @@ type parameterSpec struct {
 	In       string `yaml:"in"`
 	Required bool   `yaml:"required"`
 	Schema   struct {
-		Type string `yaml:"type"`
+		Type    string `yaml:"type"`
+		Default string `yaml:"default"`
 	} `yaml:"schema"`
 }
 
@@ -50,6 +51,7 @@ func TestAdminOpenAPIContractCoverage(t *testing.T) {
 		"/v1/admin/auth/logout":                   {"post"},
 		"/v1/admin/auth/me":                       {"get"},
 		"/v1/admin/overview":                      {"get"},
+		"/v1/admin/sessions":                      {"get"},
 		"/v1/admin/users":                         {"get", "post"},
 		"/v1/admin/users/{userId}":                {"patch", "delete"},
 		"/v1/admin/users/{userId}/access-preview": {"get"},
@@ -93,6 +95,22 @@ func TestAdminOpenAPIContractCoverage(t *testing.T) {
 	if !foundRevision {
 		t.Fatal("DELETE /v1/admin/policies/{policyId} must require an integer revision query parameter")
 	}
+
+	var overviewOperation operationSpec
+	overviewNode := spec.Paths["/v1/admin/overview"]["get"]
+	if err := overviewNode.Decode(&overviewOperation); err != nil {
+		t.Fatalf("decode overview operation: %v", err)
+	}
+	foundTimeZone := false
+	for _, parameter := range overviewOperation.Parameters {
+		if parameter.Name == "tz" && parameter.In == "query" && !parameter.Required &&
+			parameter.Schema.Type == "string" && parameter.Schema.Default == "UTC" {
+			foundTimeZone = true
+		}
+	}
+	if !foundTimeZone {
+		t.Fatal("GET /v1/admin/overview must accept an optional tz query parameter defaulting to UTC")
+	}
 }
 
 func TestAdminSchemasDoNotExposeCredentials(t *testing.T) {
@@ -105,11 +123,17 @@ func TestAdminSchemasDoNotExposeCredentials(t *testing.T) {
 		"AccessPreviewResponse",
 		"AccessPreviewDesktop",
 		"AccessPreviewWorkspace",
+		"AdminSessionMetadata",
+		"AdminSessionListResponse",
+		"AdminPendingRequest",
+		"AdminPromptTrendPoint",
+		"AdminOverviewResponse",
 	} {
 		properties := requireDefinition(t, schema, definition).Properties
 		for _, forbidden := range []string{
 			"password", "passwordHash", "code", "codeHash", "token", "tokenHash",
 			"deviceToken", "deviceTokenHash", "pairingToken", "pairingTokenHash", "path", "workspacePath",
+			"messages", "content", "body", "transcript", "cwd", "operator", "reason", "questions", "answers",
 		} {
 			if _, exists := properties[forbidden]; exists {
 				t.Fatalf("%s unexpectedly exposes %s", definition, forbidden)
@@ -201,6 +225,77 @@ func TestAdminAccessPolicySchemas(t *testing.T) {
 	for _, field := range []string{"before", "after"} {
 		if details.Properties[field].Ref != "#/$defs/AccessPolicy" {
 			t.Fatalf("AdminAuditEntry details.%s must reference AccessPolicy", field)
+		}
+	}
+}
+
+func TestAdminOperationsSchemas(t *testing.T) {
+	schema := readAdminSchema(t)
+	for _, definition := range []string{
+		"AdminAccessWarning",
+		"AdminSessionMetadata",
+		"AdminSessionListResponse",
+		"AdminPromptTrendPoint",
+		"AdminPendingRequest",
+		"AdminOverviewResponse",
+	} {
+		definitionSchema := requireDefinition(t, schema, definition)
+		if definitionSchema.AdditionalProperties == nil || *definitionSchema.AdditionalProperties {
+			t.Fatalf("%s must reject unknown properties", definition)
+		}
+	}
+
+	required := map[string][]string{
+		"AdminAccessWarning":       {"deviceId", "deviceName", "code", "message"},
+		"AdminSessionMetadata":     {"sessionId", "title", "deviceId", "deviceName", "workspaceId", "workspaceName", "status", "updatedAt"},
+		"AdminSessionListResponse": {"sessions", "warnings"},
+		"AdminPromptTrendPoint":    {"date", "count"},
+		"AdminPendingRequest":      {"interactionId", "kind", "title", "toolName", "deviceId", "deviceName", "sessionId", "workspaceId", "createdAt", "expiresAt"},
+		"AdminOverviewResponse": {
+			"devices", "users", "auditEntries", "recentActivity",
+			"activeSessions", "todayPrompts", "pendingInteractions", "promptTrend", "sessions", "pendingRequests", "warnings",
+		},
+	}
+	for definition, fields := range required {
+		definitionSchema := requireDefinition(t, schema, definition)
+		for _, field := range fields {
+			if !contains(definitionSchema.Required, field) {
+				t.Fatalf("%s must require %s", definition, field)
+			}
+			if _, exists := definitionSchema.Properties[field]; !exists {
+				t.Fatalf("%s is missing property %s", definition, field)
+			}
+		}
+	}
+
+	arrayReferences := []struct {
+		definition string
+		property   string
+		wantRef    string
+	}{
+		{"AdminSessionListResponse", "sessions", "#/$defs/AdminSessionMetadata"},
+		{"AdminSessionListResponse", "warnings", "#/$defs/AdminAccessWarning"},
+		{"AdminOverviewResponse", "promptTrend", "#/$defs/AdminPromptTrendPoint"},
+		{"AdminOverviewResponse", "sessions", "#/$defs/AdminSessionMetadata"},
+		{"AdminOverviewResponse", "pendingRequests", "#/$defs/AdminPendingRequest"},
+		{"AdminOverviewResponse", "warnings", "#/$defs/AdminAccessWarning"},
+	}
+	for _, check := range arrayReferences {
+		var arraySchema struct {
+			MaxItems int `json:"maxItems"`
+			Items    struct {
+				Ref string `json:"$ref"`
+			} `json:"items"`
+		}
+		raw := schema.Definitions[check.definition].Properties[check.property]
+		if err := json.Unmarshal(raw, &arraySchema); err != nil {
+			t.Fatalf("decode %s.%s: %v", check.definition, check.property, err)
+		}
+		if arraySchema.Items.Ref != check.wantRef {
+			t.Fatalf("%s.%s items reference=%q; want %q", check.definition, check.property, arraySchema.Items.Ref, check.wantRef)
+		}
+		if check.definition == "AdminOverviewResponse" && check.property == "sessions" && arraySchema.MaxItems != 5 {
+			t.Fatalf("AdminOverviewResponse.sessions maxItems=%d; want 5", arraySchema.MaxItems)
 		}
 	}
 }
