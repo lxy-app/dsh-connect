@@ -1,4 +1,4 @@
-// Package store provides the PostgreSQL-backed persistence layer for the
+// Package store provides the ent-backed persistence layer for the
 // single-instance DSH Connect Server. It contains no online connection state and
 // no DSH session content: session facts always come from the desktop Connector.
 package store
@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect"
@@ -19,6 +20,7 @@ import (
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "modernc.org/sqlite"
 )
 
 var (
@@ -88,18 +90,62 @@ type Store struct {
 	db     *sql.DB
 }
 
-// Open connects to PostgreSQL and verifies the connection before returning.
+var sqliteDriverPragmas = []string{
+	"_pragma=busy_timeout(5000)",
+	"_pragma=foreign_keys(1)",
+	"_pragma=journal_mode(WAL)",
+	"_pragma=synchronous(FULL)",
+}
+
+// sqliteDataSourceName applies connection-local pragmas through the driver so
+// replacement connections retain the same safety and concurrency settings.
+func sqliteDataSourceName(dsn string) (string, error) {
+	if dsn == "" {
+		return "", errors.New("sqlite database path is required")
+	}
+	separator := "?"
+	if strings.Contains(dsn, "?") {
+		separator = "&"
+	}
+	return dsn + separator + strings.Join(sqliteDriverPragmas, "&"), nil
+}
+
+// Open connects to PostgreSQL or SQLite and verifies the connection before returning.
 func Open(ctx context.Context, dsn string) (*Store, error) {
 	if dsn == "" {
 		return nil, errors.New("database URL is required")
 	}
-	db, err := sql.Open("pgx", dsn)
+	driverName := "pgx"
+	entDialect := dialect.Postgres
+	switch {
+	case strings.HasPrefix(dsn, "postgres://"), strings.HasPrefix(dsn, "postgresql://"):
+	case strings.HasPrefix(dsn, "sqlite://"):
+		driverName = "sqlite"
+		entDialect = dialect.SQLite
+		sqliteDSN, err := sqliteDataSourceName(strings.TrimPrefix(dsn, "sqlite://"))
+		if err != nil {
+			return nil, err
+		}
+		dsn = sqliteDSN
+	default:
+		return nil, errors.New("unsupported database URL scheme; use postgres://, postgresql://, or sqlite://")
+	}
+
+	db, err := sql.Open(driverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(30 * time.Minute)
+	if entDialect == dialect.SQLite {
+		// A single connection avoids deferred-transaction upgrade races and is
+		// sufficient for the single-instance control plane. WAL still permits
+		// consistent reads from backup and administrative connections.
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+	} else {
+		db.SetMaxOpenConns(25)
+		db.SetMaxIdleConns(5)
+		db.SetConnMaxLifetime(30 * time.Minute)
+	}
 
 	pingContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -107,7 +153,18 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
-	driver := entsql.OpenDB(dialect.Postgres, db)
+	if entDialect == dialect.SQLite {
+		var journalMode string
+		if err := db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("verify sqlite journal mode: %w", err)
+		}
+		if !strings.EqualFold(journalMode, "wal") {
+			_ = db.Close()
+			return nil, fmt.Errorf("sqlite WAL mode is required, got %q", journalMode)
+		}
+	}
+	driver := entsql.OpenDB(entDialect, db)
 	return &Store{client: ent.NewClient(ent.Driver(driver)), db: db}, nil
 }
 

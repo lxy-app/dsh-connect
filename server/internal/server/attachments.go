@@ -52,7 +52,7 @@ var nonRetryableAttachmentErrors = map[string]bool{
 }
 
 // attachmentBlobs is the on-disk half of attachment storage: content-addressed
-// files under one directory. Metadata lives in PostgreSQL, bytes never do.
+// files under one directory. Metadata lives in the server database, bytes never do.
 type attachmentBlobs struct {
 	dir string
 }

@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/deepseek/dsh-connect/server/internal/dbtest"
 	"github.com/deepseek/dsh-connect/server/internal/pgtest"
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -41,7 +41,7 @@ func newTestEnvironment(t *testing.T, change ...func(*Config)) *testEnvironment 
 	t.Helper()
 	config := Config{
 		BootstrapToken:    testBootstrapToken,
-		DatabaseURL:       pgtest.NewDatabase(t),
+		DatabaseURL:       dbtest.NewDatabase(t),
 		ServerURL:         "http://server.test",
 		CommandTimeout:    time.Second,
 		HeartbeatInterval: time.Second,
@@ -135,26 +135,9 @@ func TestPairingPersistsOnlyTokenHashesAndReconnects(t *testing.T) {
 		t.Fatalf("unexpected devices: %+v", devices)
 	}
 
-	// Secrets must never reach the database in plaintext: scan every text column
+	// Secrets must never reach the database in plaintext: scan every column
 	// of the device table for the live tokens.
-	db, err := sql.Open("pgx", environment.databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	rows, err := db.QueryContext(context.Background(),
-		`SELECT coalesce(string_agg(t::text, ' '), '') FROM devices t`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var persisted string
-	if rows.Next() {
-		if err := rows.Scan(&persisted); err != nil {
-			rows.Close()
-			t.Fatal(err)
-		}
-	}
-	rows.Close()
+	persisted := dumpTable(t, environment.databaseURL, "devices")
 	if strings.Contains(persisted, connector.deviceToken) {
 		t.Fatal("plaintext device token was persisted")
 	}
