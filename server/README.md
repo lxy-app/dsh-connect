@@ -90,6 +90,9 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | GET/POST | `/v1/admin/policies` | 读含 auditor；写 owner/admin | 访问策略列表/创建 |
 | PATCH/DELETE | `/v1/admin/policies/{id}` | owner/admin | 按 revision 更新/删除策略，冲突返回 `conflict` |
 | GET | `/v1/admin/users/{id}/access-preview` | owner/admin/auditor | 按用户预览策略可见桌面、工作区和 scopes，不含路径 |
+| GET | `/v1/admin/interactions` | owner/admin/auditor | 只读待处理审批/提问及完整核对上下文，不提供 Admin 决定 |
+| GET/PATCH | `/v1/admin/approval-policy` | 读含 auditor；写 owner/admin | 远程审批开关、30–600 秒 TTL 与 revision 乐观锁 |
+| GET | `/v1/admin/settings` | owner/admin | 只读运行配置、数据库方言/健康与生成时间，不含秘密 |
 
 安全约束：
 
@@ -163,6 +166,7 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 - `pair.updateGrants` 允许桌面 Connector 在面板显式确认后更新自己的 workspace/scope（例如追加 `approve`），无需重新配对；Server 校验动作词汇并写审计 `pair.grants.update`，手机 grant 仍需单独申请和桌面确认。
 - 会话列表、create、transcript、模型读取/选择、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验工作区授权、会话真实归属或审批答案，形成双重 fail-closed。
 - 待处理审批只存在内存中，Server 重启或 Connector 断连即清空；同一 interaction 在 Server 内用 CAS 预留，避免两台手机重复消费。
+- 远程审批策略持久化在 `approval_policies`。关闭远程审批会停止新副本、清空待处理手机副本和在线状态，决定失败关闭；桌面原生审批链不受影响。TTL 变更立即收窄现有项，更新使用 revision 防止并发覆盖。
 - 手机 logout、管理员吊销手机、桌面吊销都会撤销相关 grant。
 - 手机 logout、管理员吊销手机、手机或桌面撤销 grant、用户被禁用或删除时，Server 会关闭该手机/用户已建立的 `/v1/mobile/events/ws`。事件订阅登记后会重新读取当前手机、用户和 grant 状态，避免旧握手身份在吊销竞态中继续建立连接。
 - **移动 Access Token 不能访问 `/v1/devices`、`/v1/sessions` 或 `/v1/events/ws` 等调试接口。** 移动端仅使用受 grant 约束的 `/v1/mobile/*` API；`/v1/mobile/events/ws` 先校验 grant，再以 compact follow 推送 assistant 增量，原始工具 payload 由 Server 过滤。
@@ -198,6 +202,7 @@ M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/�
 | `idempotency_records` | `session.create` / `session.prompt` / `session.model.select` 持久幂等结果 |
 | `audit_entries` | 只追加审计，按 `occurred_at`/`device_id`/`action` 建索引；可选 details 保存策略 before/after |
 | `access_policies` | 用户关联、启用状态、桌面×工作区×scope 规则与 revision |
+| `approval_policies` | 单例远程审批开关、TTL 与 revision |
 | `users` | 管理账号（owner/admin/member/auditor） |
 | `admin_sessions` | 浏览器登录会话 token hash |
 | `mobile_pairing_codes` | 手机一次性配对码 hash、目标用户与消费状态 |

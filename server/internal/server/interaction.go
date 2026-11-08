@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
@@ -31,6 +32,7 @@ type interactionEntry struct {
 // resurrecting a stale prompt.
 type InteractionStore struct {
 	mu       sync.Mutex
+	enabled  atomic.Bool
 	ttl      time.Duration
 	items    map[string]*interactionEntry
 	lastPoll map[string]time.Time
@@ -40,11 +42,32 @@ func NewInteractionStore(ttl time.Duration) *InteractionStore {
 	if ttl <= 0 || ttl > interactionMaxTTL {
 		ttl = interactionMaxTTL
 	}
-	return &InteractionStore{ttl: ttl, items: make(map[string]*interactionEntry), lastPoll: make(map[string]time.Time)}
+	store := &InteractionStore{ttl: ttl, items: make(map[string]*interactionEntry), lastPoll: make(map[string]time.Time)}
+	store.enabled.Store(true)
+	return store
+}
+
+// RemoteEnabled reports whether remote interaction copies are currently accepted.
+func (s *InteractionStore) RemoteEnabled() bool {
+	return s.enabled.Load()
+}
+
+// SetEnabled applies the remote policy. Disabling first closes admission and
+// then atomically clears all pending copies and stale phone-presence signals.
+func (s *InteractionStore) SetEnabled(enabled bool) {
+	s.enabled.Store(enabled)
+	if !enabled {
+		s.Clear()
+	}
 }
 
 func (s *InteractionStore) Put(deviceID string, data protocol.InteractionRequestData, now time.Time) {
 	if data.InteractionID == "" || data.SessionID == "" || data.WorkspaceID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.enabled.Load() {
 		return
 	}
 	data.DeviceID = deviceID
@@ -57,8 +80,6 @@ func (s *InteractionStore) Put(deviceID string, data protocol.InteractionRequest
 	if !data.ExpiresAt.After(now) {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if len(s.items) > 64 {
 		for id, entry := range s.items {
 			if !entry.data.ExpiresAt.After(now) {
@@ -78,12 +99,44 @@ func (s *InteractionStore) Put(deviceID string, data protocol.InteractionRequest
 	s.items[data.InteractionID] = &interactionEntry{data: data}
 }
 
+// SetTTL atomically changes the cap for new items and narrows every existing
+// item to its original creation time plus the new TTL. Expired items disappear
+// immediately rather than waiting for the next mobile or Admin listing.
+func (s *InteractionStore) SetTTL(ttl time.Duration, now time.Time) {
+	if ttl <= 0 || ttl > interactionMaxTTL {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ttl = ttl
+	for id, entry := range s.items {
+		latestExpiry := entry.data.CreatedAt.Add(ttl)
+		if entry.data.ExpiresAt.After(latestExpiry) {
+			entry.data.ExpiresAt = latestExpiry
+		}
+		if !entry.data.ExpiresAt.After(now) {
+			delete(s.items, id)
+		}
+	}
+}
+
+// Clear drops all remote copies and polling presence. Desktop-native approval
+// state is owned by the Connector and is deliberately untouched.
+func (s *InteractionStore) Clear() {
+	s.mu.Lock()
+	clear(s.items)
+	clear(s.lastPoll)
+	s.mu.Unlock()
+}
+
 // SawPoll records that one phone just listed its pending interactions. The
 // Connector uses this short-lived presence to decide whether the phone should
 // own the next prompt or whether the desktop should answer immediately.
 func (s *InteractionStore) SawPoll(mobileDeviceID string, at time.Time) {
 	s.mu.Lock()
-	s.lastPoll[mobileDeviceID] = at
+	if s.enabled.Load() {
+		s.lastPoll[mobileDeviceID] = at
+	}
 	s.mu.Unlock()
 }
 
@@ -91,6 +144,9 @@ func (s *InteractionStore) SawPoll(mobileDeviceID string, at time.Time) {
 func (s *InteractionStore) Watching(mobileDeviceIDs []string, at time.Time, within time.Duration) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.enabled.Load() {
+		return false
+	}
 	for _, id := range mobileDeviceIDs {
 		if last, ok := s.lastPoll[id]; ok && at.Sub(last) <= within && !last.After(at) {
 			return true
@@ -119,6 +175,9 @@ func (s *InteractionStore) DropDevice(deviceID string) {
 func (s *InteractionStore) reserve(interactionID string, now time.Time) (protocol.InteractionRequestData, *protocol.Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.enabled.Load() {
+		return protocol.InteractionRequestData{}, errorPtr(protocol.NewError(protocol.CodeForbidden, "remote approvals are disabled", false))
+	}
 	entry, ok := s.items[interactionID]
 	if !ok {
 		return protocol.InteractionRequestData{}, errorPtr(protocol.NewError(protocol.CodeInteractionNotFound, "the interaction is no longer pending", true))
@@ -171,6 +230,9 @@ func (s *Server) ingestInteractionEvent(event protocol.Event) {
 	now := nowUTC()
 	switch event.Kind {
 	case protocol.KindInteractionRequest:
+		if !s.interactions.RemoteEnabled() {
+			return
+		}
 		var data protocol.InteractionRequestData
 		if err := json.Unmarshal(event.Data, &data); err != nil {
 			return
@@ -214,6 +276,10 @@ func (s *Server) handleMobileInteractions(w http.ResponseWriter, r *http.Request
 	actor, ok := mobileFromContext(r.Context())
 	if !ok {
 		writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile authentication required", false))
+		return
+	}
+	if !s.interactions.RemoteEnabled() {
+		writeJSON(w, http.StatusOK, protocol.MobileInteractionListResponse{Interactions: []protocol.MobileInteraction{}})
 		return
 	}
 	s.interactions.SawPoll(actor.Device.Device.MobileDeviceID, nowUTC())
@@ -301,6 +367,9 @@ func (s *Server) connectorInteractionAudience(ctx context.Context, deviceID stri
 	if !validID(input.WorkspaceID) {
 		return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "workspaceId is required", false))
 	}
+	if !s.interactions.RemoteEnabled() {
+		return protocol.InteractionAudienceResponse{Watching: false}, nil
+	}
 	grants, err := s.store.MobileAccessGrantsForDevice(ctx, deviceID)
 	if err != nil {
 		return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
@@ -351,6 +420,10 @@ func (s *Server) handleMobileInteractionDecision(w http.ResponseWriter, r *http.
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "requestId is required", false))
 		return
 	}
+	if !s.interactions.RemoteEnabled() {
+		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "remote approvals are disabled", false))
+		return
+	}
 	now := nowUTC()
 	item, commandError := s.interactions.reserve(interactionID, now)
 	if commandError != nil {
@@ -371,6 +444,10 @@ func (s *Server) handleMobileInteractionDecision(w http.ResponseWriter, r *http.
 	}
 	if commandError := validateInteractionDecision(item, request); commandError != nil {
 		fail(commandError)
+		return
+	}
+	if !s.interactions.RemoteEnabled() {
+		fail(errorPtr(protocol.NewError(protocol.CodeForbidden, "remote approvals are disabled", false)))
 		return
 	}
 	params := protocol.InteractionRespondParams{

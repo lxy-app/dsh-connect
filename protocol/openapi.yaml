@@ -340,6 +340,102 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/interactions:
+    get:
+      tags: [admin]
+      operationId: listAdminInteractions
+      summary: List pending approval and question details
+      description: |
+        Available to owner, admin and auditor roles. Returns currently pending
+        interactions with display-safe device/workspace metadata, approval reasons
+        and question forms. Answers, session content and credentials are never
+        returned. This is a read-only Admin projection; no Admin decision endpoint
+        is provided, and only the existing mobile decision flow may answer one.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Pending interaction details.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminInteractionListResponse}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/approval-policy:
+    get:
+      tags: [admin]
+      operationId: getAdminApprovalPolicy
+      summary: Read the remote-approval policy
+      description: Available to owner, admin and auditor roles. Returns the singleton policy and its current optimistic-concurrency revision.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Current remote-approval policy.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/ApprovalPolicy}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
+    patch:
+      tags: [admin]
+      operationId: updateAdminApprovalPolicy
+      summary: Partially update the remote-approval policy
+      description: |
+        Available to owner and admin roles. The JSON body is strictly decoded and
+        rejects unknown fields. `remoteEnabled` and `ttlSeconds` are optional;
+        `ttlSeconds` must be from 30 through 600. A positive `revision` is required
+        for optimistic concurrency, a stale revision returns 409, and a successful
+        update increments the revision.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: schemas/v1/admin.schema.json#/$defs/ApprovalPolicyUpdateRequest}
+      responses:
+        "200":
+          description: Updated remote-approval policy with its incremented revision.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/ApprovalPolicy}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The supplied revision is stale.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/admin/settings:
+    get:
+      tags: [admin]
+      operationId: getAdminSettings
+      summary: Read display-safe runtime settings and health
+      description: |
+        Available only to owner and admin roles. Returns selected runtime settings,
+        version and database health. Token values, passwords, APNs or FCM
+        credentials, database URLs and local storage paths are never returned;
+        TTL fields are numeric lifetime configuration only.
+      security:
+        - bootstrapBearer: []
+        - adminBearer: []
+      responses:
+        "200":
+          description: Display-safe runtime settings and health metadata.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/admin.schema.json#/$defs/AdminRuntimeSettings}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "500": {$ref: "#/components/responses/InternalError"}
   /v1/admin/users:
     get:
       tags: [admin]

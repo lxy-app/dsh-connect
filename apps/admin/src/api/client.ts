@@ -94,6 +94,69 @@ export interface PendingRequest {
   expiresAt: string;
 }
 
+/** Display-safe question shape shared with the v1 interaction protocol. */
+export interface InteractionQuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface InteractionQuestion {
+  id: string;
+  question: string;
+  detail?: string;
+  header?: string;
+  options?: InteractionQuestionOption[];
+  multiSelect?: boolean;
+}
+
+/** Full pending context is read-only in Admin; decisions stay on mobile/desktop. */
+export interface AdminInteraction {
+  interactionId: string;
+  kind: 'approval' | 'question' | string;
+  title: string;
+  toolName?: string;
+  reason?: string;
+  callId?: string;
+  questions?: InteractionQuestion[];
+  deviceId: string;
+  deviceName: string;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface ApprovalPolicy {
+  remoteEnabled: boolean;
+  ttlSeconds: number;
+  revision: number;
+  createdAt?: string;
+  updatedAt: string;
+}
+
+export interface ApprovalPolicyPatch {
+  remoteEnabled?: boolean;
+  ttlSeconds?: number;
+  revision: number;
+}
+
+/** Runtime-only, non-secret server configuration returned by GET /v1/admin/settings. */
+export interface AdminSettings {
+  serverUrl: string;
+  pairingCodeTTLSeconds: number;
+  mobileAccessTokenTTLSeconds: number;
+  adminSessionTTLSeconds: number;
+  commandTimeoutSeconds: number;
+  attachmentsMode: string;
+  maxAttachmentBytes: number;
+  attachmentTTLSeconds: number;
+  goVersion: string;
+  databaseDialect: string;
+  databaseConnected: boolean;
+  generatedAt: string;
+}
+
 export interface Overview {
   devices: Record<string, number>;
   users: Record<string, number>;
@@ -372,6 +435,23 @@ export const adminApi = {
 
   sessions(signal?: AbortSignal): Promise<SessionsResponse> {
     return request<SessionsResponse>('/v1/admin/sessions', { signal });
+  },
+
+  async interactions(signal?: AbortSignal): Promise<AdminInteraction[]> {
+    const response = await request<{ interactions: AdminInteraction[] }>('/v1/admin/interactions', { signal });
+    return response.interactions ?? [];
+  },
+
+  approvalPolicy(signal?: AbortSignal): Promise<ApprovalPolicy> {
+    return request<ApprovalPolicy>('/v1/admin/approval-policy', { signal });
+  },
+
+  updateApprovalPolicy(input: ApprovalPolicyPatch): Promise<ApprovalPolicy> {
+    return request<ApprovalPolicy>('/v1/admin/approval-policy', { method: 'PATCH', body: input });
+  },
+
+  settings(signal?: AbortSignal): Promise<AdminSettings> {
+    return request<AdminSettings>('/v1/admin/settings', { signal });
   },
 
   async users(signal?: AbortSignal): Promise<AdminUser[]> {

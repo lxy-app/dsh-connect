@@ -642,6 +642,125 @@
         }
       },
       "additionalProperties": false
+    },
+    "AdminInteractionDetail": {
+      "type": "object",
+      "description": "Read-only pending approval or question detail for an authorized Admin operator. Optional tool, reason, call and question fields may be omitted when empty. It never includes answers, decisions, session content or credential material.",
+      "required": [
+        "interactionId",
+        "kind",
+        "title",
+        "deviceId",
+        "deviceName",
+        "sessionId",
+        "workspaceId",
+        "workspaceName",
+        "createdAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"type": "string", "enum": ["approval", "question"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 512},
+        "toolName": {"type": "string", "maxLength": 512},
+        "reason": {"type": "string", "maxLength": 4096},
+        "callId": {"type": "string", "maxLength": 256},
+        "questions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {"$ref": "interaction.schema.json#/$defs/InteractionQuestion"}
+        },
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "maxLength": 256},
+        "sessionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workspaceName": {"type": "string", "maxLength": 512},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AdminInteractionListResponse": {
+      "type": "object",
+      "required": ["interactions"],
+      "properties": {
+        "interactions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminInteractionDetail"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalPolicy": {
+      "type": "object",
+      "description": "Singleton remote-approval policy with an optimistic-concurrency revision.",
+      "required": ["remoteEnabled", "ttlSeconds", "revision", "createdAt", "updatedAt"],
+      "properties": {
+        "remoteEnabled": {"type": "boolean"},
+        "ttlSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 600,
+          "description": "Maximum time a remote interaction remains answerable, from 30 through 600 seconds."
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1,
+          "description": "Optimistic-concurrency revision; every successful update increments it."
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "ApprovalPolicyUpdateRequest": {
+      "type": "object",
+      "description": "Strictly decoded partial update: unknown JSON fields are rejected. remoteEnabled and ttlSeconds are optional; revision is required and must match the current revision.",
+      "required": ["revision"],
+      "properties": {
+        "remoteEnabled": {"type": "boolean"},
+        "ttlSeconds": {"type": "integer", "minimum": 30, "maximum": 600},
+        "revision": {"type": "integer", "format": "int64", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "AdminRuntimeSettings": {
+      "type": "object",
+      "description": "Display-safe runtime configuration and health metadata. Token values, passwords, APNs/FCM credentials, database URLs and local storage paths are never returned.",
+      "required": [
+        "serverUrl",
+        "pairingCodeTTLSeconds",
+        "mobileAccessTokenTTLSeconds",
+        "adminSessionTTLSeconds",
+        "commandTimeoutSeconds",
+        "attachmentsMode",
+        "maxAttachmentBytes",
+        "attachmentTTLSeconds",
+        "goVersion",
+        "databaseDialect",
+        "databaseConnected",
+        "generatedAt"
+      ],
+      "properties": {
+        "serverUrl": {"type": "string", "format": "uri"},
+        "pairingCodeTTLSeconds": {"type": "integer", "minimum": 1},
+        "mobileAccessTokenTTLSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Lifetime configuration only; no mobile access token is returned."
+        },
+        "adminSessionTTLSeconds": {"type": "integer", "minimum": 1},
+        "commandTimeoutSeconds": {"type": "integer", "minimum": 1},
+        "attachmentsMode": {"type": "string", "enum": ["off", "read", "readwrite"]},
+        "maxAttachmentBytes": {"type": "integer", "format": "int64", "minimum": 1},
+        "attachmentTTLSeconds": {"type": "integer", "minimum": 1},
+        "goVersion": {"type": "string", "minLength": 1},
+        "databaseDialect": {"type": "string", "enum": ["postgres", "sqlite"]},
+        "databaseConnected": {"type": "boolean"},
+        "generatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
     }
   }
 }

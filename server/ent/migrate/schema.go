@@ -55,6 +55,21 @@ var (
 			},
 		},
 	}
+	// ApprovalPoliciesColumns holds the columns for the "approval_policies" table.
+	ApprovalPoliciesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true},
+		{Name: "remote_enabled", Type: field.TypeBool, Default: true},
+		{Name: "ttl_seconds", Type: field.TypeInt, Default: 600},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// ApprovalPoliciesTable holds the schema information for the "approval_policies" table.
+	ApprovalPoliciesTable = &schema.Table{
+		Name:       "approval_policies",
+		Columns:    ApprovalPoliciesColumns,
+		PrimaryKey: []*schema.Column{ApprovalPoliciesColumns[0]},
+	}
 	// AttachmentBlobsColumns holds the columns for the "attachment_blobs" table.
 	AttachmentBlobsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true},
@@ -385,6 +400,7 @@ var (
 	Tables = []*schema.Table{
 		AccessPoliciesTable,
 		AdminSessionsTable,
+		ApprovalPoliciesTable,
 		AttachmentBlobsTable,
 		AuditEntriesTable,
 		DevicesTable,

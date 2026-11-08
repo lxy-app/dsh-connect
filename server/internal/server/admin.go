@@ -18,6 +18,10 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /v1/admin/overview", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminOverview))
 	mux.HandleFunc("GET /v1/admin/sessions", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminSessions))
+	mux.HandleFunc("GET /v1/admin/interactions", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminInteractions))
+	mux.HandleFunc("GET /v1/admin/approval-policy", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminApprovalPolicy))
+	mux.HandleFunc("PATCH /v1/admin/approval-policy", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateApprovalPolicy))
+	mux.HandleFunc("GET /v1/admin/settings", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminSettings))
 
 	mux.HandleFunc("GET /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminUsers))
 	mux.HandleFunc("POST /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateUser))

@@ -29,6 +29,8 @@ Vite 开发服务器把 `/v1` 代理到 `http://127.0.0.1:8787`（可用 `DSH_CO
 | `/mobile` | 兼容旧深链，重定向到 `/devices?tab=mobile` |
 | `/policies` | 访问策略 CRUD、启停、成员关联、按桌面×工作区×scope 配置与 revision 冲突处理 |
 | `/running` | 只读会话元数据，按设备、状态、工作区筛选；单桌面异常以 warning 展示 |
+| `/approvals` | 只读待处理审批/提问与完整详情；Owner/Admin 可用 revision 更新远程审批开关与 TTL |
+| `/settings` | Owner/Admin 只读查看 Server 运行配置、数据库健康与未接入能力状态 |
 | `/audit` | 审计日志，支持动作/操作者/结果/时间范围过滤与分页；策略变更可展开 before/after 差异 |
 
 ## 桌面配对
@@ -63,13 +65,23 @@ Server 返回的 `serverUrl` 必须能被手机访问。若页面提示回环地
 
 概览中的“今日指令”和近 7 日趋势按幂等记录中的唯一 `session.prompt` 准入计算，即 Connector 已成功响应的请求；同一 requestId 重试不重复计数，未提交请求不计入，也不代表 Turn 已完成。日期桶使用浏览器提供的 IANA 时区，默认 UTC。
 
+## 远程审批与运行配置
+
+`/approvals` 的待处理列表和详情对 owner/admin/auditor 均为只读，不提供审批决定操作。交互只能明确决定一次，超时、离线、撤回或协议错误均失败关闭；Connector 未处理时保留桌面审批链。Owner/Admin 可修改远程审批开关和 TTL，PATCH 必须携带 revision；冲突时保留当前草稿。生物识别仅显示“移动端待接入”。
+
+`/settings` 仅 owner/admin 可访问，展示 Server 地址、各类 TTL、附件限制、Go 版本、数据库连接状态和配置生成时间。APNs/FCM 与锁屏通知隐私明确标为未接入，由部署配置管理；页面不读取或展示配对码、Token、数据库凭据或推送密钥。
+
+## 视觉与响应式
+
+Admin 使用与移动 App 相同的正式应用图标。明暗主题由顶部按钮切换，使用 Ant Design token/算法，支持系统初始偏好并保存到 `dsh-connect.admin.theme`。窄屏下侧栏保持收缩、内容缩小留白，数据表在自身容器内横向滚动，不造成页面整体横向溢出。
+
 ## 权限模型
 
 前端只做体验层隐藏，真正的权限由 Server 强制：
 
 - `owner`：全部操作，含角色变更、启用禁用、删除用户；必须保留至少一位 active Owner。
 - `admin`：可创建/编辑非 Owner 账号资料、重置其密码、管理设备；不能修改 Owner 资料或凭据、不能改角色、不能创建 Owner。
-- `auditor`：只读概览、用户、设备、配对状态与审计。
+- `auditor`：只读概览、用户、设备、策略、运行会话、审批与审计；不能访问系统设置或修改数据。
 - `member`：仅保留本人身份，不加载全局概览、用户、设备、配对或审计页面。
 
 手机设备页：owner/admin 可生成配对码并吊销手机；auditor 只读；member 无权访问该页面。后端同样强制这些权限。Member 本人自助配对 API 的既有能力不变，但当前 Web Admin 不提供对应页面。

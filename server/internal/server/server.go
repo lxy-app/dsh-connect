@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/deepseek/dsh-connect/server/internal/store"
 )
@@ -34,6 +35,11 @@ func New(ctx context.Context, config Config) (*Server, error) {
 		_ = persistentStore.Close()
 		return nil, err
 	}
+	approvalPolicy, err := persistentStore.EnsureApprovalPolicy(ctx)
+	if err != nil {
+		_ = persistentStore.Close()
+		return nil, err
+	}
 	// A fetching command cannot outlive the process that issued it. Release
 	// those rows so a restart does not leave mobile downloads pending forever.
 	if err := persistentStore.RecoverAttachmentFetches(ctx, nowUTC()); err != nil {
@@ -55,9 +61,10 @@ func New(ctx context.Context, config Config) (*Server, error) {
 		store:           persistentStore,
 		hub:             NewHub(),
 		events:          NewEventHub(config.EventBuffer),
-		interactions:    NewInteractionStore(interactionMaxTTL),
+		interactions:    NewInteractionStore(time.Duration(approvalPolicy.TTLSeconds) * time.Second),
 		attachmentBlobs: attachmentBlobs{dir: config.AttachmentDir},
 	}
+	s.interactions.SetEnabled(approvalPolicy.RemoteEnabled)
 	s.router = NewRouter(s)
 	s.handler = s.routes()
 	return s, nil

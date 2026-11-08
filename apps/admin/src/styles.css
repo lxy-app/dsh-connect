@@ -3,6 +3,11 @@
   --dsh-bg: #f4f6fb;
 }
 
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --dsh-bg: #141414;
+}
+
 * {
   box-sizing: border-box;
 }

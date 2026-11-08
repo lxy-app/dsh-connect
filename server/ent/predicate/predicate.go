@@ -12,6 +12,9 @@ type AccessPolicy func(*sql.Selector)
 // AdminSession is the predicate function for adminsession builders.
 type AdminSession func(*sql.Selector)
 
+// ApprovalPolicy is the predicate function for approvalpolicy builders.
+type ApprovalPolicy func(*sql.Selector)
+
 // AttachmentBlob is the predicate function for attachmentblob builders.
 type AttachmentBlob func(*sql.Selector)
 

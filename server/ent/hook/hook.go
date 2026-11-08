@@ -33,6 +33,18 @@ func (f AdminSessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AdminSessionMutation", m)
 }
 
+// The ApprovalPolicyFunc type is an adapter to allow the use of ordinary
+// function as ApprovalPolicy mutator.
+type ApprovalPolicyFunc func(context.Context, *ent.ApprovalPolicyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ApprovalPolicyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ApprovalPolicyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ApprovalPolicyMutation", m)
+}
+
 // The AttachmentBlobFunc type is an adapter to allow the use of ordinary
 // function as AttachmentBlob mutator.
 type AttachmentBlobFunc func(context.Context, *ent.AttachmentBlobMutation) (ent.Value, error)

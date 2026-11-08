@@ -18,6 +18,8 @@ type Tx struct {
 	AccessPolicy *AccessPolicyClient
 	// AdminSession is the client for interacting with the AdminSession builders.
 	AdminSession *AdminSessionClient
+	// ApprovalPolicy is the client for interacting with the ApprovalPolicy builders.
+	ApprovalPolicy *ApprovalPolicyClient
 	// AttachmentBlob is the client for interacting with the AttachmentBlob builders.
 	AttachmentBlob *AttachmentBlobClient
 	// AuditEntry is the client for interacting with the AuditEntry builders.
@@ -171,6 +173,7 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.AccessPolicy = NewAccessPolicyClient(tx.config)
 	tx.AdminSession = NewAdminSessionClient(tx.config)
+	tx.ApprovalPolicy = NewApprovalPolicyClient(tx.config)
 	tx.AttachmentBlob = NewAttachmentBlobClient(tx.config)
 	tx.AuditEntry = NewAuditEntryClient(tx.config)
 	tx.Device = NewDeviceClient(tx.config)

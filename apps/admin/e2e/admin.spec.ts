@@ -25,12 +25,29 @@ interface MockPolicy {
   updatedAt: string;
 }
 
+interface MockApprovalPolicy {
+  remoteEnabled: boolean;
+  ttlSeconds: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ApprovalPolicyPatch {
+  remoteEnabled?: boolean;
+  ttlSeconds?: number;
+  revision: number;
+}
+
 interface Scenario {
   pairingState: 'active' | 'waiting_desktop_authorization' | 'used' | 'expired';
   deviceLoads: number;
   sessionLoads: number;
+  settingsLoads: number;
   policies: MockPolicy[];
   createdPolicies: Array<Omit<MockPolicy, 'policyId' | 'revision' | 'createdAt' | 'updatedAt'>>;
+  approvalPolicy: MockApprovalPolicy;
+  approvalPolicyPatches: ApprovalPolicyPatch[];
   unexpectedRequests: string[];
 }
 
@@ -49,8 +66,17 @@ async function mockAdminApi(page: Page, user: MockUser = owner): Promise<Scenari
     pairingState: 'active',
     deviceLoads: 0,
     sessionLoads: 0,
+    settingsLoads: 0,
     policies: [],
     createdPolicies: [],
+    approvalPolicy: {
+      remoteEnabled: true,
+      ttlSeconds: 120,
+      revision: 4,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    },
+    approvalPolicyPatches: [],
     unexpectedRequests: [],
   };
   await page.addInitScript(() => {
@@ -90,6 +116,57 @@ async function mockAdminApi(page: Page, user: MockUser = owner): Promise<Scenari
           code: 'snapshot_delayed',
           message: 'Desktop snapshot is delayed',
         }],
+      });
+    }
+    if (path === '/v1/admin/interactions' && method === 'GET') {
+      return json({
+        interactions: [{
+          interactionId: 'interaction-e2e-approval',
+          kind: 'approval',
+          title: 'E2E production approval',
+          toolName: 'bash',
+          reason: 'The command modifies the production deployment',
+          callId: 'call-e2e-42',
+          questions: [],
+          deviceId: 'dev-e2e-1',
+          deviceName: 'E2E MacBook',
+          sessionId: 'session-e2e-1',
+          workspaceId: 'ws-1',
+          workspaceName: 'dsh-connect',
+          createdAt: '2026-01-01T00:00:00Z',
+          expiresAt: '2026-01-01T00:02:00Z',
+        }],
+      });
+    }
+    if (path === '/v1/admin/approval-policy' && method === 'GET') return json(scenario.approvalPolicy);
+    if (path === '/v1/admin/approval-policy' && method === 'PATCH') {
+      const input = request.postDataJSON() as ApprovalPolicyPatch;
+      scenario.approvalPolicyPatches.push(input);
+      scenario.approvalPolicy = {
+        ...scenario.approvalPolicy,
+        ...input,
+        revision: scenario.approvalPolicy.revision + 1,
+        updatedAt: '2026-01-01T00:05:00Z',
+      };
+      return json(scenario.approvalPolicy);
+    }
+    if (path === '/v1/admin/settings' && method === 'GET') {
+      scenario.settingsLoads += 1;
+      return json({
+        serverUrl: 'https://connect.example.com',
+        pairingCodeTTLSeconds: 300,
+        mobileAccessTokenTTLSeconds: 900,
+        adminSessionTTLSeconds: 43200,
+        commandTimeoutSeconds: 30,
+        attachmentsMode: 'read',
+        maxAttachmentBytes: 20971520,
+        attachmentTTLSeconds: 604800,
+        goVersion: 'go1.26.0',
+        databaseDialect: 'postgresql',
+        databaseConnected: true,
+        generatedAt: '2026-01-03T04:05:06Z',
+        databaseUrl: 'postgres://secret-database-password@internal/db',
+        bootstrapToken: 'secret-e2e-bootstrap-token',
       });
     }
     if (path === '/v1/admin/policies' && method === 'GET') return json({ policies: scenario.policies });
@@ -251,6 +328,42 @@ test('loads running session metadata and warnings with manual refresh', async ({
 
   await page.getByRole('button', { name: /刷\s*新/ }).click();
   await expect.poll(() => scenario.sessionLoads).toBeGreaterThanOrEqual(2);
+  expect(scenario.unexpectedRequests).toEqual([]);
+});
+
+test('saves approval policy with revision and refreshes the remote switch', async ({ page }) => {
+  const scenario = await mockAdminApi(page);
+  await page.goto('/approvals');
+  await expect(page.getByRole('heading', { name: '远程审批' })).toBeVisible();
+  await expect(page.getByText('E2E production approval', { exact: true })).toBeVisible();
+  await expect(page.getByText('一次性、超时失败关闭，桌面链保留', { exact: true })).toBeVisible();
+  await expect(page.getByText('移动端待接入', { exact: true })).toBeVisible();
+
+  await page.getByRole('switch', { name: '远程审批' }).click();
+  await page.getByRole('spinbutton', { name: '审批 TTL（秒）' }).fill('300');
+  await page.getByRole('button', { name: '保存审批策略' }).click();
+
+  await expect.poll(() => scenario.approvalPolicyPatches.length).toBe(1);
+  expect(scenario.approvalPolicyPatches).toEqual([{ remoteEnabled: false, ttlSeconds: 300, revision: 4 }]);
+  await expect(page.getByRole('switch', { name: '远程审批' })).not.toBeChecked();
+  await expect(page.getByRole('spinbutton', { name: '审批 TTL（秒）' })).toHaveValue('300');
+  expect(scenario.unexpectedRequests).toEqual([]);
+});
+
+test('reads runtime settings without rendering unexpected secret fields', async ({ page }) => {
+  const scenario = await mockAdminApi(page);
+  await page.goto('/settings');
+  await expect(page.getByRole('heading', { name: '系统设置' })).toBeVisible();
+  await expect(page.getByText('https://connect.example.com', { exact: true })).toBeVisible();
+  await expect(page.getByText('go1.26.0', { exact: true })).toBeVisible();
+  await expect(page.getByText('postgresql', { exact: true })).toBeVisible();
+  await expect(page.getByText('已连接', { exact: true })).toBeVisible();
+  await expect(page.getByText('APNs / FCM 推送', { exact: true })).toBeVisible();
+  await expect(page.getByText('锁屏通知隐私', { exact: true })).toBeVisible();
+  await expect(page.getByText('未接入', { exact: true })).toHaveCount(2);
+  await expect(page.getByText(/secret-database-password/)).toHaveCount(0);
+  await expect(page.getByText('secret-e2e-bootstrap-token', { exact: true })).toHaveCount(0);
+  expect(scenario.settingsLoads).toBeGreaterThanOrEqual(1);
   expect(scenario.unexpectedRequests).toEqual([]);
 });
 

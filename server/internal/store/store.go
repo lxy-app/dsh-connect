@@ -45,6 +45,8 @@ var (
 	ErrAccessPolicyNotFound    = errors.New("access policy not found")
 	ErrAccessPolicyConflict    = errors.New("access policy revision conflict")
 	ErrAccessPolicyNameTaken   = errors.New("access policy name is already registered")
+	ErrApprovalPolicyNotFound  = errors.New("approval policy not found")
+	ErrApprovalPolicyConflict  = errors.New("approval policy revision conflict")
 )
 
 // PairingCode is a one-time desktop pairing code. Only CodeHash is persisted.
@@ -178,6 +180,22 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 // Client exposes the generated ent client for administrative queries.
 func (s *Store) Client() *ent.Client {
 	return s.client
+}
+
+// Ping verifies that the configured database is currently reachable.
+func (s *Store) Ping(ctx context.Context) error {
+	if err := s.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	return nil
+}
+
+// DatabaseDialect returns the public SQL dialect name without exposing the DSN.
+func (s *Store) DatabaseDialect() string {
+	if s.databaseDialect == dialect.SQLite {
+		return "sqlite"
+	}
+	return s.databaseDialect
 }
 
 // Migrate creates missing tables, columns and indexes. It never drops data.

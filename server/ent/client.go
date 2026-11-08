@@ -16,6 +16,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/deepseek/dsh-connect/server/ent/accesspolicy"
 	"github.com/deepseek/dsh-connect/server/ent/adminsession"
+	"github.com/deepseek/dsh-connect/server/ent/approvalpolicy"
 	"github.com/deepseek/dsh-connect/server/ent/attachmentblob"
 	"github.com/deepseek/dsh-connect/server/ent/auditentry"
 	"github.com/deepseek/dsh-connect/server/ent/device"
@@ -39,6 +40,8 @@ type Client struct {
 	AccessPolicy *AccessPolicyClient
 	// AdminSession is the client for interacting with the AdminSession builders.
 	AdminSession *AdminSessionClient
+	// ApprovalPolicy is the client for interacting with the ApprovalPolicy builders.
+	ApprovalPolicy *ApprovalPolicyClient
 	// AttachmentBlob is the client for interacting with the AttachmentBlob builders.
 	AttachmentBlob *AttachmentBlobClient
 	// AuditEntry is the client for interacting with the AuditEntry builders.
@@ -72,6 +75,7 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.AccessPolicy = NewAccessPolicyClient(c.config)
 	c.AdminSession = NewAdminSessionClient(c.config)
+	c.ApprovalPolicy = NewApprovalPolicyClient(c.config)
 	c.AttachmentBlob = NewAttachmentBlobClient(c.config)
 	c.AuditEntry = NewAuditEntryClient(c.config)
 	c.Device = NewDeviceClient(c.config)
@@ -176,6 +180,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:            cfg,
 		AccessPolicy:      NewAccessPolicyClient(cfg),
 		AdminSession:      NewAdminSessionClient(cfg),
+		ApprovalPolicy:    NewApprovalPolicyClient(cfg),
 		AttachmentBlob:    NewAttachmentBlobClient(cfg),
 		AuditEntry:        NewAuditEntryClient(cfg),
 		Device:            NewDeviceClient(cfg),
@@ -207,6 +212,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:            cfg,
 		AccessPolicy:      NewAccessPolicyClient(cfg),
 		AdminSession:      NewAdminSessionClient(cfg),
+		ApprovalPolicy:    NewApprovalPolicyClient(cfg),
 		AttachmentBlob:    NewAttachmentBlobClient(cfg),
 		AuditEntry:        NewAuditEntryClient(cfg),
 		Device:            NewDeviceClient(cfg),
@@ -246,9 +252,10 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AccessPolicy, c.AdminSession, c.AttachmentBlob, c.AuditEntry, c.Device,
-		c.IdempotencyRecord, c.MobileAccessGrant, c.MobileDevice, c.MobilePairingCode,
-		c.PairingCode, c.SessionAttachment, c.User,
+		c.AccessPolicy, c.AdminSession, c.ApprovalPolicy, c.AttachmentBlob,
+		c.AuditEntry, c.Device, c.IdempotencyRecord, c.MobileAccessGrant,
+		c.MobileDevice, c.MobilePairingCode, c.PairingCode, c.SessionAttachment,
+		c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -258,9 +265,10 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AccessPolicy, c.AdminSession, c.AttachmentBlob, c.AuditEntry, c.Device,
-		c.IdempotencyRecord, c.MobileAccessGrant, c.MobileDevice, c.MobilePairingCode,
-		c.PairingCode, c.SessionAttachment, c.User,
+		c.AccessPolicy, c.AdminSession, c.ApprovalPolicy, c.AttachmentBlob,
+		c.AuditEntry, c.Device, c.IdempotencyRecord, c.MobileAccessGrant,
+		c.MobileDevice, c.MobilePairingCode, c.PairingCode, c.SessionAttachment,
+		c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -273,6 +281,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.AccessPolicy.mutate(ctx, m)
 	case *AdminSessionMutation:
 		return c.AdminSession.mutate(ctx, m)
+	case *ApprovalPolicyMutation:
+		return c.ApprovalPolicy.mutate(ctx, m)
 	case *AttachmentBlobMutation:
 		return c.AttachmentBlob.mutate(ctx, m)
 	case *AuditEntryMutation:
@@ -561,6 +571,139 @@ func (c *AdminSessionClient) mutate(ctx context.Context, m *AdminSessionMutation
 		return (&AdminSessionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AdminSession mutation op: %q", m.Op())
+	}
+}
+
+// ApprovalPolicyClient is a client for the ApprovalPolicy schema.
+type ApprovalPolicyClient struct {
+	config
+}
+
+// NewApprovalPolicyClient returns a client for the ApprovalPolicy from the given config.
+func NewApprovalPolicyClient(c config) *ApprovalPolicyClient {
+	return &ApprovalPolicyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `approvalpolicy.Hooks(f(g(h())))`.
+func (c *ApprovalPolicyClient) Use(hooks ...Hook) {
+	c.hooks.ApprovalPolicy = append(c.hooks.ApprovalPolicy, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `approvalpolicy.Intercept(f(g(h())))`.
+func (c *ApprovalPolicyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ApprovalPolicy = append(c.inters.ApprovalPolicy, interceptors...)
+}
+
+// Create returns a builder for creating a ApprovalPolicy entity.
+func (c *ApprovalPolicyClient) Create() *ApprovalPolicyCreate {
+	mutation := newApprovalPolicyMutation(c.config, OpCreate)
+	return &ApprovalPolicyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ApprovalPolicy entities.
+func (c *ApprovalPolicyClient) CreateBulk(builders ...*ApprovalPolicyCreate) *ApprovalPolicyCreateBulk {
+	return &ApprovalPolicyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ApprovalPolicyClient) MapCreateBulk(slice any, setFunc func(*ApprovalPolicyCreate, int)) *ApprovalPolicyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ApprovalPolicyCreateBulk{err: fmt.Errorf("calling to ApprovalPolicyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ApprovalPolicyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ApprovalPolicyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ApprovalPolicy.
+func (c *ApprovalPolicyClient) Update() *ApprovalPolicyUpdate {
+	mutation := newApprovalPolicyMutation(c.config, OpUpdate)
+	return &ApprovalPolicyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ApprovalPolicyClient) UpdateOne(_m *ApprovalPolicy) *ApprovalPolicyUpdateOne {
+	mutation := newApprovalPolicyMutation(c.config, OpUpdateOne, withApprovalPolicy(_m))
+	return &ApprovalPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ApprovalPolicyClient) UpdateOneID(id string) *ApprovalPolicyUpdateOne {
+	mutation := newApprovalPolicyMutation(c.config, OpUpdateOne, withApprovalPolicyID(id))
+	return &ApprovalPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ApprovalPolicy.
+func (c *ApprovalPolicyClient) Delete() *ApprovalPolicyDelete {
+	mutation := newApprovalPolicyMutation(c.config, OpDelete)
+	return &ApprovalPolicyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ApprovalPolicyClient) DeleteOne(_m *ApprovalPolicy) *ApprovalPolicyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ApprovalPolicyClient) DeleteOneID(id string) *ApprovalPolicyDeleteOne {
+	builder := c.Delete().Where(approvalpolicy.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.SetOp(OpDeleteOne)
+	return &ApprovalPolicyDeleteOne{builder}
+}
+
+// Query returns a query builder for ApprovalPolicy.
+func (c *ApprovalPolicyClient) Query() *ApprovalPolicyQuery {
+	return &ApprovalPolicyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeApprovalPolicy},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ApprovalPolicy entity by its id.
+func (c *ApprovalPolicyClient) Get(ctx context.Context, id string) (*ApprovalPolicy, error) {
+	return c.Query().Where(approvalpolicy.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ApprovalPolicyClient) GetX(ctx context.Context, id string) *ApprovalPolicy {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ApprovalPolicyClient) Hooks() []Hook {
+	return c.hooks.ApprovalPolicy
+}
+
+// Interceptors returns the client interceptors.
+func (c *ApprovalPolicyClient) Interceptors() []Interceptor {
+	return c.inters.ApprovalPolicy
+}
+
+func (c *ApprovalPolicyClient) mutate(ctx context.Context, m *ApprovalPolicyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ApprovalPolicyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ApprovalPolicyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ApprovalPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ApprovalPolicyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ApprovalPolicy mutation op: %q", m.Op())
 	}
 }
 
@@ -1897,12 +2040,12 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AccessPolicy, AdminSession, AttachmentBlob, AuditEntry, Device,
+		AccessPolicy, AdminSession, ApprovalPolicy, AttachmentBlob, AuditEntry, Device,
 		IdempotencyRecord, MobileAccessGrant, MobileDevice, MobilePairingCode,
 		PairingCode, SessionAttachment, User []ent.Hook
 	}
 	inters struct {
-		AccessPolicy, AdminSession, AttachmentBlob, AuditEntry, Device,
+		AccessPolicy, AdminSession, ApprovalPolicy, AttachmentBlob, AuditEntry, Device,
 		IdempotencyRecord, MobileAccessGrant, MobileDevice, MobilePairingCode,
 		PairingCode, SessionAttachment, User []ent.Interceptor
 	}

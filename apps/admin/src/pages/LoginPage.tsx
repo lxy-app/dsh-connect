@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Form, Input, Typography } from 'antd';
+import { Alert, Button, Card, Form, Input, Typography, theme } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth/AuthProvider';
 import { ApiError } from '../api/client';
@@ -13,6 +13,7 @@ interface LoginForm {
 
 export function LoginPage() {
   const { signIn } = useAuth();
+  const { token } = theme.useToken();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +39,7 @@ export function LoginPage() {
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        background: 'linear-gradient(160deg, #f5f7ff 0%, #eef2f9 55%, #e8edf7 100%)',
+        background: `linear-gradient(160deg, ${token.colorBgLayout} 0%, ${token.colorBgContainer} 100%)`,
         padding: 24,
       }}
     >
