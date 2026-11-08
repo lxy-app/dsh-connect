@@ -79,6 +79,9 @@ async function main(): Promise<void> {
       env: {
         ...process.env,
         DSH_CONNECT_BOOTSTRAP_TOKEN: token,
+        DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL: 'e2e-owner@example.com',
+        DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD: 'e2e-owner-password-not-for-production',
+        DSH_CONNECT_BOOTSTRAP_OWNER_NAME: 'E2E Owner',
         DSH_CONNECT_DATABASE_URL: databaseURL,
         DSH_CONNECT_LISTEN_ADDR: `127.0.0.1:${port}`,
         DSH_CONNECT_SERVER_URL: serverUrl,
