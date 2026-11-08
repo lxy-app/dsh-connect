@@ -25,6 +25,12 @@ type Draft = {
   entries: MobileMessage[];
 };
 
+export function runningTurnIndex(turns: readonly TurnGroup[], active: boolean): number {
+  // A trailing user-only group is the new prompt's reply slot. Do not skip back
+  // to an older group with content and mark its completed reply as running again.
+  return active ? turns.length - 1 : -1;
+}
+
 /**
  * Groups a transcript into turns.
  *

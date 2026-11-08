@@ -31,7 +31,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
-import { groupTurns } from '@/lib/turn-grouping';
+import { groupTurns, runningTurnIndex } from '@/lib/turn-grouping';
 import {
   cancelMobileSession,
   createRequestId,
@@ -475,16 +475,7 @@ function ChatScreenContent() {
     [messages],
   );
   const turns = useMemo(() => groupTurns(conversation), [conversation]);
-  // While a new prompt is optimistic, the still-executing turn is the last one
-  // with content rather than the trailing user-only group.
-  const runningIndex = transcript?.active === true
-    ? turns.reduce(
-      (latest, turn, index) => (
-        turn.steps.length > 0 || turn.final || turn.attachments.length > 0 ? index : latest
-      ),
-      -1,
-    )
-    : -1;
+  const runningIndex = runningTurnIndex(turns, transcript?.active === true);
   const runningTurn = runningIndex >= 0 ? turns[runningIndex] : undefined;
   const runningHasContent = Boolean(
     runningTurn && (runningTurn.steps.length > 0 || runningTurn.final || runningTurn.attachments.length > 0),
