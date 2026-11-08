@@ -1,6 +1,7 @@
-# Production deployment using an existing PostgreSQL 18 instance.
+# Production deployment using PostgreSQL 18 (default) or single-instance SQLite.
 # Required settings in .env include DSH_CONNECT_BOOTSTRAP_TOKEN,
-# DSH_CONNECT_DATABASE_URL and the bootstrap Owner credentials.
+# DSH_CONNECT_DATABASE_URL and the bootstrap Owner credentials. For SQLite use
+# sqlite:///data/sqlite/dsh-connect.db and keep the dsh-connect-sqlite volume.
 services:
   server:
     image: lxyapp/dsh-connect:latest
@@ -19,6 +20,9 @@ services:
       # A host bind mount such as ./data/attachments:/data/attachments must be
       # owned by UID/GID 10001; the container runs as the unprivileged app user.
       - dsh-connect-attachments:/data/attachments
+      # Only used when DSH_CONNECT_DATABASE_URL selects SQLite. Keep the
+      # database on a local Docker volume; do not use a network filesystem.
+      - dsh-connect-sqlite:/data/sqlite
     extra_hosts:
       # Allows DSH_CONNECT_DATABASE_URL to reach PostgreSQL on the Docker host
       # via host.docker.internal. A remote database can use its DNS name or IP.
@@ -26,3 +30,4 @@ services:
 
 volumes:
   dsh-connect-attachments:
+  dsh-connect-sqlite:
