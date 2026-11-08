@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupTurns } from './turn-grouping';
+import { groupTurns, runningTurnIndex } from './turn-grouping';
 import type { MobileMessage } from '@/types/mobile';
 
 function message(partial: Partial<MobileMessage> & Pick<MobileMessage, 'seq' | 'role'>): MobileMessage {
@@ -39,6 +39,29 @@ test('a new user message starts a new group', () => {
   assert.equal(turns.length, 2);
   assert.equal(turns[1]?.user?.text, '第二轮');
   assert.equal(turns[1]?.final?.text, '答复二');
+});
+
+test('a new prompt owns the running state without reactivating the previous reply', () => {
+  const turns = groupTurns([
+    message({ seq: 1, role: 'user', text: '第一轮', turn: 1 }),
+    message({ seq: 2, role: 'assistant', text: '已完成的第一轮答复', turn: 1 }),
+    message({ seq: 3, role: 'user', text: '第二轮', turn: 2 }),
+  ]);
+
+  assert.equal(runningTurnIndex(turns, true), 1);
+  assert.equal(turns[0]?.final?.text, '已完成的第一轮答复');
+  assert.equal(turns[1]?.final, undefined);
+  assert.equal(runningTurnIndex(turns, false), -1);
+});
+
+test('an active reply with content remains the running turn', () => {
+  const turns = groupTurns([
+    message({ seq: 1, role: 'user', text: '第一轮' }),
+    message({ seq: 2, role: 'assistant', text: '正在回复' }),
+  ]);
+
+  assert.equal(runningTurnIndex(turns, true), 0);
+  assert.equal(runningTurnIndex([], true), -1);
 });
 
 test('a page that starts mid-turn still produces a usable group', () => {

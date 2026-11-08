@@ -205,7 +205,7 @@ function elapsedLabel(ms: number): string {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, marginBottom: 14, overflow: 'hidden' },
+  card: { borderWidth: 1, borderRadius: 16, marginTop: 12, marginBottom: 14, overflow: 'hidden' },
   head: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 11 },
   state: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   check: { fontSize: 13, fontWeight: '700' },
