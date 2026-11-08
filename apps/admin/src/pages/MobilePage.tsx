@@ -27,14 +27,14 @@ import type { AdminUser, MobileDevice, MobilePairingCode } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDateTime, formatRelative } from '../utils/format';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
 const statusMeta: Record<string, { color: string; label: string }> = {
   active: { color: 'success', label: '有效' },
   revoked: { color: 'default', label: '已吊销' },
 };
 
-export function MobilePage() {
+export function MobileDevicesPanel() {
   const { message } = AntApp.useApp();
   const { user } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -222,21 +222,8 @@ export function MobilePage() {
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          marginBottom: 20,
-          gap: 16,
-        }}
-      >
-        <div>
-          <Title level={4} style={{ marginBottom: 2 }}>
-            手机设备
-          </Title>
-          <Text type="secondary">为指定用户生成一次性配对二维码，并管理已配对手机凭据</Text>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 16 }}>
+        <Text type="secondary">为指定用户生成一次性配对二维码，并管理已配对手机凭据</Text>
         <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
           刷新
         </Button>

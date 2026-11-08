@@ -24,14 +24,23 @@ Vite 开发服务器把 `/v1` 代理到 `http://127.0.0.1:8787`（可用 `DSH_CO
 |---|---|
 | `/overview` | 设备在线/离线、账号统计、最近 8 条审计 |
 | `/users` | 用户列表、创建、改名/改角色/重置密码、启用禁用、删除 |
-| `/devices` | 设备列表、详情（授权工作区/scope/指纹）、改名、吊销、删除 |
-| `/pairing` | 生成一次性桌面配对码（明文只显示一次）、查看最近配对码状态 |
-| `/mobile` | 按用户生成手机配对二维码、复制配对码/链接、查看和吊销手机 |
+| `/devices` | 桌面/手机 Tab；桌面详情、改名、吊销、删除；添加桌面向导与配对记录；手机二维码配对与吊销 |
+| `/pairing` | 兼容旧深链，重定向到 `/devices` |
+| `/mobile` | 兼容旧深链，重定向到 `/devices?tab=mobile` |
 | `/audit` | 审计日志，支持动作/操作者/结果/时间范围过滤与分页 |
+
+## 桌面配对
+
+在 `/devices` 的“桌面 Connector”页点击“添加桌面”：
+
+1. 生成一次性配对码，明文仅保留在当前向导中，关闭后清除且不能回读。
+2. 在目标桌面的 Connector 面板中输入 Server 地址与配对码。
+3. 向导按稳定 `pairingId` 每 2 秒读取状态，依次展示等待 Connector、等待桌面授权和设备上线。
+4. 桌面明确确认指纹、工作区和 scopes 后才完成；接入桌面不会隐式授予手机权限。
 
 ## 手机配对
 
-`/mobile` 使用本地 `qrcode.react` 渲染二维码，不依赖外部二维码服务：
+`/devices?tab=mobile` 使用本地 `qrcode.react` 渲染二维码，不依赖外部二维码服务：
 
 1. 选择要绑定的用户。
 2. 生成一次性手机配对码。
@@ -70,5 +79,17 @@ make admin-build     # 产出 apps/admin/dist
 ## 检查
 
 ```sh
-make test-admin      # tsc --noEmit
+make test-admin           # TypeScript + Vitest 组件测试
+make test-admin-e2e       # Playwright Chromium 浏览器测试
 ```
+
+首次运行浏览器测试前安装匹配版本的 Chromium：
+
+```sh
+cd apps/admin
+npx playwright install chromium
+```
+
+已有系统 Chrome 时也可执行 `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e`，无需下载独立 Chromium。
+
+浏览器测试由 Playwright 启动 Vite，并通过 `page.route` 模拟 Admin API，覆盖设备 Tab、旧深链、配对状态轮询和 Member 路由拦截；不连接真实 Server。真实权限与协议行为由 Go Server 集成测试及跨端 E2E 验证。

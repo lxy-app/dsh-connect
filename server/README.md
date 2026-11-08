@@ -81,8 +81,8 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | POST | `/v1/admin/devices/{id}/revoke` | owner/admin | 吊销凭据并断开在线 Connector |
 | DELETE | `/v1/admin/devices/{id}` | owner/admin | 删除设备记录 |
 | GET | `/v1/admin/audit` | owner/admin/auditor | 审计查询：`action/actor/deviceId/result/from/to/limit/offset` |
-| POST | `/v1/admin/pairing-codes` | owner/admin | 生成一次性桌面配对码（明文仅返回一次） |
-| GET | `/v1/admin/pairing-codes` | owner/admin/auditor | 最近 20 个配对码的生命周期状态 |
+| POST | `/v1/admin/pairing-codes` | owner/admin | 生成一次性桌面配对码，返回稳定 `pairingId`；明文仅返回一次 |
+| GET | `/v1/admin/pairing-codes` | owner/admin/auditor | 最近 20 个配对码的 `pairingId` 与生命周期状态 |
 | POST | `/v1/admin/mobile/pairing-codes` | 已登录 | 为用户生成手机配对码；bootstrap 必须显式传 `userId`，成员只能为自己生成 |
 | GET | `/v1/admin/mobile-devices` | owner/admin/auditor | 手机设备列表，永不返回令牌 |
 | POST | `/v1/admin/mobile-devices/{id}/revoke` | owner/admin | 吊销手机及其访问/刷新令牌 |

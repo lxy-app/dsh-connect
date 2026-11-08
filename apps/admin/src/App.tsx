@@ -8,8 +8,6 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  MobileOutlined,
-  QrcodeOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -25,8 +23,6 @@ const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ de
 const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })));
 const DevicesPage = lazy(() => import('./pages/DevicesPage').then((m) => ({ default: m.DevicesPage })));
 const AuditPage = lazy(() => import('./pages/AuditPage').then((m) => ({ default: m.AuditPage })));
-const PairingPage = lazy(() => import('./pages/PairingPage').then((m) => ({ default: m.PairingPage })));
-const MobilePage = lazy(() => import('./pages/MobilePage').then((m) => ({ default: m.MobilePage })));
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -37,8 +33,6 @@ const NAV = [
   { key: '/overview', icon: <DashboardOutlined />, label: '概览' },
   { key: '/users', icon: <TeamOutlined />, label: '用户与角色' },
   { key: '/devices', icon: <CloudServerOutlined />, label: '设备管理' },
-  { key: '/pairing', icon: <QrcodeOutlined />, label: '桌面配对' },
-  { key: '/mobile', icon: <MobileOutlined />, label: '手机配对' },
   { key: '/audit', icon: <AuditOutlined />, label: '审计日志' },
 ];
 
@@ -177,8 +171,8 @@ export function App() {
               <Route path="/overview" element={guardManagementPage(<OverviewPage />)} />
               <Route path="/users" element={guardManagementPage(<UsersPage />)} />
               <Route path="/devices" element={guardManagementPage(<DevicesPage />)} />
-              <Route path="/pairing" element={guardManagementPage(<PairingPage />)} />
-              <Route path="/mobile" element={guardManagementPage(<MobilePage />)} />
+              <Route path="/pairing" element={<Navigate to="/devices" replace />} />
+              <Route path="/mobile" element={<Navigate to="/devices?tab=mobile" replace />} />
               <Route path="/audit" element={guardManagementPage(<AuditPage />)} />
               <Route path="*" element={<Navigate to="/overview" replace />} />
             </Routes>

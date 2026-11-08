@@ -576,6 +576,7 @@ func (s *Server) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 // ---------- pairing codes ----------
 
 type createPairingCodeResponse struct {
+	PairingID int       `json:"pairingId"`
 	Code      string    `json:"code"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	ServerURL string    `json:"serverUrl"`
@@ -603,14 +604,16 @@ func (s *Server) issuePairingCode(r *http.Request) (string, createPairingCodeRes
 	}
 	now := nowUTC()
 	expiresAt := now.Add(s.config.PairingCodeTTL)
-	if err := s.store.CreatePairingCode(r.Context(), store.PairingCode{
+	pairingID, err := s.store.CreatePairingCode(r.Context(), store.PairingCode{
 		CodeHash:  store.HashToken(code),
 		CreatedAt: now,
 		ExpiresAt: expiresAt,
-	}); err != nil {
+	})
+	if err != nil {
 		return "", createPairingCodeResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not persist pairing code", true))
 	}
 	return code, createPairingCodeResponse{
+		PairingID: pairingID,
 		Code:      code,
 		ExpiresAt: expiresAt,
 		ServerURL: s.config.ServerURL,
@@ -618,6 +621,7 @@ func (s *Server) issuePairingCode(r *http.Request) (string, createPairingCodeRes
 }
 
 type pairingCodeView struct {
+	PairingID int        `json:"pairingId"`
 	State     string     `json:"state"`
 	CreatedAt time.Time  `json:"createdAt"`
 	ExpiresAt time.Time  `json:"expiresAt"`
@@ -658,6 +662,7 @@ func (s *Server) handleAdminListPairingCodes(w http.ResponseWriter, r *http.Requ
 			state = "expired"
 		}
 		codes = append(codes, pairingCodeView{
+			PairingID: record.ID,
 			State:     state,
 			CreatedAt: record.CreatedAt,
 			ExpiresAt: record.ExpiresAt,

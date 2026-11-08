@@ -85,6 +85,7 @@ export interface AuditPage {
 
 /** A freshly issued desktop pairing code. The plaintext is shown only once. */
 export interface PairingCode {
+  pairingId: number;
   code: string;
   expiresAt: string;
   serverUrl: string;
@@ -92,6 +93,7 @@ export interface PairingCode {
 
 /** Lifecycle metadata for a previously issued pairing code. */
 export interface PairingCodeState {
+  pairingId: number;
   state: 'active' | 'waiting_desktop_authorization' | 'used' | 'expired';
   createdAt: string;
   expiresAt: string;

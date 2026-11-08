@@ -1,0 +1,345 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-connect.local/schemas/v1/admin.schema.json",
+  "title": "DSH Connect Web Admin DTOs v1",
+  "$defs": {
+    "AdminRole": {
+      "type": "string",
+      "enum": ["owner", "admin", "member", "auditor"]
+    },
+    "AdminUserStatus": {
+      "type": "string",
+      "enum": ["active", "disabled"]
+    },
+    "AdminUser": {
+      "type": "object",
+      "description": "Public administrative user projection. Passwords and password hashes are never returned.",
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "role",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "email": {"type": "string", "format": "email", "maxLength": 254},
+        "displayName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "role": {"$ref": "#/$defs/AdminRole"},
+        "status": {"$ref": "#/$defs/AdminUserStatus"},
+        "lastLoginAt": {"type": "string", "format": "date-time"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "AdminLoginRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected.",
+      "required": ["email", "password"],
+      "properties": {
+        "email": {"type": "string", "minLength": 1},
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "writeOnly": true,
+          "description": "Plaintext credential accepted only for authentication; it is never returned."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminLoginResponse": {
+      "type": "object",
+      "required": ["token", "expiresAt", "user"],
+      "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque Admin session token returned at login; only its hash is persisted."
+        },
+        "expiresAt": {"type": "string", "format": "date-time"},
+        "user": {"$ref": "#/$defs/AdminUser"}
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceCounts": {
+      "type": "object",
+      "required": ["total", "online", "offline", "waiting", "revoked"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "online": {"type": "integer", "minimum": 0},
+        "offline": {"type": "integer", "minimum": 0},
+        "waiting": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of devices in waiting_desktop_authorization state."
+        },
+        "revoked": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminUserCounts": {
+      "type": "object",
+      "required": ["total", "active", "disabled"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "active": {"type": "integer", "minimum": 0},
+        "disabled": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminOverviewResponse": {
+      "type": "object",
+      "required": ["devices", "users", "auditEntries", "recentActivity"],
+      "properties": {
+        "devices": {"$ref": "#/$defs/AdminDeviceCounts"},
+        "users": {"$ref": "#/$defs/AdminUserCounts"},
+        "auditEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of persisted audit entries."
+        },
+        "recentActivity": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "Up to eight newest audit entries.",
+          "items": {"$ref": "#/$defs/AdminAuditEntry"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminUserListResponse": {
+      "type": "object",
+      "required": ["users"],
+      "properties": {
+        "users": {
+          "type": "array",
+          "description": "Users ordered by creation time, oldest first.",
+          "items": {"$ref": "#/$defs/AdminUser"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminCreateUserRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected. Only an owner may assign the owner role.",
+      "required": ["email", "displayName", "password"],
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254,
+          "description": "Normalized to lowercase and trimmed before storage."
+        },
+        "displayName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "password": {
+          "type": "string",
+          "minLength": 8,
+          "writeOnly": true,
+          "description": "Initial plaintext password; only a one-way hash is persisted and neither form is returned."
+        },
+        "role": {"$ref": "#/$defs/AdminRole", "default": "member"}
+      },
+      "additionalProperties": false
+    },
+    "AdminUpdateUserRequest": {
+      "type": "object",
+      "description": "Strictly decoded partial update; omitted fields remain unchanged. Unknown JSON fields are rejected. An empty object is a valid no-op.",
+      "properties": {
+        "displayName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "role": {
+          "$ref": "#/$defs/AdminRole",
+          "description": "Only an owner may change roles."
+        },
+        "status": {
+          "$ref": "#/$defs/AdminUserStatus",
+          "description": "Only an owner may enable or disable accounts."
+        },
+        "password": {
+          "type": "string",
+          "minLength": 8,
+          "writeOnly": true,
+          "description": "Replacement plaintext password; only a one-way hash is persisted and neither form is returned."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDevice": {
+      "type": "object",
+      "description": "Desktop device projection with credential-presence metadata only; token and pairing hashes are never returned.",
+      "required": [
+        "deviceId",
+        "deviceName",
+        "fingerprint",
+        "connectorVersion",
+        "status",
+        "workspaces",
+        "scopes",
+        "createdAt",
+        "updatedAt",
+        "hasToken"
+      ],
+      "properties": {
+        "deviceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256},
+        "fingerprint": {"type": "string", "minLength": 1},
+        "connectorVersion": {"type": "string"},
+        "status": {
+          "type": "string",
+          "enum": ["waiting_desktop_authorization", "online", "offline", "revoked"]
+        },
+        "workspaces": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/Workspace"}
+        },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "common.schema.json#/$defs/Scope"}
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"},
+        "lastSeenAt": {"type": "string", "format": "date-time"},
+        "hasToken": {
+          "type": "boolean",
+          "description": "Whether a device token hash is currently stored; never exposes the hash or plaintext token."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceListResponse": {
+      "type": "object",
+      "required": ["devices"],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/AdminDevice"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceUpdateRequest": {
+      "type": "object",
+      "description": "Strictly decoded: unknown JSON fields are rejected.",
+      "required": ["deviceName"],
+      "properties": {
+        "deviceName": {"type": "string", "minLength": 1, "maxLength": 256}
+      },
+      "additionalProperties": false
+    },
+    "AdminDeviceRevokeResponse": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"const": "revoked"}
+      },
+      "additionalProperties": false
+    },
+    "AdminAuditEntry": {
+      "type": "object",
+      "description": "Append-only action metadata; audit entries do not contain session content or credential material.",
+      "required": ["occurredAt", "actor", "action", "result"],
+      "properties": {
+        "occurredAt": {"type": "string", "format": "date-time"},
+        "actor": {"type": "string", "minLength": 1},
+        "action": {"type": "string", "minLength": 1},
+        "requestId": {"type": "string", "minLength": 1},
+        "deviceId": {"type": "string", "minLength": 1},
+        "sessionId": {"type": "string", "minLength": 1},
+        "result": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stored result such as success, error, waiting_desktop_authorization, started, or failed."
+        },
+        "errorCode": {"type": "string", "minLength": 1},
+        "sourceIp": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "AdminAuditListResponse": {
+      "type": "object",
+      "required": ["entries", "total", "limit", "offset"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "description": "Matching entries ordered by occurredAt and internal id, newest first.",
+          "items": {"$ref": "#/$defs/AdminAuditEntry"}
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total matching entries before limit and offset are applied."
+        },
+        "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+        "offset": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "AdminDesktopPairingCodeResponse": {
+      "type": "object",
+      "description": "Freshly issued desktop pairing code. The plaintext code is returned only by this creation response; only its hash is persisted.",
+      "required": ["pairingId", "code", "expiresAt", "serverUrl"],
+      "properties": {
+        "pairingId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Stable administrative pairing record identifier."
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "One-time plaintext pairing code; never included in pairing-code listings or other read responses."
+        },
+        "expiresAt": {"type": "string", "format": "date-time"},
+        "serverUrl": {"type": "string", "format": "uri"}
+      },
+      "additionalProperties": false
+    },
+    "AdminDesktopPairingCodeState": {
+      "type": "object",
+      "description": "Pairing lifecycle metadata only. Neither the plaintext code nor its hash is exposed.",
+      "required": ["pairingId", "state", "createdAt", "expiresAt"],
+      "properties": {
+        "pairingId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Stable administrative pairing record identifier."
+        },
+        "state": {
+          "type": "string",
+          "enum": ["active", "waiting_desktop_authorization", "used", "expired"]
+        },
+        "createdAt": {"type": "string", "format": "date-time"},
+        "expiresAt": {"type": "string", "format": "date-time"},
+        "usedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Present once the code has been consumed, including while desktop authorization is still waiting."
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Device created by consuming the code, when available."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AdminDesktopPairingCodeListResponse": {
+      "type": "object",
+      "required": ["codes"],
+      "properties": {
+        "codes": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "Up to twenty most recently created pairing-code records, newest first; plaintext codes are never returned.",
+          "items": {"$ref": "#/$defs/AdminDesktopPairingCodeState"}
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

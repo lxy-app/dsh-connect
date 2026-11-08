@@ -25,7 +25,7 @@ export DSH_CONNECT_BOOTSTRAP_TOKEN DSH_CONNECT_LISTEN_ADDR \
 endif
 
 .PHONY: help db-up db-down db-reset test test-server test-connector test-e2e \
-	test-admin test-mobile vet check run-server run-admin run-mobile admin-install \
+	test-admin test-admin-e2e test-mobile vet check run-server run-admin run-mobile admin-install \
 	admin-build website-deploy website-deploy-check mobile-install mobile-build ent-gen \
 	ent-upgrade-check
 
@@ -37,7 +37,7 @@ help:
 	@echo "run-admin      启动管理后台开发服务器（Vite）"
 	@echo "run-mobile     启动 Expo Metro（需先安装 Development Build）"
 	@echo "test           全部既有测试（Server + Connector）"
-	@echo "check          vet + 全部测试 + 跨语言 E2E + Web/Mobile 静态检查"
+	@echo "check          vet + Server/Connector 测试与 E2E + Admin 组件测试 + Mobile 检查"
 	@echo "ent-gen        修改 ent/schema 后重新生成实体代码"
 	@echo "ent-upgrade-check 检查 ent 是否已发布含 Go 1.27 修复的正式版"
 	@echo "website-deploy 编译 Website，使用 SSH 密钥通过 SCP 部署到 lxy.app"
@@ -76,6 +76,11 @@ test-e2e:
 
 test-admin:
 	npm --prefix apps/admin run typecheck
+	npm --prefix apps/admin test
+
+# Browser tests require installing Chromium from apps/admin first.
+test-admin-e2e:
+	npm --prefix apps/admin run test:e2e
 
 test-mobile:
 	npm --prefix apps/mobile run check

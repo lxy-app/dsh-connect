@@ -10,20 +10,66 @@ import {
   Popconfirm,
   Space,
   Table,
+  Tabs,
   Tag,
   Tooltip,
   Typography,
 } from 'antd';
-import { DeleteOutlined, EditOutlined, KeyOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
+import { useSearchParams } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import { adminApi, ApiError } from '../api/client';
 import type { Device } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { deviceStatusMeta, formatDateTime, formatRelative } from '../utils/format';
+import { MobileDevicesPanel } from './MobilePage';
+import { DesktopPairingWizard, PairingHistoryPanel } from './PairingPage';
 
 const { Title, Text } = Typography;
 
 export function DevicesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const activeTab = searchParams.get('tab') === 'mobile' ? 'mobile' : 'desktop';
+  const handlePaired = useCallback(() => setRefreshKey((value) => value + 1), []);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <Title level={4} style={{ marginBottom: 2 }}>
+          设备管理
+        </Title>
+        <Text type="secondary">桌面 Connector 与手机设备分别授权、独立配对和吊销</Text>
+      </div>
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => setSearchParams(key === 'mobile' ? { tab: 'mobile' } : {}, { replace: true })}
+        items={[
+          { key: 'desktop', label: '桌面 Connector' },
+          { key: 'mobile', label: '手机设备' },
+        ]}
+      />
+      {activeTab === 'mobile' ? (
+        <MobileDevicesPanel />
+      ) : (
+        <DesktopDevicesPanel refreshKey={refreshKey} onAddDesktop={() => setWizardOpen(true)} />
+      )}
+      <DesktopPairingWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onPaired={handlePaired}
+      />
+    </div>
+  );
+}
+
+interface DesktopDevicesPanelProps {
+  refreshKey: number;
+  onAddDesktop: () => void;
+}
+
+function DesktopDevicesPanel({ refreshKey, onAddDesktop }: DesktopDevicesPanelProps) {
   const { message } = AntApp.useApp();
   const { user } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
@@ -50,7 +96,7 @@ export function DevicesPage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const revoke = async (target: Device) => {
     try {
@@ -205,16 +251,16 @@ export function DevicesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16 }}>
-        <div>
-          <Title level={4} style={{ marginBottom: 2 }}>
-            设备管理
-          </Title>
-          <Text type="secondary">已配对的桌面 Connector、授权工作区与在线状态</Text>
-        </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
-          刷新
-        </Button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 16 }}>
+        <Text type="secondary">已配对的桌面、授权工作区与在线状态</Text>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
+            刷新
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={onAddDesktop}>
+            添加桌面
+          </Button>
+        </Space>
       </div>
 
       <Card>
@@ -232,6 +278,7 @@ export function DevicesPage() {
           />
         )}
       </Card>
+      <PairingHistoryPanel refreshKey={refreshKey} />
 
       {/* Device detail: grants, fingerprint and presence in one place. */}
       <Modal

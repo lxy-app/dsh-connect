@@ -162,7 +162,7 @@ func TestPairingCodeCanOnlyBeConsumedOnce(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	code := "code"
-	if err := persistent.CreatePairingCode(ctx, store.PairingCode{
+	if _, err := persistent.CreatePairingCode(ctx, store.PairingCode{
 		CodeHash:  store.HashToken(code),
 		CreatedAt: now,
 		ExpiresAt: now.Add(time.Minute),
@@ -192,7 +192,7 @@ func TestPairingCodeExpiryAndAuthorization(t *testing.T) {
 	now := time.Now().UTC()
 
 	expired := "expired-code"
-	if err := persistent.CreatePairingCode(ctx, store.PairingCode{
+	if _, err := persistent.CreatePairingCode(ctx, store.PairingCode{
 		CodeHash:  store.HashToken(expired),
 		CreatedAt: now.Add(-time.Hour),
 		ExpiresAt: now.Add(-time.Minute),
@@ -207,7 +207,7 @@ func TestPairingCodeExpiryAndAuthorization(t *testing.T) {
 	}
 
 	code := "good-code"
-	if err := persistent.CreatePairingCode(ctx, store.PairingCode{
+	if _, err := persistent.CreatePairingCode(ctx, store.PairingCode{
 		CodeHash:  store.HashToken(code),
 		CreatedAt: now,
 		ExpiresAt: now.Add(10 * time.Minute),
