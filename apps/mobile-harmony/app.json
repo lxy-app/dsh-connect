@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "DSH Connect",
+    "slug": "dsh-connect",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "dshconnect",
+    "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "android", "harmony"],
+    "ios": {
+      "bundleIdentifier": "app.lxy.dsh-connect"
+    },
+    "android": {
+      "package": "app.lxy.dshconnect"
+    },
+    "experiments": {
+      "outOfTreePlatforms": true
+    },
+    "plugins": [
+      "expo-router",
+      "@expo-harmony/expo-constants",
+      [
+        "@expo-harmony/expo-audio",
+        {
+          "microphonePermission": "允许 DSH Connect 使用麦克风，将你的语音转写为指令。",
+          "enableBackgroundPlayback": true,
+          "enableBackgroundRecording": false
+        }
+      ],
+      "@expo-harmony/prebuild-config"
+    ],
+    "harmony": {
+      "bundleName": "app.lxy.dshconnect",
+      "label": "DSH Connect",
+      "versionCode": 2,
+      "compatibleSdkVersion": 21,
+      "permissions": [
+        {
+          "name": "ohos.permission.CAMERA",
+          "reason": "$string:camera_permission_reason",
+          "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
+        }
+      ]
+    }
+  }
+}

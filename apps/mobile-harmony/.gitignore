@@ -1,0 +1,15 @@
+/harmony/
+/dist/
+/.expo/
+node_modules/
+.DS_Store
+
+# 本地公开环境变量与签名材料均不提交。
+.env
+.env.*
+!.env.example
+signing*.json
+*.p12
+*.p7b
+*.cer
+*.csr
