@@ -4,6 +4,8 @@ DSH Connect 面向个人开发者与小团队：用户通过移动端查看和�
 
 代码库已从产品设计进入 **P0 真实技术验证实现 + 管理后台 MVP + 移动端可用闭环**：已有 Go Server（PostgreSQL 18 / SQLite + ent）、版本化协议、实际 DSH Connector 与桌面授权面板、对接真实 API 的 Web 管理后台，以及可完成扫码配对、桌面访问授权、工作区浏览、会话查看、提示词发送与远程审批/回答提问的移动 App。移动端已接入会话事件 WSS，用于 assistant 文本的实时流式展示；远程审批同时覆盖 DSH 的 `approval/request` 与 `user-questions/request`，一次性、失败关闭，推送（APNs/FCM）仍属于后续阶段。
 
+移动端采用「共享源码 + 双运行时壳」：iOS/Android 主线使用 Expo SDK 58，鸿蒙壳使用独立 SDK 55 + RNOH 0.84.1，公共逻辑位于 `apps/mobile-shared/`。鸿蒙已完成签名 HAP 与真机远程会话验证；具体支持边界见 [apps/mobile-harmony/README.md](apps/mobile-harmony/README.md)。
+
 ## 当前实现状态
 
 | 组件 | 状态 | 说明 |
@@ -106,8 +108,9 @@ npm --prefix connector/dsh-plugin run debug -- list --device dev_xxx
 make test          # Go Server 双数据库测试 + Connector 单元/集成测试
 make test-e2e      # PostgreSQL / SQLite + 真实 Go Server + Connector + 可控 Host 仿真
 make test-admin    # 管理后台类型检查
-make test-mobile   # 移动端 ESLint + TypeScript + ASR/TTS 协议测试
-make check         # go vet、全部测试、跨语言 E2E 与前端/移动端静态检查
+make test-mobile   # 主线移动端 ESLint + TypeScript + ASR/TTS 协议测试
+make test-mobile-harmony # 鸿蒙壳 ESLint + TypeScript
+make check         # go vet、全部测试、跨语言 E2E 与双移动端静态检查
 ```
 
 Server 测试由 `internal/dbtest` 选择数据库，同一套用例分别运行 PostgreSQL 与 SQLite。PostgreSQL 会自动拉起临时 18 容器（`internal/pgtest`），每个测试使用独立数据库；没有 Docker 时会跳过，设置 `DSH_CONNECT_REQUIRE_PG=1` 则改为失败。SQLite 每个测试使用独立临时文件，无需 Docker。`make test-e2e` 同样运行两种数据库；PostgreSQL E2E 应通过 `DSH_CONNECT_E2E_DATABASE_URL` 使用独立业务数据库，SQLite E2E 自动使用临时文件。
@@ -138,7 +141,9 @@ Web Admin（已实现）    ── HTTPS ──────>      │           
 ```text
 dsh-connect/
 ├── apps/admin/                   # Web 管理后台（React 19 + antd + Vite）
-├── apps/mobile/                  # Expo SDK 58 移动 App（配对、授权、工作区、会话）
+├── apps/mobile/                  # Expo SDK 58 iOS/Android App（配对、授权、工作区、会话）
+├── apps/mobile-harmony/          # Expo SDK 55 + RNOH 0.84.1 鸿蒙壳
+├── apps/mobile-shared/           # 双端共享 TS/TSX 源码（@shared/*）
 ├── connector/dsh-plugin/         # 真正的 DSH Connector + 桌面面板 + 调试客户端
 ├── protocol/                     # OpenAPI / AsyncAPI / JSON Schema
 ├── server/
@@ -161,7 +166,8 @@ dsh-connect/
 | [06-mobile-attachments-design.md](docs/06-mobile-attachments-design.md) | 移动端文件与图片展示：来源、契约、字节通道、安全与分阶段实施 |
 | [server/README.md](server/README.md) | Server 配置、PostgreSQL/SQLite + ent 迁移与管理 API |
 | [apps/admin/README.md](apps/admin/README.md) | 管理后台开发、页面与权限模型 |
-| [apps/mobile/README.md](apps/mobile/README.md) | Expo 工程、Development Build、模块与安全边界 |
+| [apps/mobile/README.md](apps/mobile/README.md) | iOS/Android Expo 工程、Development Build、模块与安全边界 |
+| [apps/mobile-harmony/README.md](apps/mobile-harmony/README.md) | 鸿蒙 SDK 55 + RNOH 壳、HAP 构建、签名与真机验证 |
 | [connector/dsh-plugin/README.md](connector/dsh-plugin/README.md) | 实际 Connector、桌面 RPC、调试与限制 |
 | [protocol/README.md](protocol/README.md) | v1 契约与恢复语义 |
 
