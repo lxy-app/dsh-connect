@@ -838,7 +838,7 @@ function ChatScreenContent() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       style={[styles.page, { backgroundColor: theme.background }]}
     >
       <View style={{ paddingTop: insets.top }}>
