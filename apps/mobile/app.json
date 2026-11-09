@@ -16,7 +16,7 @@
       }
     },
     "android": {
-      "package": "app.lxy.dsh-connect",
+      "package": "app.lxy.dshconnect",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#5852EF",
