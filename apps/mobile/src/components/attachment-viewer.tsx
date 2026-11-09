@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { AttachmentImage } from '@/components/attachment-image';
-import type { MobileAttachment } from '@/types/mobile';
+import type { MobileAttachment } from '@shared/types/mobile';
 
 export type ViewerAuth = { readonly serverUrl: string; readonly accessToken: string };
 

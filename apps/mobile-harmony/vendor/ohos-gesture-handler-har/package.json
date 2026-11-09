@@ -1,0 +1,10 @@
+{
+  "name": "@react-native-ohos/react-native-gesture-handler",
+  "version": "2.30.2",
+  "description": "HarmonyOS HAR provider for react-native-gesture-handler (M0 vendor).",
+  "harmony": {
+    "alias": "react-native-gesture-handler",
+    "redirectInternalImports": true
+  },
+  "main": "index.js"
+}

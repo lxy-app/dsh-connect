@@ -5,7 +5,7 @@ import { AttachmentImage } from '@/components/attachment-image';
 import { Typography, type AppTheme } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { attachmentIdFromHref, type AttachmentImageAuth } from '@/lib/attachment-loading';
-import type { MobileAttachment } from '@/types/mobile';
+import type { MobileAttachment } from '@shared/types/mobile';
 import {
   parseInline,
   parseMarkdown,

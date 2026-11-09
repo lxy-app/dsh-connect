@@ -22,7 +22,7 @@ import {
   loadMobileSession,
   saveMobileSession,
 } from '@/lib/mobile-session-store';
-import type { MobilePlatform, MobileSession, MobileSessionResponse, StoredMobileSession } from '@/types/mobile';
+import type { MobilePlatform, MobileSession, MobileSessionResponse, StoredMobileSession } from '@shared/types/mobile';
 
 type MobileSessionStatus = 'loading' | 'unpaired' | 'paired';
 

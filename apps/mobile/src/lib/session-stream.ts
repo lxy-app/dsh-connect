@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 import { normalizeServerUrl } from '@/lib/mobile-api';
-import { isModelSelectionEvent } from '@/lib/session-model';
+import { isModelSelectionEvent } from '@shared/lib/session-model';
 
 export type SessionStreamHandlers = {
   onOpen: () => void;

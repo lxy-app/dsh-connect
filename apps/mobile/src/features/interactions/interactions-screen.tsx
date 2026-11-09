@@ -17,7 +17,7 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError, getMobileAccessOverview } from '@/lib/mobile-api';
 import { useInteractions, type InteractionDecision } from '@/providers/interactions-provider';
 import { useMobileSession } from '@/providers/mobile-session-provider';
-import type { MobileDesktopAccess, MobileInteraction } from '@/types/mobile';
+import type { MobileDesktopAccess, MobileInteraction } from '@shared/types/mobile';
 
 import { InteractionCard } from './interaction-card';
 

@@ -8,7 +8,7 @@ import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import type { ThemePreference } from '@/lib/theme-preference';
 import { useThemeSettings } from '@/providers/theme-provider';
-import type { StoredMobileSession } from '@/types/mobile';
+import type { StoredMobileSession } from '@shared/types/mobile';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: '跟随系统' },

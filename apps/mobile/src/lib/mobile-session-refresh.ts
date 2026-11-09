@@ -1,4 +1,4 @@
-import type { MobileSessionResponse, StoredMobileSession } from '@/types/mobile';
+import type { MobileSessionResponse, StoredMobileSession } from '@shared/types/mobile';
 
 export type RefreshedMobileSession = {
   session: StoredMobileSession;

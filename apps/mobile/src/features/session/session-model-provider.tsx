@@ -6,9 +6,9 @@ import {
   getMobileSessionModel,
   selectMobileSessionModel,
 } from '@/lib/mobile-api';
-import { isUncertainModelSelectionError, selectionKey } from '@/lib/session-model';
+import { isUncertainModelSelectionError, selectionKey } from '@shared/lib/session-model';
 import { useMobileSession } from '@/providers/mobile-session-provider';
-import type { MobileModelSelection, MobileSessionModelCatalog } from '@/types/mobile';
+import type { MobileModelSelection, MobileSessionModelCatalog } from '@shared/types/mobile';
 
 export type SessionModelPending = {
   requestId: string;

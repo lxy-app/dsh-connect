@@ -5,7 +5,7 @@ import {
   createMobileSessionRefresher,
   isSameMobileCredential,
 } from './mobile-session-refresh';
-import type { MobileSessionResponse, StoredMobileSession } from '@/types/mobile';
+import type { MobileSessionResponse, StoredMobileSession } from '@shared/types/mobile';
 
 const user = {
   id: 'usr_1',

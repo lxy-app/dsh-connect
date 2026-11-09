@@ -1,0 +1,9 @@
+{
+  "name": "harmony-audio-stream",
+  "version": "1.0.0",
+  "main": "Index.ets",
+  "license": "MIT",
+  "dependencies": {
+    "@expo-harmony/expo-modules-core": "55.0.26-harmony.3"
+  }
+}

@@ -7,6 +7,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@shared/*": [
+        "../mobile-shared/*"
+      ],
       "@/assets/*": [
         "./assets/*"
       ]

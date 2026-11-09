@@ -9,8 +9,8 @@ import {
   sameModelSelection,
   selectionForRoute,
   selectionInCatalog,
-} from './session-model';
-import type { MobileSessionModelCatalog } from '@/types/mobile';
+} from '@shared/lib/session-model';
+import type { MobileSessionModelCatalog } from '@shared/types/mobile';
 
 const catalog: MobileSessionModelCatalog = {
   sessionId: 's1',

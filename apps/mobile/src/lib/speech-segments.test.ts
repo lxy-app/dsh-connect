@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { FIRST_SPEECH_SEGMENT_MAX, SPEECH_SEGMENT_MAX, splitTextForSpeech } from './speech-segments';
+import { FIRST_SPEECH_SEGMENT_MAX, SPEECH_SEGMENT_MAX, splitTextForSpeech } from '@shared/lib/speech-segments';
 
 test('empty and short speech text need no segmentation', () => {
   assert.deepEqual(splitTextForSpeech('  \n'), []);

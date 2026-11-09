@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { KeyedPublishQueue } from './keyed-publish-queue';
+import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
 
 test('same-key publications share one task and different keys stay independent', async () => {
   const queue = new KeyedPublishQueue<string>();

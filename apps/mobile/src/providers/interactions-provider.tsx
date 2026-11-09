@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 
 import { createRequestId, decideMobileInteraction, getMobileInteractions } from '@/lib/mobile-api';
 import { useMobileSession } from '@/providers/mobile-session-provider';
-import type { MobileInteraction, MobileInteractionAnswer } from '@/types/mobile';
+import type { MobileInteraction, MobileInteractionAnswer } from '@shared/types/mobile';
 
 const POLL_INTERVAL_MS = 2_000;
 

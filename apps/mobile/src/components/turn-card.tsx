@@ -7,10 +7,10 @@ import { MarkdownText } from '@/components/markdown';
 import { ReadAloudButton } from '@/components/read-aloud-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { formatTime } from '@/lib/format';
+import { formatTime } from '@shared/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
-import type { TurnGroup } from '@/lib/turn-grouping';
-import type { MobileMessage } from '@/types/mobile';
+import type { TurnGroup } from '@shared/lib/turn-grouping';
+import type { MobileMessage } from '@shared/types/mobile';
 
 const COLLAPSE_CHARS = 700;
 

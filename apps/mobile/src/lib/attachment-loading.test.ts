@@ -7,7 +7,7 @@ import {
   attachmentImageSource,
   shouldAutoRetryAttachment,
 } from './attachment-loading';
-import type { MobileAttachment } from '@/types/mobile';
+import type { MobileAttachment } from '@shared/types/mobile';
 
 const attachment: MobileAttachment = {
   attachmentId: 'att_b7Qk2m9xT4pL0rVc8sN1',

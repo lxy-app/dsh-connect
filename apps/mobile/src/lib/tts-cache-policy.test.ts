@@ -7,7 +7,7 @@ import {
   TTS_CACHE_MAX_BYTES,
   TTS_CACHE_MAX_FILES,
   type TtsCacheEntry,
-} from './tts-cache-policy';
+} from '@shared/lib/tts-cache-policy';
 
 const INPUT = {
   text: '需要朗读的文本',

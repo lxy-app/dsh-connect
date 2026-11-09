@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupTurns, runningTurnIndex } from './turn-grouping';
-import type { MobileMessage } from '@/types/mobile';
+import { groupTurns, runningTurnIndex } from '@shared/lib/turn-grouping';
+import type { MobileMessage } from '@shared/types/mobile';
 
 function message(partial: Partial<MobileMessage> & Pick<MobileMessage, 'seq' | 'role'>): MobileMessage {
   return {

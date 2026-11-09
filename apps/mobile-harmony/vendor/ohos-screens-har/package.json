@@ -1,0 +1,10 @@
+{
+  "name": "@react-native-ohos/react-native-screens",
+  "version": "4.26.2-rnoh084.0",
+  "description": "HarmonyOS HAR provider for react-native-screens (M0 vendor).",
+  "harmony": {
+    "alias": "react-native-screens",
+    "redirectInternalImports": true
+  },
+  "main": "index.js"
+}

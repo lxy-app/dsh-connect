@@ -13,8 +13,8 @@ import { EmptyState } from '@/components/empty-state';
 import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { formatRelative } from '@/lib/format';
-import type { MobileAccessWarning, MobileSession } from '@/types/mobile';
+import { formatRelative } from '@shared/lib/format';
+import type { MobileAccessWarning, MobileSession } from '@shared/types/mobile';
 
 type StatusFilter = 'all' | 'running' | 'idle';
 

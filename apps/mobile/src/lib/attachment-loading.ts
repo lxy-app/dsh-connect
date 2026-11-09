@@ -1,7 +1,7 @@
 import type { ImageSource } from 'expo-image';
 
 import { buildAttachmentUrl } from '@/lib/mobile-api';
-import type { MobileAttachment } from '@/types/mobile';
+import type { MobileAttachment } from '@shared/types/mobile';
 
 export type AttachmentImageAuth = { readonly serverUrl: string; readonly accessToken: string };
 
