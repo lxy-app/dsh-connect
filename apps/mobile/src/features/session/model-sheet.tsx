@@ -10,9 +10,9 @@ import {
   selectionForRoute,
   selectionInCatalog,
   selectionKey,
-} from '@/lib/session-model';
+} from '@shared/lib/session-model';
 import type { SessionModelPending } from '@/features/session/session-model-provider';
-import type { MobileModelSelection, MobileSessionModelCatalog } from '@/types/mobile';
+import type { MobileModelSelection, MobileSessionModelCatalog } from '@shared/types/mobile';
 
 export function ModelSheet({
   visible,

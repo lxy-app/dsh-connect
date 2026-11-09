@@ -3,8 +3,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { modelLabel, sameModelSelection } from '@/lib/session-model';
-import type { MobileSessionModelCatalog } from '@/types/mobile';
+import { modelLabel, sameModelSelection } from '@shared/lib/session-model';
+import type { MobileSessionModelCatalog } from '@shared/types/mobile';
 
 export function MoreOptionsSheet({
   visible,

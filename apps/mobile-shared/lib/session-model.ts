@@ -2,7 +2,7 @@ import type {
   MobileModelCatalogModel,
   MobileModelSelection,
   MobileSessionModelCatalog,
-} from '@/types/mobile';
+} from '../types/mobile';
 
 export function sameModelSelection(
   left: MobileModelSelection | null | undefined,

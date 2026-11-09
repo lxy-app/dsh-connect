@@ -11,8 +11,8 @@ import { EmptyState } from '@/components/empty-state';
 import { StatusBadge, type BadgeTone } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { formatScopes } from '@/lib/format';
-import type { MobileDesktopAccess } from '@/types/mobile';
+import { formatScopes } from '@shared/lib/format';
+import type { MobileDesktopAccess } from '@shared/types/mobile';
 
 export function DevicesTab({
   desktops,

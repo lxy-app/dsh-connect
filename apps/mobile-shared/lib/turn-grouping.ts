@@ -1,4 +1,4 @@
-import type { MobileAttachment, MobileMessage } from '@/types/mobile';
+import type { MobileAttachment, MobileMessage } from '../types/mobile';
 
 /**
  * One DSH turn as the chat should render it: the user's prompt, the folded

@@ -16,7 +16,7 @@ import { ActionButton } from '@/components/action-button';
 import { EmptyState } from '@/components/empty-state';
 import { StatusBadge } from '@/components/status-badge';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { formatScopes } from '@/lib/format';
+import { formatScopes } from '@shared/lib/format';
 import {
   describeMobileApiError,
   getMobileAccessOverview,
@@ -24,7 +24,7 @@ import {
   revokeMobileAccess,
 } from '@/lib/mobile-api';
 import { useMobileSession } from '@/providers/mobile-session-provider';
-import type { MobileAccessOverview, MobileDesktopAccess } from '@/types/mobile';
+import type { MobileAccessOverview, MobileDesktopAccess } from '@shared/types/mobile';
 
 type Selection = { workspaces: string[]; scopes: string[] };
 

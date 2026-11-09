@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ActionButton } from '@/components/action-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import type { MobileInteraction, MobileInteractionAnswer } from '@/types/mobile';
+import type { MobileInteraction, MobileInteractionAnswer } from '@shared/types/mobile';
 
 type InteractionCardProps = {
   interaction: MobileInteraction;

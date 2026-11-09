@@ -27,7 +27,7 @@ import type {
   MobileUser,
   MobileWorkspaceList,
   MobileWorkspaceSummary,
-} from '@/types/mobile';
+} from '@shared/types/mobile';
 
 const API_TIMEOUT_MS = 15_000;
 

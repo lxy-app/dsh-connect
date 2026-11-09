@@ -14,9 +14,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError, getMobileAccessOverview, getMobileSessions } from '@/lib/mobile-api';
-import { formatRelative } from '@/lib/format';
+import { formatRelative } from '@shared/lib/format';
 import { useMobileSession } from '@/providers/mobile-session-provider';
-import type { MobileDesktopAccess, MobileSession } from '@/types/mobile';
+import type { MobileDesktopAccess, MobileSession } from '@shared/types/mobile';
 
 export function SessionDrawer({
   visible,

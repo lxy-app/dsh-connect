@@ -31,7 +31,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
-import { groupTurns, runningTurnIndex } from '@/lib/turn-grouping';
+import { groupTurns, runningTurnIndex } from '@shared/lib/turn-grouping';
 import {
   cancelMobileSession,
   createRequestId,
@@ -39,10 +39,10 @@ import {
   getMobileTranscript,
   promptMobileSession,
 } from '@/lib/mobile-api';
-import { formatTime } from '@/lib/format';
+import { formatTime } from '@shared/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
-import { resolvePendingReply } from '@/lib/pending-reply';
-import { modelLabel } from '@/lib/session-model';
+import { resolvePendingReply } from '@shared/lib/pending-reply';
+import { modelLabel } from '@shared/lib/session-model';
 import { shouldCancelVoiceGesture } from '@/lib/voice-gesture';
 import { openSessionStream } from '@/lib/session-stream';
 import { SystemVoiceSessionGuard } from '@/lib/system-voice-session';
@@ -53,7 +53,7 @@ import { AttachmentViewer } from '@/components/attachment-viewer';
 import type { AttachmentAuth } from '@/components/attachment-grid';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useVoice } from '@/providers/voice-provider';
-import type { MobileMessage, MobileSession, MobileTranscript } from '@/types/mobile';
+import type { MobileMessage, MobileSession, MobileTranscript } from '@shared/types/mobile';
 
 const VOICE_WAVE_BARS = [6, 6, 10, 6, 14, 10, 20, 10, 14, 6, 10, 20, 14, 10, 6, 14, 20, 10, 6, 14, 10, 20, 10, 6, 6] as const;
 

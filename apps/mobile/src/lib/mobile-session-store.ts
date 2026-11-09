@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-import type { StoredMobileSession } from '@/types/mobile';
+import type { StoredMobileSession } from '@shared/types/mobile';
 
 const SESSION_KEY = 'dsh-connect.mobile-session';
 const MAX_SERIALIZED_LENGTH = 2048;

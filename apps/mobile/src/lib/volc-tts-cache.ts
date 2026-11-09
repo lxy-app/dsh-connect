@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { KeyedPublishQueue } from '@/lib/keyed-publish-queue';
-import { buildTtsCacheKey, selectTtsCacheEvictions } from '@/lib/tts-cache-policy';
+import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
+import { buildTtsCacheKey, selectTtsCacheEvictions } from '@shared/lib/tts-cache-policy';
 import {
   synthesizeVolcTts,
   VOLC_TTS_DEFAULT_ENDPOINT,

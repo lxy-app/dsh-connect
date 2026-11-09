@@ -6,7 +6,7 @@ import {
 import { File, Paths } from 'expo-file-system';
 
 import { PLAYBACK_AUDIO_MODE } from '@/lib/audio-session';
-import { PcmStreamChunker, wrapPcmInWav } from '@/lib/pcm-stream';
+import { PcmStreamChunker, wrapPcmInWav } from '@shared/lib/pcm-stream';
 import { publishVolcPcm, readCachedVolcPcm } from '@/lib/volc-tts-cache';
 import {
   openVolcTtsStream,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolvePendingReply } from './pending-reply';
+import { resolvePendingReply } from '@shared/lib/pending-reply';
 
 test('new-session waiting survives an empty transcript without a completed turn', () => {
   const pending = { since: 1, afterSeq: 0, text: '' };

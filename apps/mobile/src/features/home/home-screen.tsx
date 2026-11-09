@@ -26,7 +26,7 @@ import type {
   MobileAccessOverview,
   MobileSession,
   MobileSessionList,
-} from '@/types/mobile';
+} from '@shared/types/mobile';
 
 import { DevicesTab } from './devices-tab';
 import { ProfileTab } from './profile-tab';

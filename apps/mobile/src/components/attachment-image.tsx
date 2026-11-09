@@ -16,7 +16,7 @@ import {
   shouldAutoRetryAttachment,
   type AttachmentImageAuth,
 } from '@/lib/attachment-loading';
-import type { MobileAttachment } from '@/types/mobile';
+import type { MobileAttachment } from '@shared/types/mobile';
 
 const AUTO_RETRY_DELAY_MS = 1_000;
 

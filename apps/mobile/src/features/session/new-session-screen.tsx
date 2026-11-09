@@ -30,7 +30,7 @@ import type {
   MobileDesktopAccess,
   MobileSession,
   MobileSessionCreateResult,
-} from '@/types/mobile';
+} from '@shared/types/mobile';
 
 type CreateAttempt = {
   deviceId: string;

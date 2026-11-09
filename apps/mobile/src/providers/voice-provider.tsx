@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Alert, Platform } from 'react-native';
 
 import { PAUSED_AUDIO_MODE, PLAYBACK_AUDIO_MODE } from '@/lib/audio-session';
-import { splitTextForSpeech } from '@/lib/speech-segments';
+import { splitTextForSpeech } from '@shared/lib/speech-segments';
 import type { VolcAsrProtocol } from '@/lib/volc-asr';
 import { VolcPcmPlayer } from '@/lib/volc-pcm-player';
 import {

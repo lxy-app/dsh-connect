@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { pcm16LeToFloat32, PcmStreamChunker, PCM_STREAM_BUFFER_BYTES, wrapPcmInWav } from './pcm-stream';
+import { pcm16LeToFloat32, PcmStreamChunker, PCM_STREAM_BUFFER_BYTES, wrapPcmInWav } from '@shared/lib/pcm-stream';
 
 test('PCM chunker preserves sample alignment and emits bounded buffers', () => {
   const chunker = new PcmStreamChunker();

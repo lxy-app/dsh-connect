@@ -193,9 +193,16 @@ npx expo export --platform web # 验证 Expo Router 服务端/静态导出不会
 
 `build:bundles` 只验证 JavaScript/Hermes 打包，不等同于 Xcode/Gradle 原生构建或真机验收。原生 Release 流程还会执行 Expo Router 静态导出，因此原生模块路径、目录等对象应在实际功能调用时初始化，不要在模块顶层实例化。
 
+## 双端共享与鸿蒙壳
+
+- 本目录保持 SDK 58 的 iOS/Android 主线，不因鸿蒙适配降级。
+- 通用协议类型、流式/消息分组等纯 TS 逻辑位于 `apps/mobile-shared/`，通过 `@shared/*` 引用；共享规则见其 `AGENTS.md`。
+- 鸿蒙工程位于 `apps/mobile-harmony/`，使用独立 SDK 55 + RNOH 0.84.1 基线、lockfile 与 HAP 构建脚本，详见其 README。
+- `metro.config.js` 只额外监听并映射 `../mobile-shared`。修改共享代码后除本工程检查/测试/bundle 外，还要运行鸿蒙壳的 `npm run check`。
+
 ## 配置与安全
 
-- iOS bundle identifier / Android package：`app.lxy.dsh-connect`。
+- iOS bundle identifier：`app.lxy.dsh-connect`；Android package：`app.lxy.dshconnect`（Android 包名只允许字母、数字、`.` 和 `_`，不能带连字符）。
 - URL scheme：`dshconnect`。
 - `.env.example` 仅展示公开的默认 Server URL 配置。
 - 所有 `EXPO_PUBLIC_*` 值都会进入应用包，严禁放入 bootstrap token、Access Token、Refresh Token 或设备密钥。
@@ -215,9 +222,10 @@ apps/mobile/
 │   ├── hooks/             # 跨平台 hooks
 │   ├── lib/               # Mobile API、SecureStore 会话
 │   ├── providers/         # 配对状态、启动校验与 Token 刷新
-│   └── types/             # 移动协议 TypeScript 类型
+│   └── types/             # 本壳私有类型；公共移动协议在 apps/mobile-shared/types/
 ├── assets/                # 应用图标和启动资源
 ├── app.json               # Expo 与原生能力配置
+├── metro.config.js        # @shared/* 与 mobile-shared 监听配置
 ├── eas.json               # 可选 EAS 构建 profile
 └── eslint.config.js       # Expo flat ESLint 配置
 ```

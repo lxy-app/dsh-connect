@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { MobileAttachment } from '@/types/mobile';
+import type { MobileAttachment } from '@shared/types/mobile';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export type AttachmentAuth = { readonly serverUrl: string; readonly accessToken: string };
