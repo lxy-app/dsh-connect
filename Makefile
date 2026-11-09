@@ -25,8 +25,8 @@ export DSH_CONNECT_BOOTSTRAP_TOKEN DSH_CONNECT_LISTEN_ADDR \
 endif
 
 .PHONY: help db-up db-down db-reset test test-server test-connector test-e2e \
-	test-admin test-admin-e2e test-mobile vet check run-server run-admin run-mobile admin-install \
-	admin-build website-deploy website-deploy-check mobile-install mobile-build ent-gen \
+	test-admin test-admin-e2e test-mobile test-mobile-harmony vet check run-server run-admin run-mobile run-mobile-harmony admin-install \
+	admin-build website-deploy website-deploy-check mobile-install mobile-harmony-install mobile-build mobile-harmony-build ent-gen \
 	ent-upgrade-check
 
 help:
@@ -86,10 +86,14 @@ test-mobile:
 	npm --prefix apps/mobile run check
 	npm --prefix apps/mobile test
 
+test-mobile-harmony:
+	npm --prefix apps/mobile-harmony run check
+	npm --prefix apps/mobile-harmony test
+
 vet:
 	go -C server vet ./...
 
-check: vet test test-e2e test-admin test-mobile
+check: vet test test-e2e test-admin test-mobile test-mobile-harmony
 
 # ---------- 运行 ----------
 
@@ -126,11 +130,20 @@ website-deploy: website-deploy-check
 mobile-install:
 	npm --prefix apps/mobile install
 
+mobile-harmony-install:
+	npm --prefix apps/mobile-harmony ci --legacy-peer-deps
+
 run-mobile:
 	npm --prefix apps/mobile start
 
+run-mobile-harmony:
+	npm --prefix apps/mobile-harmony start
+
 mobile-build:
 	npm --prefix apps/mobile run build:bundles
+
+mobile-harmony-build:
+	npm --prefix apps/mobile-harmony run build:hap
 
 # ---------- 代码生成 ----------
 
