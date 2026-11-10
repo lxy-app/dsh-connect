@@ -73,7 +73,7 @@ Server 返回的 `serverUrl` 必须能被手机访问。若页面提示回环地
 
 ## 视觉与响应式
 
-Admin 使用与移动 App 相同的正式应用图标。明暗主题由顶部按钮切换，使用 Ant Design token/算法，支持系统初始偏好并保存到 `dsh-connect.admin.theme`。窄屏下侧栏保持收缩、内容缩小留白，数据表在自身容器内横向滚动，不造成页面整体横向溢出。
+Admin 使用与移动 App 相同的正式应用图标。明暗主题由顶部按钮切换，使用 Ant Design token/算法，支持系统初始偏好并保存到 `dsh-connect.admin.theme`。品牌色采用浅色 graphite `#4B5563` / 浅银 `#E8EDF2` 和深色 icon-white `#F4F6F8` / 深银 `#353B43`，主按钮与深色菜单选中态使用对比前景色；成功、警告和错误语义色不变。`Sider` 与 `Menu` 显式共享明暗主题，`darkItemSelectedBg` 固定为图标白；深色非危险主按钮通过局部 `--ant-btn-*` 变量保持精确色值，避免 Ant Design 暗色算法将近白色派生为灰色。窄屏下侧栏保持收缩、内容缩小留白，数据表在自身容器内横向滚动，不造成页面整体横向溢出。
 
 ## 权限模型
 

@@ -132,6 +132,7 @@ export function App() {
           )}
         </div>
         <Menu
+          theme={dark ? 'dark' : 'light'}
           mode="inline"
           selectedKeys={[selected]}
           items={navItems}

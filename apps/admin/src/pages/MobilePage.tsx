@@ -153,7 +153,7 @@ export function MobileDevicesPanel() {
       key: 'platform',
       width: 100,
       render: (platform: MobileDevice['platform']) => (
-        <Tag color={platform === 'ios' ? 'geekblue' : 'green'}>
+        <Tag color={platform === 'ios' ? 'default' : 'green'}>
           {platform === 'ios' ? 'iOS' : 'Android'}
         </Tag>
       ),
