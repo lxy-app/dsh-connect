@@ -56,7 +56,7 @@ export function Features() {
               <div className="stream-block">
                 <div className="stream-label"><Icon name="chat" size={12} />DSH Assistant</div>
                 <div className="stream-text">已定位到事件游标的恢复问题，正在补充重复事件与分页修复的测试。</div>
-                <div className="stream-code"><span className="code-violet">const</span> cursor = snapshot.lastSeq;<br /><span className="code-violet">await</span> follow({'{ cursor }'});<br /><span className="code-green">// 按序恢复，不重复提交</span></div>
+                <div className="stream-code"><span className="code-accent">const</span> cursor = snapshot.lastSeq;<br /><span className="code-accent">await</span> follow({'{ cursor }'});<br /><span className="code-green">// 按序恢复，不重复提交</span></div>
                 <div className="stream-state">正在流式接收</div>
               </div>
             </div>

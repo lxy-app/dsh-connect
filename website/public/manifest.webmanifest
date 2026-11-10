@@ -6,8 +6,8 @@
   "start_url": "/dsh-connect/",
   "scope": "/dsh-connect/",
   "display": "standalone",
-  "background_color": "#0b0c12",
-  "theme_color": "#0b0c12",
+  "background_color": "#0b0e12",
+  "theme_color": "#0b0e12",
   "icons": [
     {
       "src": "/dsh-connect/images/icon.png",
