@@ -2,6 +2,7 @@
 """从选定的鲲主题候选图生成 Expo / iOS / Android 图标资源。
 
 源图：kun-B-connection-ring.png（2048×2048，白色鲲标 + 靛蓝底）
+输出：暖白底（#F4F6F8）+ 炭黑鲲标（#232529），保留源图解混出的抗锯齿边缘。
 产物：assets/images/*.png 与 assets/expo.icon/（iOS 26 Icon Composer 包）
 
 设计约束（平台规则决定的，不是审美偏好）：
@@ -25,6 +26,8 @@ SOURCE = HERE / "kun-B-connection-ring.png"
 # 前景/单色层：标记宽度占画布比例（Android 自适应图标安全区为中间 66%）
 MARK_RATIO = 0.62
 ALPHA_FLOOR = 0.06
+ICON_BACKGROUND = (244, 246, 248)  # 暖白，不使用纯白
+ICON_MARK = (35, 37, 41, 255)  # 炭黑，不使用纯黑
 
 
 def estimate_background(im: Image.Image) -> tuple[int, int, int]:
@@ -101,34 +104,43 @@ def rounded_preview(icon: Image.Image, radius_ratio: float = 0.2237) -> Image.Im
 
 def main() -> None:
     src = Image.open(SOURCE).convert("RGB")
-    bg = estimate_background(src)
-    mark = extract_mark(src, bg)
+    source_bg = estimate_background(src)
+    mark = extract_mark(src, source_bg)
     bbox = mark.getbbox()
-    print(f"背景色 #{bg[0]:02X}{bg[1]:02X}{bg[2]:02X}，标记 bbox={bbox}")
+    print(f"源图背景 #{source_bg[0]:02X}{source_bg[1]:02X}{source_bg[2]:02X}，标记 bbox={bbox}")
+    print("目标配色：背景 #F4F6F8，鲲标 #232529")
 
-    # iOS / 通用图标：1024 不透明正方形（无 alpha）
-    icon = src.resize((1024, 1024), Image.LANCZOS).convert("RGB")
+    # iOS / 通用图标：从透明轮廓重新合成，避免直接改色留下紫色边缘。
+    icon = Image.new("RGBA", src.size, ICON_BACKGROUND + (255,))
+    mark_layer = Image.new("RGBA", src.size, ICON_MARK)
+    mark_layer.putalpha(mark.getchannel("A"))
+    icon = Image.alpha_composite(icon, mark_layer).convert("RGB")
+    icon = icon.resize((1024, 1024), Image.LANCZOS)
     icon.save(IMAGES / "icon.png", optimize=True)
 
     # favicon：不透明小图
     icon.resize((48, 48), Image.LANCZOS).save(IMAGES / "favicon.png", optimize=True)
 
-    # Android 自适应：透明前景 + 纯色背景 + 单色
-    fit(mark, 512, MARK_RATIO).save(IMAGES / "android-icon-foreground.png", optimize=True)
-    Image.new("RGB", (512, 512), bg).save(IMAGES / "android-icon-background.png", optimize=True)
+    # Android 自适应：炭黑透明前景 + 不透明暖白背景。
+    fit(mark, 512, MARK_RATIO, color=ICON_MARK).save(IMAGES / "android-icon-foreground.png", optimize=True)
+    Image.new("RGB", (512, 512), ICON_BACKGROUND).save(IMAGES / "android-icon-background.png", optimize=True)
+    # 单色层是系统重新着色的掩膜，必须保留纯黑，不作为直接显示的品牌色。
     fit(mark, 432, MARK_RATIO, color=(0, 0, 0, 255)).save(
         IMAGES / "android-icon-monochrome.png", optimize=True
     )
 
-    # 启动图：透明底鲲标，App 的 splash 背景色会透出来
-    fit(mark, 456, 0.86).save(IMAGES / "splash-icon.png", optimize=True)
+    # 启动图：浅色页用炭黑鲲标，深色页用暖白鲲标，均为透明底。
+    fit(mark, 456, 0.86, color=ICON_MARK).save(IMAGES / "splash-icon.png", optimize=True)
+    fit(mark, 456, 0.86, color=ICON_BACKGROUND + (255,)).save(
+        IMAGES / "splash-icon-dark.png", optimize=True
+    )
 
-    # iOS 26 Icon Composer 包：品牌色底 + 标记图层
+    # iOS 26 Icon Composer 包：暖白底 + 炭黑标记图层
     expo_icon = ASSETS / "expo.icon"
     (expo_icon / "Assets").mkdir(parents=True, exist_ok=True)
-    fit(mark, 1024, 0.66).save(expo_icon / "Assets" / "kun-mark.png", optimize=True)
+    fit(mark, 1024, 0.66, color=ICON_MARK).save(expo_icon / "Assets" / "kun-mark.png", optimize=True)
     fill = "extended-srgb:{:.5f},{:.5f},{:.5f},1.00000".format(
-        bg[0] / 255, bg[1] / 255, bg[2] / 255
+        *(channel / 255 for channel in ICON_BACKGROUND)
     )
     (expo_icon / "icon.json").write_text(
         "{\n"
