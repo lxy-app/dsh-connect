@@ -43,10 +43,31 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
         theme={{
           algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
           token: {
-            colorPrimary: '#4f6ef7',
+            colorPrimary: dark ? '#F4F6F8' : '#4B5563',
+            colorPrimaryBg: dark ? '#353B43' : '#E8EDF2',
+            colorPrimaryBgHover: dark ? '#353B43' : '#E8EDF2',
+            colorBgLayout: dark ? '#17191D' : '#F4F5F7',
             borderRadius: 8,
             fontFamily:
               '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+          },
+          components: {
+            Button: {
+              primaryColor: dark ? '#171A1F' : '#FFFFFF',
+            },
+            Layout: {
+              siderBg: dark ? '#17191D' : '#FFFFFF',
+            },
+            Menu: {
+              darkItemBg: '#17191D',
+              darkPopupBg: '#17191D',
+              darkSubMenuItemBg: '#17191D',
+              darkItemSelectedColor: '#171A1F',
+              darkItemSelectedBg: '#F4F6F8',
+            },
+            Tag: {
+              defaultBg: dark ? '#353B43' : '#E8EDF2',
+            },
           },
         }}
       >

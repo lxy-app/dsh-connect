@@ -21,6 +21,10 @@ npm run doctor      # DevEco / SDK / Metro / RNOH 诊断
 
 本工程独立维护 `package-lock.json`。不要因为 `apps/mobile/` 升级而修改本目录版本；先看上游支持矩阵。
 
+## 品牌主题
+
+`src/constants/theme.ts` 与主线 Mobile 使用同一套银白品牌令牌：浅色石墨 `#4B5563`、深色图标白 `#F4F6F8`，语义状态色独立保留。应用图标与启动资源由 `assets/logo-candidates/build-icon-assets.py` 生成；原生图标变化需重新执行 `setup:native` 和 HAP 构建，静态检查不代表真机视觉验收。
+
 ## 启动 Metro
 
 ```bash

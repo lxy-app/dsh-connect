@@ -47,6 +47,12 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - 聊天 Markdown 由 `src/lib/markdown.ts` 本地解析、`src/components/markdown.tsx` 按主题渲染，不引入第三方 Markdown 运行时依赖。
 - 主要页面使用 `src/constants/theme.ts` 中的统一 Typography 层级：聊天与输入为 16px，普通说明为 13–14px，功能性辅助信息不低于 12px，并保留系统字体缩放。
 
+### 品牌配色
+
+- `src/constants/theme.ts` 集中定义银白品牌主题：浅色 accent 为石墨 `#4B5563`、accentSoft 为 `#E8EDF2`；深色 accent 为图标白 `#F4F6F8`、accentSoft 为 `#353B43`，onAccent 分别使用白色与 `#171A1F` 保持对比。
+- 成功、警告、危险等语义色独立于品牌色，不随本次中性配色调整。
+- `app.json` 的 Android 自适应图标、浅色/深色启动图和通知色使用同一套中性色；启动图由 `assets/logo-candidates/build-icon-assets.py` 生成。修改原生图标或启动配置后需要重新 prebuild 和原生构建。
+
 相机权限只在打开扫码界面时请求；SecureStore 不需要额外权限，也不会在启动时注册推送。
 
 ## 环境要求
