@@ -8,6 +8,18 @@ test('Client bundle is a classic script accepted by the DSH module loader', asyn
   assert.doesNotMatch(source, /^\s*(?:export|import)\b/m);
 });
 
+test('Desktop panel uses silver-white brand tokens with contrasting foregrounds', async () => {
+  const source = await readFile(new URL('../../dist/client.js', import.meta.url), 'utf8');
+  for (const token of [
+    '--dsc-brand:#4B5563', '--dsc-brand-soft:#E8EDF2', '--dsc-on-brand:#FFFFFF',
+    '--dsc-brand:#F4F6F8', '--dsc-brand-soft:#353B43', '--dsc-on-brand:#171A1F',
+  ]) {
+    assert.ok(source.includes(token), `missing Connector brand token: ${token}`);
+  }
+  assert.doesNotMatch(source, /--dsw-alias-brand-primary/);
+  assert.match(source, /hostIsDark\(\) \? 'dark' : 'light'/);
+});
+
 test('Desktop panel can still change its own grants after pairing', async () => {
   const source = await readFile(new URL('../../dist/client.js', import.meta.url), 'utf8');
   // Only the post-pairing grant editor calls this RPC; pairing itself uses
