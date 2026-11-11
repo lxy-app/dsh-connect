@@ -43,7 +43,7 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。
 - `expo-file-system`：在缓存目录写入 TTS MP3 / PCM；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
 - `expo-sqlite`：后续保存草稿、游标和可重建缓存。
-- `expo-notifications`：后续接入原生 APNs/FCM token 与通知深链。
+- `expo-notifications`：后续接入原生 APNs/FCM token 与通知深链。远程推送尚未实现，`app.json` 中 `enableRemoteNotifications` 保持 `false`，不向 iOS 工程写入 `aps-environment`；未来启用时需同时在 Apple Developer 账号、App ID 和签名 Profile 中配置 Push Notifications 能力。
 - 聊天 Markdown 由 `src/lib/markdown.ts` 本地解析、`src/components/markdown.tsx` 按主题渲染，不引入第三方 Markdown 运行时依赖。
 - 主要页面使用 `src/constants/theme.ts` 中的统一 Typography 层级：聊天与输入为 16px，普通说明为 13–14px，功能性辅助信息不低于 12px，并保留系统字体缩放。
 
