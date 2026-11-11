@@ -326,6 +326,23 @@
 .policy-selection-summary.empty{color:var(--orange)}
 .policy-selection-summary svg{flex:0 0 auto}
 @media(max-width:900px){.policy-multi-row{grid-template-columns:1fr}}
+/* Only the mobile preview follows the app's silver-white + charcoal palette. */
+#mobileView{--bg:#f4f5f7;--surface:#fff;--surface2:#eff1f3;--text:#181b20;--muted:#232529;--border:#e2e5e9;--brand:#232529;--brand-soft:#e8edf2;--on-brand:#fff;--bubble-user:#232529;--on-bubble-user:#fff;--shadow:0 24px 70px #20262e24;--dot:#cfd4da}
+[data-theme="dark"] #mobileView{--bg:#1a1a1a;--surface:#242424;--surface2:#303030;--text:#f2f2f2;--muted:#9c9c9c;--border:#333;--brand:#f4f6f8;--brand-soft:#353b43;--on-brand:#171a1f;--bubble-user:#383838;--on-bubble-user:#f2f2f2;--shadow:0 24px 70px #0007;--dot:#41464e}
+#mobileView .fab{color:var(--on-brand);box-shadow:0 8px 18px #23252944}
+#mobileView .send,#mobileView .voice-compose .send,#mobileView .voice-hero-icon,#mobileView .guide-item.on .num,#mobileView .pair-step.on .step-num,#mobileView .model-row.on .model-radio,#mobileView .workspace-check.on,#mobileView .btn.primary{color:var(--on-brand)}
+#mobileView .voice-hero-icon{box-shadow:0 7px 16px #23252933}
+#mobileView .hold-to-talk.listening{color:var(--on-brand);box-shadow:0 5px 15px #2325293d}
+#mobileView .voice-feedback{box-shadow:0 8px 24px #20262e0c}
+#mobileView .composer .voice-feedback{background:radial-gradient(ellipse 85% 100% at 50% 100%,#2325296e 0%,#2325292e 48%,transparent 76%)}
+[data-theme="dark"] #mobileView .composer .voice-feedback{background:radial-gradient(ellipse 85% 100% at 50% 100%,#f4f6f870 0%,#4b556333 48%,transparent 76%)}
+#mobileView .new-session-spinner{border-color:var(--brand-soft);border-top-color:var(--on-brand)}
+#mobileView .drawer-device-menu{box-shadow:0 12px 30px #20262e26}
+#mobileView .sheet-layer{background:#18191b66}
+#mobileView .session-drawer-backdrop{background:#11151870}
+#mobileView .pair-panel{box-shadow:0 10px 30px #23252912}
+#mobileView .user .bubble{background:var(--bubble-user);color:var(--on-bubble-user)}
+#mobileView .user .bubble .message-time{color:var(--on-bubble-user);opacity:.72}
 </style>
 </head>
 <body>
