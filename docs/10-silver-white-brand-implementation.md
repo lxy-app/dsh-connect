@@ -68,3 +68,12 @@
 - 已核对 Mobile、鸿蒙壳、Admin、Website 的应用图标一致性，以及双壳主题和图标生成脚本一致性；旧紫色品牌值无生产源码残留，测试中的否定断言除外。
 - 仍需按目标平台重新 prebuild/原生构建并安装，验收真实应用图标、启动页、系统通知色与 Mobile 页面；鸿蒙需重新执行 `setup:native` 和 HAP 构建。
 - 如需发布 Website，应基于本次最终源码重新构建并走既有部署流程，不能把本地视觉验收描述为线上已生效。
+
+## 8. 深色会话页 WorkBuddy 对齐（2026-11-11）
+
+- 深色令牌改为中性近黑：background `#1A1A1A`、surface `#242424`、surfaceMuted `#303030`、border `#333333`、textSecondary `#9C9C9C`；图标白 accent 与语义状态色保持不变。
+- 用户气泡独立使用 `bubbleUser` / `onBubbleUser`：深色为 `#383838` / `#F2F2F2`，浅色沿用品牌炭黑 `#232529` / 白色，避免把 accent 复用于气泡。
+- 时间不再放在气泡或 Turn 卡片内：`shouldShowTimeDivider` 在首条消息或与上一 Turn 末条相隔 5 分钟时，于消息组上方居中显示 `HH:mm`；跨天仍只显示时间。
+- 助理 Turn 去掉卡片边框与底色，`已完成` / `深度求索中` 与折叠箭头改为灰字；用时移入展开后的执行步骤，朗读按钮移到标题行右侧。
+- 预览：`prototype/previews/mobile-workbuddy-chat.html` 与 `mobile-workbuddy-chat.png`（390×844 离线渲染，非真机截图）。
+- 双端 ESLint、TypeScript、Mobile 97/97 单元测试与 iOS/Android bundle 导出通过；未进行 iOS/Android/鸿蒙真机视觉验收。

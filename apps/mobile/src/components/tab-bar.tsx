@@ -33,7 +33,7 @@ export function TabBar({
       style={[
         styles.bar,
         {
-          backgroundColor: theme.surface,
+          backgroundColor: theme.background,
           borderTopColor: theme.border,
           paddingBottom: Math.max(bottomInset, 6),
         },
