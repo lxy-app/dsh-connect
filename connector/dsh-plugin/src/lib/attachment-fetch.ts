@@ -11,7 +11,7 @@ import {
   isSensitivePath,
   readBaseline,
 } from './attachment-policy.js';
-import type { AttachmentIndex, StoredDeclaration } from './attachment-index.js';
+import type { AttachmentIndex, StoredDeclaration, StoredMessageDeclaration } from './attachment-index.js';
 import { protocolError } from './request-cache.js';
 
 export interface AttachmentReadRequest {
@@ -35,6 +35,13 @@ export interface AttachmentUploadRequest {
 
 export type AttachmentUploader = (request: AttachmentUploadRequest) => Promise<void>;
 
+export type MessageAttachmentByteReader = (request: {
+  readonly sessionId: string;
+  readonly declaration: StoredMessageDeclaration;
+  readonly maxBytes: number;
+  readonly signal: AbortSignal;
+}) => Promise<Uint8Array>;
+
 export interface AttachmentFetchResult {
   readonly status: 'ready';
   readonly bytes: number;
@@ -45,6 +52,7 @@ export interface AttachmentFetchResult {
 export interface AttachmentFetcherOptions {
   readonly index: AttachmentIndex;
   readonly readBytes: AttachmentByteReader;
+  readonly readMessage?: MessageAttachmentByteReader;
   readonly upload: AttachmentUploader;
   readonly maxBytes: number;
   readonly resolveWorkspaceRoot: (sessionId: string, workspaceId: string) => string;
@@ -62,15 +70,17 @@ export interface AttachmentFetcherOptions {
 export class AttachmentFetcher {
   readonly #index: AttachmentIndex;
   readonly #readBytes: AttachmentByteReader;
+  readonly #readMessage: MessageAttachmentByteReader | undefined;
   readonly #upload: AttachmentUploader;
   readonly #maxBytes: number;
   readonly #resolveWorkspaceRoot: (sessionId: string, workspaceId: string) => string;
   readonly #stat: (path: string) => Promise<FileBaseline>;
   readonly #inFlight = new Map<string, Promise<AttachmentFetchResult>>();
 
-  constructor({ index, readBytes, upload, maxBytes, resolveWorkspaceRoot, stat = readBaseline }: AttachmentFetcherOptions) {
+  constructor({ index, readBytes, readMessage, upload, maxBytes, resolveWorkspaceRoot, stat = readBaseline }: AttachmentFetcherOptions) {
     this.#index = index;
     this.#readBytes = readBytes;
+    this.#readMessage = readMessage;
     this.#upload = upload;
     this.#maxBytes = maxBytes;
     this.#resolveWorkspaceRoot = resolveWorkspaceRoot;
@@ -97,6 +107,9 @@ export class AttachmentFetcher {
     const declaration = this.#index.get(params.sessionId, params.attachmentId);
     if (!declaration) {
       throw protocolError(ATTACHMENT_ERROR_UNKNOWN, 'This attachment was never declared in this session');
+    }
+    if (declaration.source === 'message') {
+      return this.#runMessage(params.sessionId, declaration, signal);
     }
     if (isSensitivePath(declaration.path)) {
       throw protocolError(ATTACHMENT_ERROR_DENIED, 'This attachment matches the sensitive-name list');
@@ -142,11 +155,49 @@ export class AttachmentFetcher {
       // A size mismatch means the file moved under us even if the stat matched.
       throw protocolError(ATTACHMENT_ERROR_CHANGED, 'The declared file changed after it was declared');
     }
+    return this.#storeBytes(declaration, params.sessionId, data, signal);
+  }
+
+  async #runMessage(
+    sessionId: string,
+    declaration: StoredMessageDeclaration,
+    signal: AbortSignal,
+  ): Promise<AttachmentFetchResult> {
+    if (declaration.bytes > this.#maxBytes) {
+      throw protocolError(ATTACHMENT_ERROR_TOO_LARGE, 'The declared file exceeds the attachment size limit');
+    }
+    if (!this.#readMessage) {
+      throw protocolError(ATTACHMENT_ERROR_UNAVAILABLE, 'This Host cannot read persisted message attachments');
+    }
+    let data: Uint8Array;
+    try {
+      data = await this.#readMessage({ sessionId, declaration, maxBytes: this.#maxBytes, signal });
+    } catch (error) {
+      if (errorCodeOf(error) === ATTACHMENT_ERROR_TOO_LARGE) {
+        throw protocolError(ATTACHMENT_ERROR_TOO_LARGE, 'The attachment exceeds the configured size limit');
+      }
+      throw protocolError(ATTACHMENT_ERROR_FAILED, errorMessageOf(error, 'Could not read the message attachment'), true);
+    }
+    if (data.byteLength > this.#maxBytes) {
+      throw protocolError(ATTACHMENT_ERROR_TOO_LARGE, 'The attachment exceeds the configured size limit');
+    }
+    if (data.byteLength !== declaration.bytes) {
+      throw protocolError(ATTACHMENT_ERROR_CHANGED, 'The attachment bytes do not match the persisted reference');
+    }
+    return this.#storeBytes(declaration, sessionId, data, signal);
+  }
+
+  async #storeBytes(
+    declaration: StoredDeclaration,
+    sessionId: string,
+    data: Uint8Array,
+    signal: AbortSignal,
+  ): Promise<AttachmentFetchResult> {
     const digest = createHash('sha256').update(data).digest('hex');
     try {
       await this.#upload({
         attachmentId: declaration.attachmentId,
-        sessionId: params.sessionId,
+        sessionId,
         bytes: data,
         sha256: digest,
         signal,

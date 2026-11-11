@@ -10,12 +10,12 @@ function prompt(overrides: Partial<PromptRequestInput> = {}): PromptRequestInput
     mode: 'queue',
     content: [
       { type: 'text', text: 'look at these' },
-      { type: 'image', attachmentId: 'atu_image' },
-      { type: 'file', attachmentId: 'atu_file' },
+      { type: 'image', attachmentId: 'atu_image', name: '拍照 01.png', mime: 'image/png' },
+      { type: 'file', attachmentId: 'atu_file', name: 'notes.txt', mime: 'text/plain; charset=utf-8' },
     ],
     attachments: [
-      { type: 'image', attachmentId: 'atu_image' },
-      { type: 'file', attachmentId: 'atu_file' },
+      { type: 'image', attachmentId: 'atu_image', name: '拍照 01.png', mime: 'image/png' },
+      { type: 'file', attachmentId: 'atu_file', name: 'notes.txt', mime: 'text/plain; charset=utf-8' },
     ],
     ...overrides,
   };
@@ -25,10 +25,16 @@ test('attachments become staged receipts in prompt order', async () => {
   const staged: string[] = [];
   const admitter = new PromptAttachmentAdmitter({
     uploads: {
+      async uploadImageStream({ sessionId, name, mediaType }) {
+        assert.equal(sessionId, 'session-1');
+        assert.equal(mediaType, 'image/png');
+        staged.push(`image:${name ?? ''}`);
+        return { receiptId: 'receipt_image' };
+      },
       async uploadStream({ sessionId, name }) {
         assert.equal(sessionId, 'session-1');
-        staged.push(name ?? '');
-        return { receiptId: `receipt_${name}` };
+        staged.push(`file:${name ?? ''}`);
+        return { receiptId: 'receipt_file' };
       },
     },
     download: async ({ attachmentId }) => new TextEncoder().encode(attachmentId),
@@ -37,10 +43,10 @@ test('attachments become staged receipts in prompt order', async () => {
   assert.deepEqual(admission.admittedIds, ['atu_image', 'atu_file']);
   assert.deepEqual(admission.content, [
     { type: 'text', text: 'look at these' },
-    { type: 'file', receiptId: 'receipt_atu_image' },
-    { type: 'file', receiptId: 'receipt_atu_file' },
+    { type: 'file', receiptId: 'receipt_image' },
+    { type: 'file', receiptId: 'receipt_file' },
   ]);
-  assert.deepEqual(staged, ['atu_image', 'atu_file']);
+  assert.deepEqual(staged, ['image:拍照 01.png', 'file:notes.txt']);
 });
 
 test('text-only prompts never touch the Host upload service', async () => {

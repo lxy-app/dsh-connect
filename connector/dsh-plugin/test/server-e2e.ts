@@ -43,6 +43,7 @@ const token = 'e2e-bootstrap-token-that-is-not-for-production';
 const promptRequestId = `prompt-e2e-${Date.now()}-${process.pid}`;
 const createRequestId = `create-e2e-${Date.now()}-${process.pid}`;
 const mobilePromptRequestId = `mobile-prompt-e2e-${Date.now()}-${process.pid}`;
+const mobileAttachmentPromptRequestId = `mobile-attachment-prompt-e2e-${Date.now()}-${process.pid}`;
 const mobileCreateRequestId = `mobile-create-e2e-${Date.now()}-${process.pid}`;
 const mobileModelRequestId = `mobile-model-e2e-${Date.now()}-${process.pid}`;
 const existingSessionId = `existing-session-${Date.now()}-${process.pid}`;
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
         DSH_CONNECT_LISTEN_ADDR: `127.0.0.1:${port}`,
         DSH_CONNECT_SERVER_URL: serverUrl,
         DSH_CONNECT_ATTACHMENT_DIR: join(temp, 'attachments'),
+        DSH_CONNECT_ATTACHMENTS: 'readwrite',
       },
     });
     server.stdout?.on('data', (data: Buffer) => serverLog.push(data.toString()));
@@ -344,6 +346,41 @@ async function main(): Promise<void> {
       },
     );
     assert.equal(mobilePrompt.status, 'accepted');
+
+    // Phone uplink: exact bytes cross Server and Connector, then enter DSH as
+    // an image receipt plus a file receipt without requiring a text part.
+    const phoneFileBytes = new TextEncoder().encode('phone attachment\n');
+    const uploadedImage = await uploadMobileAttachment(mobileCreated.sessionId, phone.accessToken, deviceId, '拍照 01.png', attachmentBytes);
+    const uploadedFile = await uploadMobileAttachment(mobileCreated.sessionId, phone.accessToken, deviceId, 'notes.txt', phoneFileBytes);
+    const attachmentPrompt = await mobileRequest<{ readonly status: string }>(
+      `/v1/mobile/sessions/${mobileCreated.sessionId}/prompt`, phone.accessToken,
+      {
+        method: 'POST',
+        body: {
+          requestId: mobileAttachmentPromptRequestId, deviceId, workspaceId: 'ws-1', mode: 'queue', text: '',
+          attachments: [
+            { attachmentId: uploadedImage.attachmentId },
+            { attachmentId: uploadedFile.attachmentId },
+          ],
+        },
+      },
+    );
+    assert.equal(attachmentPrompt.status, 'accepted');
+    assert.equal(host.uploads.length, 2);
+    assert.equal(host.uploads[0]?.kind, 'image');
+    assert.equal(host.uploads[0]?.name, '拍照 01.png');
+    assert.equal(host.uploads[0]?.mime, 'image/png');
+    assert.deepEqual(host.uploads[0]?.bytes, attachmentBytes);
+    assert.equal(host.uploads[1]?.kind, 'file');
+    assert.equal(host.uploads[1]?.name, 'notes.txt');
+    assert.deepEqual(host.uploads[1]?.bytes, phoneFileBytes);
+    const hostAttachmentPrompt = host.prompts.find((prompt) => prompt.requestId === mobileAttachmentPromptRequestId);
+    assert.ok(hostAttachmentPrompt, 'attachment-only prompt must reach the Host');
+    assert.deepEqual(hostAttachmentPrompt.content, [
+      { type: 'file', receiptId: 'e2e-image-receipt' },
+      { type: 'file', receiptId: 'e2e-file-receipt' },
+    ]);
+
     await mobileRequest('/v1/mobile/auth/logout', phone.accessToken, { method: 'POST' });
 
     runtime.stop();
@@ -367,6 +404,7 @@ async function main(): Promise<void> {
         'device token reconnect',
         'mobile access request + desktop approval',
         'mobile workspaces/sessions/create/transcript/prompt',
+        'phone image/file upload → Connector download → Host receipts → attachment-only prompt',
         'present attachment → Host bytes → upload → mobile download + attachment.ready',
         'offline fast failure',
       ],
@@ -393,6 +431,46 @@ async function main(): Promise<void> {
     }
     await rm(temp, { recursive: true, force: true });
   }
+}
+
+async function collectUploadBytes(data: AsyncIterable<Uint8Array>): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of data) {
+    chunks.push(chunk);
+    total += chunk.byteLength;
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function uploadMobileAttachment(
+  sessionId: string,
+  accessToken: string,
+  deviceId: string,
+  name: string,
+  bytes: Uint8Array,
+): Promise<{ readonly attachmentId: string }> {
+  const query = new URLSearchParams({ deviceId, workspaceId: 'ws-1' });
+  const response = await fetch(`${serverUrl}/v1/mobile/sessions/${sessionId}/attachments?${query}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/octet-stream',
+      'X-DSH-Attachment-Name': encodeURIComponent(name),
+      'X-DSH-Attachment-Name-Encoding': 'url',
+    },
+    body: bytes as unknown as BodyInit,
+  });
+  const value: unknown = await response.json();
+  if (!response.ok) throw new Error(`mobile upload failed: ${response.status} ${JSON.stringify(value)}`);
+  assert.ok(isRecord(value) && typeof value.attachmentId === 'string');
+  return { attachmentId: value.attachmentId };
 }
 
 async function mobileRequest<T = unknown>(
@@ -455,6 +533,8 @@ interface HostFixture {
   promptCalls: number;
   attachmentReads: number;
   modelSelectCalls: number;
+  readonly uploads: { readonly kind: 'image' | 'file'; readonly name: string; readonly mime: string; readonly bytes: Uint8Array }[];
+  readonly prompts: SessionPromptRequest[];
   readonly defaultModel: ModelSelection;
   currentModel(): ModelSelection;
   followAborted(sessionId: string): boolean;
@@ -474,6 +554,8 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
     promptCalls: 0,
     attachmentReads: 0,
     modelSelectCalls: 0,
+    uploads: [],
+    prompts: [],
     defaultModel,
     currentModel: () => selectedModel,
     followAborted: (sessionId) => follows.get(sessionId)?.signal.aborted ?? false,
@@ -519,6 +601,22 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
           return { absolutePath: path, version: '1', bytes: attachmentBytes.byteLength };
         },
       },
+      fileUploads: {
+        async uploadImageStream({ name, mediaType, data }) {
+          const bytes = await collectUploadBytes(data);
+          host.uploads.push({
+            kind: 'image', name: name ?? '', mime: mediaType, bytes,
+          });
+          return { receiptId: 'e2e-image-receipt' };
+        },
+        async uploadStream({ name, data }) {
+          const bytes = await collectUploadBytes(data);
+          host.uploads.push({
+            kind: 'file', name: name ?? '', mime: 'application/octet-stream', bytes,
+          });
+          return { receiptId: 'e2e-file-receipt' };
+        },
+      },
       sessionController: {
         async list() {
           return {
@@ -551,6 +649,7 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
         },
         async prompt(request: SessionPromptRequest) {
           host.promptCalls += 1;
+          host.prompts.push(request);
           if (request.requestId === promptRequestId) {
             assert.equal(request.requestId, promptRequestId);
             const follow = follows.get(request.sessionId);

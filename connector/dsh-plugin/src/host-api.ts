@@ -287,6 +287,27 @@ export interface WorkspaceFilesService {
   ): Promise<{ readonly absolutePath: string; readonly version: string; readonly bytes?: number }>;
 }
 
+export interface HostImageAttachmentReference {
+  readonly attachmentId: string;
+  readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+  readonly bytes: number;
+  readonly width: number;
+  readonly height: number;
+  readonly name?: string;
+}
+
+export interface HostFileAttachmentReference {
+  readonly attachmentId: string;
+  readonly name: string;
+  readonly bytes: number;
+}
+
+/** Reads only immutable references learned from an authorized Session log. */
+export interface HostAttachmentsService {
+  readImage(ref: HostImageAttachmentReference, signal: AbortSignal): Promise<{ readonly data: Uint8Array }>;
+  readFileStream(ref: HostFileAttachmentReference, signal: AbortSignal): AsyncIterable<Uint8Array>;
+}
+
 export interface HostFileUploadValue {
   /** Host-minted authority accepted only inside the receiving Session's scope. */
   readonly receiptId: string;
@@ -304,6 +325,14 @@ export interface HostFileUploads {
     readonly signal?: AbortSignal;
     readonly name?: string;
   }): Promise<HostFileUploadValue>;
+  /** Images use the same file receipt at prompt time, but retain image modality. */
+  uploadImageStream?(request: {
+    readonly sessionId: string;
+    readonly data: AsyncIterable<Uint8Array>;
+    readonly signal?: AbortSignal;
+    readonly name?: string;
+    readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+  }): Promise<HostFileUploadValue>;
 }
 
 export interface HostContext {
@@ -313,6 +342,7 @@ export interface HostContext {
   readonly connection: HostConnection;
   readonly webServer: HostWebServer;
   readonly workspaceFiles?: WorkspaceFilesService;
+  readonly attachments?: HostAttachmentsService;
   /**
    * The DSH file-upload service (Cordis name `fileUploads`). A phone prompt that
    * carries files reaches DSH through a staged receipt minted here, so the bytes
@@ -330,7 +360,7 @@ export interface HostContext {
   on?(name: string, listener: (...args: never[]) => unknown, options?: { readonly prepend?: boolean }): () => void;
 }
 
-export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'llm' | 'workspaceRegistry' | 'on' | 'workspaceFiles' | 'fileUploads'>;
+export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'llm' | 'workspaceRegistry' | 'on' | 'workspaceFiles' | 'attachments' | 'fileUploads'>;
 
 /** Minimal agent identity carried by DSH interaction requests. */
 export interface InteractionAgent {

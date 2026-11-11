@@ -35,12 +35,13 @@ export interface PromptContentInput {
 export interface PromptAttachmentInput {
   readonly type: 'image' | 'file';
   readonly attachmentId: string;
+  /** Server-owned display metadata; optional for compatibility with older Servers. */
+  readonly name?: string;
+  readonly mime?: string;
 }
 
 /** One Host prompt content part: text stays inline, attachments cite an id. */
-export type PromptPartInput =
-  | PromptContentInput
-  | { readonly type: 'image' | 'file'; readonly attachmentId: string };
+export type PromptPartInput = PromptContentInput | PromptAttachmentInput;
 
 /** Connector-side prompt request, still carrying attachment ids for admission. */
 export interface PromptRequestInput {
@@ -73,13 +74,15 @@ export function promptInput(params: PromptInputParams, requestId: string): Promp
       if (typeof part.attachmentId !== 'string' || !part.attachmentId.trim()) {
         throw protocolError('unsupported_content', 'Attachment parts must carry an attachmentId');
       }
-      return { type: part.type, attachmentId: part.attachmentId };
+      return {
+        type: part.type,
+        attachmentId: part.attachmentId,
+        ...part.name === undefined ? {} : { name: requiredText(part.name, 'name', 256) },
+        ...part.mime === undefined ? {} : { mime: requiredText(part.mime, 'mime', 128) },
+      };
     }
     throw protocolError('unsupported_content', 'Prompt content parts must be text or an attachment');
   });
-  if (!content.some((part) => part.type === 'text')) {
-    throw protocolError('invalid_request', 'At least one text prompt part is required');
-  }
   const textBytes = content.reduce(
     (total, part) => total + (part.type === 'text' ? Buffer.byteLength(part.text) : 0),
     0,
@@ -88,7 +91,12 @@ export function promptInput(params: PromptInputParams, requestId: string): Promp
     throw protocolError('payload_too_large', 'Text prompts are limited to 64 KiB');
   }
   const attachments = content.filter((part): part is PromptAttachmentInput => part.type !== 'text');
-  const hostContent = content.map((part) => (part.type === 'text' ? part : { type: part.type, attachmentId: part.attachmentId }));
+  const hostContent = content.map((part) => (part.type === 'text' ? part : {
+    type: part.type,
+    attachmentId: part.attachmentId,
+    ...part.name === undefined ? {} : { name: part.name },
+    ...part.mime === undefined ? {} : { mime: part.mime },
+  }));
   return {
     requestId,
     sessionId: sessionAddress(params.sessionId).sessionId,

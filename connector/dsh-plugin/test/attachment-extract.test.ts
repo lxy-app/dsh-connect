@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   attachmentID,
   extractAttachmentCandidates,
+  extractMessageAttachmentCandidates,
   DEFAULT_TOOL_ALLOWLIST,
 } from '../src/lib/attachment-extract.js';
 import { evaluateAttachmentPath, isSensitivePath, ATTACHMENT_ERROR_DENIED } from '../src/lib/attachment-policy.js';
@@ -50,6 +51,35 @@ test('present events become one declaration per file, in order', () => {
       attachmentID('sess-1', 'deliverable', 2, 1),
     ],
   );
+});
+
+test('persisted user image and file blocks become opaque message declarations', () => {
+  const imageRef = `sha256:${'a'.repeat(64)}`;
+  const fileRef = `sha256:${'b'.repeat(64)}`;
+  const candidates = extractMessageAttachmentCandidates({
+    id: 'u-7', role: 'user', source: { kind: 'user' },
+    content: [
+      { type: 'text', text: '看图和文件' },
+      { type: 'image', attachment: {
+        attachmentId: imageRef, mediaType: 'image/png', bytes: 1234, width: 640, height: 480, name: '拍摄.png',
+      } },
+      { type: 'file', attachment: { attachmentId: fileRef, name: 'notes.pdf', bytes: 4567 } },
+    ],
+  }, { sessionId: 'sess-1', seq: 7 });
+
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0]?.source, 'message');
+  assert.equal(candidates[0]?.name, '拍摄.png');
+  assert.equal(candidates[0]?.mime, 'image/png');
+  assert.equal(candidates[0]?.width, 640);
+  assert.equal(candidates[0]?.reference.attachmentId, imageRef);
+  assert.equal(candidates[1]?.mime, 'application/pdf');
+  assert.equal(candidates[1]?.reference.attachmentId, fileRef);
+  assert.deepEqual(candidates.map((candidate) => candidate.attachmentId), [
+    attachmentID('sess-1', 'message', 7, 1),
+    attachmentID('sess-1', 'message', 7, 2),
+  ]);
+  assert.equal(JSON.stringify(candidates.map(({ reference: _reference, ...candidate }) => candidate)).includes('sha256:'), false);
 });
 
 test('only allowlisted tools contribute, and only when the result succeeded', () => {

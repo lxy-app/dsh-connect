@@ -85,12 +85,13 @@ export class PromptAttachmentAdmitter {
     }
     let receiptId: unknown;
     try {
-      const value: unknown = await uploads.uploadStream({
-        sessionId,
-        data: chunk(bytes),
-        signal,
-        name: displayNameOf(attachment),
-      });
+      const name = displayNameOf(attachment);
+      const mediaType = hostImageMediaType(attachment);
+      // DSH resolves both services' receipts through a file prompt part. The
+      // image upload service preserves modality; the generic service does not.
+      const value: unknown = mediaType !== undefined && uploads.uploadImageStream !== undefined
+        ? await uploads.uploadImageStream({ sessionId, data: chunk(bytes), signal, name, mediaType })
+        : await uploads.uploadStream({ sessionId, data: chunk(bytes), signal, name });
       receiptId = isRecord(value) ? value.receiptId : undefined;
     } catch (cause) {
       throw attachmentAdmissionError(attachment, cause);
@@ -116,9 +117,24 @@ async function* chunk(bytes: Uint8Array): AsyncIterable<Uint8Array> {
   yield bytes;
 }
 
-/** The Server never sends the display name with the prompt, so the id stands in. */
+/** Prefer the Server-verified display name; older Servers fall back to the id. */
 function displayNameOf(attachment: PromptAttachmentInput): string {
-  return attachment.attachmentId;
+  return attachment.name ?? attachment.attachmentId;
+}
+
+function hostImageMediaType(
+  attachment: PromptAttachmentInput,
+): 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | undefined {
+  if (attachment.type !== 'image') return undefined;
+  switch (attachment.mime) {
+    case 'image/png':
+    case 'image/jpeg':
+    case 'image/webp':
+    case 'image/gif':
+      return attachment.mime;
+    default:
+      return undefined;
+  }
 }
 
 function attachmentAdmissionError(attachment: PromptAttachmentInput, cause: unknown): Error {

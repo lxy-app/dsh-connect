@@ -40,6 +40,22 @@ test('prompt keeps attachment ids in order and rejects arbitrary session address
   assert.throws(() => sessionAddress(''), { code: 'invalid_request' });
 });
 
+test('attachment-only prompts retain Server-verified names and MIME types', () => {
+  const prompt = promptInput({
+    sessionId: 'session-1',
+    content: [
+      { type: 'image', attachmentId: 'atu_image', name: '拍照 01.png', mime: 'image/png' },
+      { type: 'file', attachmentId: 'atu_file', name: 'notes.txt', mime: 'text/plain; charset=utf-8' },
+    ],
+  }, 'req-attachments');
+
+  assert.deepEqual(prompt.content, [
+    { type: 'image', attachmentId: 'atu_image', name: '拍照 01.png', mime: 'image/png' },
+    { type: 'file', attachmentId: 'atu_file', name: 'notes.txt', mime: 'text/plain; charset=utf-8' },
+  ]);
+  assert.deepEqual(prompt.attachments, prompt.content);
+});
+
 test('history input is bounded and uses the DSH SessionAddress shape', () => {
   assert.deepEqual(pageInput({ sessionId: 'session-1', cursor: 20, limit: 500 }), {
     address: { kind: 'session', sessionId: 'session-1' },

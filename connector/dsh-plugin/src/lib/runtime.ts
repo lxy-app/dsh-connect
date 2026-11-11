@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import type { RuntimeHostContext, WorkspaceFilesService } from '../host-api.js';
+import type { HostAttachmentsService, RuntimeHostContext, WorkspaceFilesService } from '../host-api.js';
 import type { ConnectorDecisionInput, ConnectorMobileAccessList, Logger, UnknownRecord, WorkspaceGrants, WorkspaceInfo } from '../types.js';
 import { isRecord } from '../types.js';
 import { CommandHandler } from './command-handler.js';
 import type { FileStateStore } from './file-state-store.js';
 import { HostSessionAdapter } from './host-session-adapter.js';
 import type { AttachmentWiring } from './host-session-adapter.js';
-import type { AttachmentByteReader } from './attachment-fetch.js';
+import type { AttachmentByteReader, MessageAttachmentByteReader } from './attachment-fetch.js';
 import { InteractionBridge } from './interaction-bridge.js';
 import { PairingController } from './pairing.js';
 import { protocolError } from './request-cache.js';
@@ -243,6 +243,7 @@ export class ConnectorRuntime extends EventEmitter {
     return {
       maxBytes,
       readBytes: hostAttachmentByteReader(workspaceFiles),
+      ...(this.#ctx.attachments ? { readMessage: hostMessageAttachmentReader(this.#ctx.attachments) } : {}),
       upload: async ({ attachmentId, sessionId, bytes, sha256, signal }) => {
         await this.#uploadAttachment({ attachmentId, sessionId, bytes, sha256, signal });
       },
@@ -334,6 +335,34 @@ export class ConnectorRuntime extends EventEmitter {
       interactions: this.#interactions,
     });
   }
+}
+
+/** Reads immutable message refs through the Host attachment service. */
+export function hostMessageAttachmentReader(attachments: HostAttachmentsService): MessageAttachmentByteReader {
+  return async ({ declaration, maxBytes, signal }) => {
+    const reference = declaration.reference;
+    if (declaration.kind === 'image') {
+      if (!('mediaType' in reference)) throw new Error('Image attachment reference is invalid');
+      const result = await attachments.readImage(reference, signal);
+      if (result.data.byteLength > maxBytes) throw protocolError('attachment_too_large', 'Attachment exceeds the size limit');
+      return result.data;
+    }
+    if ('mediaType' in reference) throw new Error('File attachment reference is invalid');
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for await (const chunk of attachments.readFileStream(reference, signal)) {
+      total += chunk.byteLength;
+      if (total > maxBytes) throw protocolError('attachment_too_large', 'Attachment exceeds the size limit');
+      chunks.push(chunk);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
+  };
 }
 
 /**

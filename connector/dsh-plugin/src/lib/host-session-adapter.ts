@@ -24,11 +24,11 @@ import type {
 import { errorCode, errorMessage, isRecord } from '../types.js';
 import { AttachmentIndex } from './attachment-index.js';
 import { rewriteAttachmentImageLinks } from './attachment-markdown.js';
-import { extractAttachmentCandidates } from './attachment-extract.js';
-import type { AttachmentCandidate } from './attachment-extract.js';
+import { extractAttachmentCandidates, extractMessageAttachmentCandidates } from './attachment-extract.js';
+import type { AttachmentCandidate, MessageAttachmentCandidate } from './attachment-extract.js';
 import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
-import type { AttachmentByteReader, AttachmentUploader } from './attachment-fetch.js';
-import { evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE } from './attachment-policy.js';
+import type { AttachmentByteReader, AttachmentUploader, MessageAttachmentByteReader } from './attachment-fetch.js';
+import { evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE, ATTACHMENT_ERROR_UNAVAILABLE } from './attachment-policy.js';
 import { CursorJournal } from './cursor-journal.js';
 import { modelCatalogInput, modelSelectInput, pageInput, promptInput, sessionAddress } from './input-validation.js';
 import type {
@@ -89,7 +89,9 @@ export interface TranscriptAttachment {
   readonly name: string;
   readonly mime: string;
   readonly bytes: number;
-  readonly source: 'deliverable' | 'tool';
+  readonly width?: number;
+  readonly height?: number;
+  readonly source: 'deliverable' | 'message' | 'tool';
   readonly description?: string;
   readonly state: 'known' | 'failed' | 'unavailable';
   readonly errorCode?: string;
@@ -175,6 +177,7 @@ export interface HostSessionAdapterOptions {
 export interface AttachmentWiring {
   readonly index?: AttachmentIndex;
   readonly readBytes: AttachmentByteReader;
+  readonly readMessage?: MessageAttachmentByteReader;
   readonly upload: AttachmentUploader;
   readonly maxBytes?: number;
   readonly allowOutsideWorkspace?: boolean;
@@ -242,6 +245,7 @@ export class HostSessionAdapter {
       this.#attachmentFetcher = new AttachmentFetcher({
         index: this.#attachmentIndex,
         readBytes: attachments.readBytes,
+        ...(attachments.readMessage ? { readMessage: attachments.readMessage } : {}),
         upload: attachments.upload,
         maxBytes: attachments.maxBytes ?? DEFAULT_MAX_ATTACHMENT_BYTES,
         resolveWorkspaceRoot: (_sessionId, workspaceId) => this.#workspaceRoot(workspaceId),
@@ -391,12 +395,20 @@ export class HostSessionAdapter {
       }
       const payload = isRecord(data.message) ? data.message : data;
       const text = messageText(payload.content);
-      if (!text) continue;
+      const messageAttachments = event.type === 'user/message'
+        ? this.#projectMessageAttachments(
+            sessionId,
+            workspaceId,
+            extractMessageAttachmentCandidates(payload, { sessionId, seq }),
+          )
+        : [];
+      if (!text && messageAttachments.length === 0) continue;
       const message: TranscriptMessage = {
         id: typeof payload.id === 'string' && payload.id ? payload.id : `message-${seq}`,
         seq,
         role: event.type === 'user/message' ? 'user' : 'assistant',
         text,
+        ...(messageAttachments.length > 0 ? { attachments: messageAttachments } : {}),
         // A user message is recorded before its own turn/start, so the current
         // ordinal still belongs to the previous turn; only steps and replies
         // carry a turn number.
@@ -762,7 +774,10 @@ export class HostSessionAdapter {
       occurredAt: new Date(event.time).toISOString(),
       data: {
         type: event.type,
-        payload: event.data,
+        // Live user messages are only a transcript refresh signal on Mobile.
+        // Strip durable attachment blocks; the safe transcript projects them as
+        // opaque att_ ids after the same session/workspace authorization.
+        payload: externalEventPayload(event),
         ...(event.ignorable ? { ignorable: true } : {}),
         ...(event.sourceEventSeqs !== undefined ? { sourceEventSeqs: event.sourceEventSeqs } : {}),
         ...(event.surfaceOp !== undefined ? { surfaceOp: event.surfaceOp } : {}),
@@ -827,6 +842,50 @@ export class HostSessionAdapter {
       mime: result.mime,
     };
     return envelope;
+  }
+
+  /** Projects immutable user-message blocks and remembers their private refs. */
+  #projectMessageAttachments(
+    sessionId: string,
+    workspaceId: string,
+    candidates: readonly MessageAttachmentCandidate[],
+  ): TranscriptAttachment[] {
+    const wiring = this.#attachments;
+    const index = this.#attachmentIndex;
+    if (!wiring || !index) return [];
+    const maxBytes = wiring.maxBytes ?? DEFAULT_MAX_ATTACHMENT_BYTES;
+    return candidates.map((candidate) => {
+      const errorCode = candidate.bytes > maxBytes
+        ? ATTACHMENT_ERROR_TOO_LARGE
+        : wiring.readMessage === undefined ? ATTACHMENT_ERROR_UNAVAILABLE : undefined;
+      if (errorCode === undefined) {
+        index.remember({
+          attachmentId: candidate.attachmentId,
+          sessionId,
+          workspaceId,
+          source: 'message',
+          seq: candidate.seq,
+          reference: candidate.reference,
+          name: candidate.name,
+          kind: candidate.kind,
+          mime: candidate.mime,
+          bytes: candidate.bytes,
+        });
+      }
+      return {
+        attachmentId: candidate.attachmentId,
+        kind: candidate.kind,
+        name: candidate.name,
+        mime: candidate.mime,
+        bytes: candidate.bytes,
+        ...(candidate.width === undefined ? {} : { width: candidate.width }),
+        ...(candidate.height === undefined ? {} : { height: candidate.height }),
+        source: 'message',
+        ...(errorCode === undefined
+          ? { state: 'known' as const }
+          : { state: errorCode === ATTACHMENT_ERROR_TOO_LARGE ? 'failed' as const : 'unavailable' as const, errorCode }),
+      };
+    });
   }
 
   /**
@@ -1137,6 +1196,17 @@ function singleLine(value: string, workspaceRoot = ''): string {
 function baseName(value: string): string {
   const parts = value.split(/[\\/]/).filter(Boolean);
   return parts.at(-1) ?? value;
+}
+
+function externalEventPayload(event: SessionWireEvent): unknown {
+  if (event.type !== 'user/message' || !isRecord(event.data) || !Array.isArray(event.data.content)) return event.data;
+  let changed = false;
+  const content = event.data.content.filter((block) => {
+    const attachment = isRecord(block) && (block.type === 'image' || block.type === 'file');
+    if (attachment) changed = true;
+    return !attachment;
+  });
+  return changed ? { ...event.data, content } : event.data;
 }
 
 function messageText(content: unknown): string {
