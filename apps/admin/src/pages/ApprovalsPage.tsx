@@ -117,7 +117,7 @@ export function ApprovalsPage() {
       dataIndex: 'kind',
       key: 'kind',
       width: 100,
-      render: (kind: string) => <Tag color={kind === 'approval' ? 'gold' : 'default'}>{kind === 'approval' ? '审批' : kind === 'question' ? '提问' : kind}</Tag>,
+      render: (kind: string) => <Tag color={kind === 'approval' ? 'gold' : 'blue'}>{kind === 'approval' ? '审批' : kind === 'question' ? '提问' : kind}</Tag>,
     },
     {
       title: '请求',

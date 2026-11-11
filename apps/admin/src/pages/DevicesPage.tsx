@@ -182,7 +182,7 @@ function DesktopDevicesPanel({ refreshKey, onAddDesktop }: DesktopDevicesPanelPr
       render: (scopes: string[]) => (
         <Space size={4} wrap>
           {(scopes ?? []).map((scope) => (
-            <Tag key={scope}>
+            <Tag key={scope} color="blue">
               {scope}
             </Tag>
           ))}

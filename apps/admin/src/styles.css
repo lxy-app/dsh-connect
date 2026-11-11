@@ -1,19 +1,18 @@
 :root {
   color-scheme: light;
-  --dsh-bg: #F4F5F7;
+  --dsh-bg: #F4F5F9;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --dsh-bg: #17191D;
+  --dsh-bg: #17181E;
 }
 
-/* Ant Design's dark algorithm derives near-white primary colors to gray.
-   Keep the confirmed icon-white exact without affecting dangerous buttons. */
+/* Keep the confirmed violet exact on dark primary buttons without affecting danger actions. */
 :root[data-theme='dark'] .ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-color-dangerous) {
-  --ant-btn-color-base: #F4F6F8;
-  --ant-btn-color-hover: #FFFFFF;
-  --ant-btn-color-active: #E8EDF2;
+  --ant-btn-color-base: #928BFF;
+  --ant-btn-color-hover: #A49EFF;
+  --ant-btn-color-active: #7F76E8;
 }
 
 * {

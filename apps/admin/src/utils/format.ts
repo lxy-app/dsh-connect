@@ -52,7 +52,7 @@ export const roleLabels: Record<string, string> = {
 
 export const roleColors: Record<string, string> = {
   owner: 'gold',
-  admin: 'default',
+  admin: 'blue',
   member: 'default',
-  auditor: 'default',
+  auditor: 'purple',
 };
