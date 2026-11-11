@@ -725,3 +725,36 @@ test('attachment-only user messages remain in the mobile transcript', async () =
   assert.equal(result.messages[0]?.text, '');
   assert.equal(result.messages[0]?.attachments?.[0]?.name, 'only.zip');
 });
+
+test('transcript applies one attachment budget across user and delivery sources', async () => {
+  const messageBlocks = Array.from({ length: 10 }, (_, index) => ({
+    type: 'file',
+    attachment: { attachmentId: `sha256:${String(index).repeat(64).slice(0, 64)}`, name: `user-${index}.txt`, bytes: 4 },
+  }));
+  const records = [
+    { type: 'event' as const, event: { type: 'user/message', seq: 1, time: 1_000, data: {
+      id: 'u-budget', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: 'mixed sources' }, ...messageBlocks],
+    } } },
+    { type: 'event' as const, event: { type: 'turn/start', seq: 2, time: 2_000, data: { turn: 1 } } },
+    { type: 'event' as const, event: { type: 'deliverables/presented', seq: 3, time: 3_000, data: {
+      turn: 1, files: Array.from({ length: 4 }, (_, index) => ({ path: `/work/a/delivered-${index}.txt` })),
+    } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 4, time: 4_000, data: {
+      message: { id: 'a-budget', content: [{ type: 'text', text: 'done' }] },
+    } } },
+  ];
+  const { adapter } = setup({
+    attachments: unusedAttachmentWiring,
+    controller: { async events() { return { records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+  const count = result.messages.reduce((total, item) => total + (item.attachments?.length ?? 0), 0);
+  assert.equal(count, 12);
+  assert.equal(result.truncated, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 64 * 1024);
+});

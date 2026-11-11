@@ -40,6 +40,7 @@ import type {
 import { PromptAttachmentAdmitter } from './prompt-attachments.js';
 import type { AttachmentByteDownloader } from './prompt-attachments.js';
 import { protocolError } from './request-cache.js';
+import { fitTranscriptBudget } from './transcript-budget.js';
 import type { WorkspacePolicy } from './workspace-policy.js';
 
 export interface SessionListParams {
@@ -442,7 +443,10 @@ export class HostSessionAdapter {
     if (this.#attachments) {
       await this.#attachDeclarations(sessionId, workspaceId, result.records, visible, messageTurns, signal);
     }
-    const droppedOlder = firstVisible > 0;
+    const budget = fitTranscriptBudget(visible);
+    visible = budget.messages;
+    truncated = truncated || budget.truncated;
+    const droppedOlder = firstVisible > 0 || budget.droppedMessages;
     const firstRecordSeq = result.records[0]?.event.seq;
     const cursorSeq = visible[0]?.seq ?? firstRecordSeq;
     const hasMore = result.hasMore || droppedOlder;
