@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } 
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   RefreshControl,
@@ -30,6 +29,7 @@ import { ChatIcon } from '@/components/chat-icon';
 import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
 import { groupTurns, runningTurnIndex } from '@shared/lib/turn-grouping';
 import {
@@ -114,6 +114,7 @@ function ChatScreenContent() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
+  const keyboard = useKeyboardInset();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
@@ -832,9 +833,15 @@ function ChatScreenContent() {
         : '松手完成，上移取消';
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.page, { backgroundColor: theme.background }]}
+    <View
+      style={[
+        styles.page,
+        {
+          backgroundColor: theme.background,
+          // 只按键盘真实高度留出底部空间，不再由 KeyboardAvoidingView 反推坐标。
+          paddingBottom: Platform.OS === 'ios' ? keyboard.height : 0,
+        },
+      ]}
     >
       <View style={{ paddingTop: insets.top }}>
         <View style={styles.head}>
@@ -1217,7 +1224,9 @@ function ChatScreenContent() {
           </Pressable>
         </View>
       )}
-      {voiceActive ? null : <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />}
+      {voiceActive || keyboard.visible ? null : (
+        <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />
+      )}
       <MoreOptionsSheet
         visible={moreOptionsOpen}
         catalog={modelCatalog}
@@ -1247,7 +1256,7 @@ function ChatScreenContent() {
         onCreateSession={openNewSession}
         onOpenSession={openDrawerSession}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
