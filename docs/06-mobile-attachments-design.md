@@ -880,3 +880,44 @@ sequenceDiagram
 - Connector typecheck/build 与 97 项测试通过，覆盖精确路径、带空格 angle destination、普通链接、同名与歧义声明，以及 transcript 中的 Markdown 投影。
 - Mobile ESLint、TypeScript、37 项测试与 iOS/Android 生产 bundle 导出通过，覆盖图片 AST、普通链接兼容、纯文本/TTS 投影和不透明 URI 校验。
 - iOS Simulator 临时原生页使用两个独立附件完成 smoke：初始页面只请求正文引用的第一张图片，第二张附件卡没有请求；打开第二张附件后才产生其 GET，并在全屏查看器正确显示。临时路由与测试服务已清理。真实 DSH 会话的本次新交互与 Android 真机仍需另行验收。
+
+## 20. 手机上行附件实现（2026-11-11）
+
+### 已实现链路
+
+```text
+App 选择（ImagePicker / DocumentPicker）
+  → POST /v1/mobile/sessions/{id}/attachments（原始字节 + 名称头）
+  → Server 存 blob、登记 source=upload 的 ready 行，返回 atu_ 前缀 id
+  → prompt 请求携带 attachments[]（服务端校验归属：同手机、同会话、同工作区）
+  → Connector 从 GET /v1/connector/uploads/{id} 取回字节
+  → Host fileUploads.uploadStream 生成回执
+  → prompt content 以 { type: 'file', receiptId } 引用
+```
+
+要点：
+
+- **字节不走 prompt。** prompt 只传不可猜测的 attachmentId，Server 端 64 KiB JSON 限制不受影响。
+- **归属反向校验。** `promptAttachmentParts` 拒绝非 `upload` 来源、跨设备、跨会话、跨工作区、未 ready 的 id；桌面交付（`deliverable`/`tool`）的 id 不能拿来当上行附件。
+- **来源校验：** 上传要求 `prompt` scope（只读 grant 无法上传），`DSH_CONNECT_ATTACHMENTS` 需为 `readwrite`，`read` 模式下上传端点返回 404。
+- **名称安全：** 显示名不允许 `/`、`\`、NUL，最长 256 字符；MIME 以字节嗅探为准，识别为 `image/png|jpeg|webp|gif` 时按图片处理，其余按文件。
+- **Connector 单一入口：** 图片与文件都经 Host `fileUploads.uploadStream` 生成回执。DSH 0.2.2-rc.1 的 `PromptContentPart` 只有 text、image（内联 Base64）与 file（receiptId）三种，回执路径同时满足两类文件且不把 Base64 塞进 RPC。
+
+### 移动端交互
+
+- 入口仍是输入区 `＋` → 「更多输入选项」，三个磁贴：拍照 / 照片与视频 / 添加文件。
+- 选中后进入输入区上方的草稿条，可逐项移除、失败单项重试、继续添加；最多 6 项，单文件 20 MB。
+- 存在附件时发送按钮可用，支持图文混发与纯附件发送；发送前保证所有附件处于 ready，否则不提交 prompt。
+- 选择后立即后台上传，失败停留在草稿条并可重试，不阻塞继续输入。
+
+### 本轮验证
+
+- Server：`go test ./...` 通过；新增上行、拒权、归属与设备令牌下载用例。
+- Connector：TypeScript 检查与 117 项测试通过；新增 prompt 附件校验与回执转换用例。
+- Mobile：lint、typecheck、104 项测试与 iOS/Android bundle 导出通过；鸿蒙壳 lint + typecheck 通过。
+
+### 未完成与边界
+
+- 鸿蒙壳可编译，但 RNOH 暂无 `expo-image-picker` / `expo-document-picker` 的 JS API（`@expo-harmony` 版只提供原生模块桩），当前明确提示「鸿蒙版暂不支持选择附件」，需另做鸿蒙原生选择器模块。
+- 未做 iOS/Android 真机验收；附件选择、相机权限与上传只在静态检查与单元测试层面验证。
+- 未实现上传进度百分比、断点续传与后台上传；大文件在弱网下仍是一次性请求。
