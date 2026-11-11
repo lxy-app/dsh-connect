@@ -19,7 +19,7 @@ import { ConnectorRuntime } from './lib/runtime.js';
 import { normalizeServerUrl, normalizeSettings } from './lib/settings.js';
 
 export const name = 'dsh-connect-connector';
-export const inject = ['sessionController', 'llm', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles'];
+export const inject = ['sessionController', 'llm', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles', 'fileUploads'];
 
 const VERSION = '0.1.4';
 

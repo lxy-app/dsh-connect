@@ -14,10 +14,29 @@ test('prompt defaults to queue and preserves the end-to-end requestId', () => {
   });
 });
 
-test('P0 rejects files, images and arbitrary session addresses', () => {
+test('prompt keeps attachment ids in order and rejects arbitrary session addresses', () => {
+  const prompt = promptInput({
+    sessionId: 'session-1',
+    content: [
+      { type: 'text', text: 'see attached' },
+      { type: 'image', attachmentId: 'atu_image' },
+      { type: 'file', attachmentId: 'atu_file' },
+    ],
+  }, 'req-2');
+  assert.deepEqual(prompt.attachments, [
+    { type: 'image', attachmentId: 'atu_image' },
+    { type: 'file', attachmentId: 'atu_file' },
+  ]);
+  assert.deepEqual(prompt.content.map((part) => part.type), ['text', 'image', 'file']);
   assert.throws(() => promptInput({
     sessionId: 'session-1', content: [{ type: 'file', receiptId: 'receipt-1' }],
-  }, 'req-2'), { code: 'unsupported_content' });
+  }, 'req-3'), { code: 'unsupported_content' });
+  assert.throws(() => promptInput({
+    sessionId: 'session-1', content: [{ type: 'text', text: '   ' }],
+  }, 'req-4'), { code: 'unsupported_content' });
+  assert.throws(() => promptInput({
+    sessionId: 'session-1', content: [{ type: 'audio', attachmentId: 'x' }],
+  }, 'req-5'), { code: 'unsupported_content' });
   assert.throws(() => sessionAddress(''), { code: 'invalid_request' });
 });
 

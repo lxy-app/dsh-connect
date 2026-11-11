@@ -98,11 +98,16 @@ export interface SessionPage {
   readonly hasMore: boolean;
 }
 
+/** One prompt content part the Host accepts. */
+export type HostPromptContentPart =
+  | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'file'; readonly receiptId: string };
+
 export interface SessionPromptRequest {
   readonly requestId: string;
   readonly sessionId: string;
   readonly mode: 'queue' | 'steer';
-  readonly content: readonly { readonly type: 'text'; readonly text: string }[];
+  readonly content: readonly HostPromptContentPart[];
   readonly clientTimeZone?: string;
 }
 
@@ -282,6 +287,25 @@ export interface WorkspaceFilesService {
   ): Promise<{ readonly absolutePath: string; readonly version: string; readonly bytes?: number }>;
 }
 
+export interface HostFileUploadValue {
+  /** Host-minted authority accepted only inside the receiving Session's scope. */
+  readonly receiptId: string;
+}
+
+/**
+ * The subset of DSH `fileUploads` the Connector uses. `uploadStream` stores the
+ * bytes verbatim and stages a receipt for the exact Session, which is what a
+ * file prompt part cites.
+ */
+export interface HostFileUploads {
+  uploadStream(request: {
+    readonly sessionId: string;
+    readonly data: AsyncIterable<Uint8Array>;
+    readonly signal?: AbortSignal;
+    readonly name?: string;
+  }): Promise<HostFileUploadValue>;
+}
+
 export interface HostContext {
   readonly sessionController: SessionController;
   readonly llm: LlmRuntime;
@@ -289,6 +313,12 @@ export interface HostContext {
   readonly connection: HostConnection;
   readonly webServer: HostWebServer;
   readonly workspaceFiles?: WorkspaceFilesService;
+  /**
+   * The DSH file-upload service (Cordis name `fileUploads`). A phone prompt that
+   * carries files reaches DSH through a staged receipt minted here, so the bytes
+   * are stored by the Host and referenced by an opaque receipt, never by path.
+   */
+  readonly fileUploads?: HostFileUploads;
   readonly logger?: Logger;
   provide(name: string, service: unknown): void;
   effect(register: () => void | (() => void), description?: string): void;
@@ -300,7 +330,7 @@ export interface HostContext {
   on?(name: string, listener: (...args: never[]) => unknown, options?: { readonly prepend?: boolean }): () => void;
 }
 
-export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'llm' | 'workspaceRegistry' | 'on' | 'workspaceFiles'>;
+export type RuntimeHostContext = Pick<HostContext, 'sessionController' | 'llm' | 'workspaceRegistry' | 'on' | 'workspaceFiles' | 'fileUploads'>;
 
 /** Minimal agent identity carried by DSH interaction requests. */
 export interface InteractionAgent {

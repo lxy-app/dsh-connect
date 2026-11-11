@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  HostFileUploads,
+  HostPromptContentPart,
   LlmRuntime,
   ModelSelection,
   SessionController,
@@ -35,6 +37,8 @@ import type {
   SessionModelCatalogInputParams,
   SessionModelSelectInputParams,
 } from './input-validation.js';
+import { PromptAttachmentAdmitter } from './prompt-attachments.js';
+import type { AttachmentByteDownloader } from './prompt-attachments.js';
 import { protocolError } from './request-cache.js';
 import type { WorkspacePolicy } from './workspace-policy.js';
 
@@ -107,6 +111,13 @@ export interface SessionPromptParams extends PromptInputParams {
 export type SessionModelCatalogParams = SessionModelCatalogInputParams;
 export type SessionModelSelectParams = SessionModelSelectInputParams;
 
+/** Wiring for phone-uploaded prompt attachments. */
+export interface PromptAttachmentAdmitterWiring {
+  /** The Host file-upload service; absent Hosts refuse attachment prompts. */
+  readonly uploads: HostFileUploads | undefined;
+  readonly downloads: AttachmentByteDownloader;
+}
+
 export interface SessionAttachmentFetchParams {
   readonly sessionId: unknown;
   readonly workspaceId?: string;
@@ -156,6 +167,8 @@ export interface HostSessionAdapterOptions {
   readonly journal?: CursorJournal;
   readonly logger?: Logger;
   readonly attachments?: AttachmentWiring;
+  /** Turns Server-verified phone attachment ids into DSH prompt receipts. */
+  readonly promptAttachments?: PromptAttachmentAdmitterWiring;
 }
 
 /** Byte plumbing the Connector runtime supplies; the adapter owns the policy. */
@@ -194,6 +207,7 @@ export class HostSessionAdapter {
   readonly #attachments: AttachmentWiring | undefined;
   readonly #attachmentIndex: AttachmentIndex | undefined;
   readonly #attachmentFetcher: AttachmentFetcher | undefined;
+  readonly #promptAttachments: PromptAttachmentAdmitter | undefined;
   #sessions = new Map<string, string>();
   readonly #watermarks = new Map<string, number>();
   readonly #follows = new Map<string, FollowSubscription>();
@@ -209,6 +223,7 @@ export class HostSessionAdapter {
     journal = new CursorJournal(),
     logger = console,
     attachments,
+    promptAttachments,
   }: HostSessionAdapterOptions) {
     this.#controller = controller;
     this.#llm = llm;
@@ -219,6 +234,9 @@ export class HostSessionAdapter {
     this.#journal = journal;
     this.#logger = logger;
     this.#attachments = attachments;
+    this.#promptAttachments = promptAttachments === undefined
+      ? undefined
+      : new PromptAttachmentAdmitter({ uploads: promptAttachments.uploads, download: promptAttachments.downloads });
     if (attachments) {
       this.#attachmentIndex = attachments.index ?? new AttachmentIndex();
       this.#attachmentFetcher = new AttachmentFetcher({
@@ -435,7 +453,11 @@ export class HostSessionAdapter {
     return this.#serializeSession(sessionId, async () => {
       await this.#authorizeSession(sessionId, 'prompt', params.workspaceId);
       signal.throwIfAborted();
-      const result = await this.#controller.prompt(promptInput(params, requestId), signal);
+      const prompt = promptInput(params, requestId);
+      const admitted = this.#promptAttachments === undefined
+        ? promptRequestWithoutAttachments(prompt)
+        : (await this.#promptAttachments.admit(prompt, signal)).content;
+      const result = await this.#controller.prompt({ ...prompt, content: admitted }, signal);
       return { ...result, sessionId, requestId, status: 'accepted' };
     });
   }
@@ -1127,4 +1149,14 @@ function messageText(content: unknown): string {
     }
   }
   return truncate(parts.join('\n'));
+}
+
+/** Reject attachment parts when no admitter is configured, keeping text prompts working. */
+function promptRequestWithoutAttachments(prompt: ReturnType<typeof promptInput>): HostPromptContentPart[] {
+  return prompt.content.map((part) => {
+    if (part.type !== 'text') {
+      throw protocolError('unsupported_method', 'This Connector cannot forward attachment prompts.');
+    }
+    return part;
+  });
 }

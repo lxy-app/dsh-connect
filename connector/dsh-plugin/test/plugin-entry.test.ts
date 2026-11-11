@@ -60,7 +60,7 @@ test('Host plugin loads without a Server and exposes only non-secret status', as
     logger: { warn() {} },
   };
   assert.equal(name, 'dsh-connect-connector');
-  assert.deepEqual(inject, ['sessionController', 'llm', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles']);
+  assert.deepEqual(inject, ['sessionController', 'llm', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles', 'fileUploads']);
   assert.doesNotThrow(() => apply(ctx));
   const api = services.get('dshConnectConnector');
   assert.ok(api && typeof api === 'object');

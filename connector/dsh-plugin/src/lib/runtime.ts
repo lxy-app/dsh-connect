@@ -277,6 +277,26 @@ export class ConnectorRuntime extends EventEmitter {
     }
   }
 
+  /**
+   * Downloads one Server-staged phone upload. The Server already checked that
+   * the id belongs to the sending phone, Session and workspace, and the device
+   * token scopes the request to this desktop.
+   */
+  async #downloadAttachment(attachmentId: string, signal: AbortSignal): Promise<Uint8Array> {
+    const deviceToken = await this.#store.get('deviceToken');
+    if (!deviceToken) throw new Error('Connector is not paired');
+    const url = `${this.#serverUrl.replace(/\/$/, '')}/v1/connector/uploads/${encodeURIComponent(attachmentId)}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${deviceToken}` },
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(`attachment download failed with status ${response.status}`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   #configureHost({ deviceId, workspaces, scopes }: WorkspaceGrants & { readonly deviceId: string }): void {
     this.#interactions?.dispose();
     this.#host?.dispose();
@@ -292,6 +312,10 @@ export class ConnectorRuntime extends EventEmitter {
       emit: (event) => this.#transport.send(event),
       logger: this.#logger,
       ...(attachments ? { attachments } : {}),
+      promptAttachments: {
+        uploads: this.#ctx.fileUploads,
+        downloads: ({ attachmentId, signal }) => this.#downloadAttachment(attachmentId, signal),
+      },
     });
     this.#interactions = new InteractionBridge({
       ctx: this.#ctx,
