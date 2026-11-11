@@ -49,6 +49,38 @@ test('attachments become staged receipts in prompt order', async () => {
   assert.deepEqual(staged, ['image:拍照 01.png', 'file:notes.txt']);
 });
 
+test('legacy image refs sniff bytes instead of silently becoming files', async () => {
+  let mediaType = '';
+  const admitter = new PromptAttachmentAdmitter({
+    uploads: {
+      async uploadImageStream(input) {
+        mediaType = input.mediaType;
+        return { receiptId: 'receipt-image' };
+      },
+      async uploadStream() { throw new Error('must not downgrade an image'); },
+    },
+    download: async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]),
+  });
+  const image = { type: 'image' as const, attachmentId: 'atu_legacy' };
+  const admission = await admitter.admit(prompt({ content: [image], attachments: [image] }), new AbortController().signal);
+  assert.equal(mediaType, 'image/png');
+  assert.deepEqual(admission.content, [{ type: 'file', receiptId: 'receipt-image' }]);
+});
+
+test('a Host without image uploads refuses images instead of losing modality', async () => {
+  let fileUploads = 0;
+  const admitter = new PromptAttachmentAdmitter({
+    uploads: { async uploadStream() { fileUploads += 1; return { receiptId: 'wrong' }; } },
+    download: async () => new Uint8Array([1, 2, 3]),
+  });
+  const image = { type: 'image' as const, attachmentId: 'atu_image', mime: 'image/png' };
+  await assert.rejects(
+    admitter.admit(prompt({ content: [image], attachments: [image] }), new AbortController().signal),
+    { code: 'unsupported_method' },
+  );
+  assert.equal(fileUploads, 0);
+});
+
 test('text-only prompts never touch the Host upload service', async () => {
   const admitter = new PromptAttachmentAdmitter({
     uploads: undefined,
@@ -78,7 +110,10 @@ test('an empty download or a refused receipt fails closed', async () => {
   await assert.rejects(empty.admit(prompt(), new AbortController().signal), { code: 'invalid_request' });
 
   const refused = new PromptAttachmentAdmitter({
-    uploads: { async uploadStream() { return { receiptId: '' }; } },
+    uploads: {
+      async uploadImageStream() { return { receiptId: '' }; },
+      async uploadStream() { return { receiptId: '' }; },
+    },
     download: async () => new Uint8Array([1, 2, 3]),
   });
   await assert.rejects(refused.admit(prompt(), new AbortController().signal), { code: 'attachment_denied' });
@@ -86,7 +121,10 @@ test('an empty download or a refused receipt fails closed', async () => {
 
 test('a Host staging failure is reported as a denied attachment', async () => {
   const admitter = new PromptAttachmentAdmitter({
-    uploads: { async uploadStream() { throw new Error('too large'); } },
+    uploads: {
+      async uploadImageStream() { throw new Error('too large'); },
+      async uploadStream() { throw new Error('too large'); },
+    },
     download: async () => new Uint8Array([1, 2, 3]),
   });
   await assert.rejects(admitter.admit(prompt(), new AbortController().signal), { code: 'attachment_denied' });

@@ -83,14 +83,21 @@ export class PromptAttachmentAdmitter {
     if (bytes.byteLength === 0) {
       throw protocolError('invalid_request', `Attachment ${attachment.attachmentId} is empty`);
     }
+    const mediaType = hostImageMediaType(attachment)
+      ?? (attachment.type === 'image' ? detectImageMediaType(bytes) : undefined);
+    if (attachment.type === 'image' && mediaType === undefined) {
+      throw protocolError('attachment_denied', `Could not determine the image type for ${attachment.attachmentId}`);
+    }
+    if (mediaType !== undefined && uploads.uploadImageStream === undefined) {
+      throw protocolError('unsupported_method', 'This DSH Host cannot upload prompt images; update DeepSeek Harness.');
+    }
     let receiptId: unknown;
     try {
       const name = displayNameOf(attachment);
-      const mediaType = hostImageMediaType(attachment);
-      // DSH resolves both services' receipts through a file prompt part. The
-      // image upload service preserves modality; the generic service does not.
-      const value: unknown = mediaType !== undefined && uploads.uploadImageStream !== undefined
-        ? await uploads.uploadImageStream({ sessionId, data: chunk(bytes), signal, name, mediaType })
+      // DSH resolves both services' receipts through a file prompt part. Never
+      // silently downgrade an image to the generic file service.
+      const value: unknown = mediaType !== undefined
+        ? await uploads.uploadImageStream!({ sessionId, data: chunk(bytes), signal, name, mediaType })
         : await uploads.uploadStream({ sessionId, data: chunk(bytes), signal, name });
       receiptId = isRecord(value) ? value.receiptId : undefined;
     } catch (cause) {
@@ -135,6 +142,26 @@ function hostImageMediaType(
     default:
       return undefined;
   }
+}
+
+function detectImageMediaType(
+  bytes: Uint8Array,
+): 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | undefined {
+  if (matches(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
+  if (matches(bytes, [0xff, 0xd8, 0xff])) return 'image/jpeg';
+  if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP') return 'image/webp';
+  const signature = ascii(bytes, 0, 6);
+  if (signature === 'GIF87a' || signature === 'GIF89a') return 'image/gif';
+  return undefined;
+}
+
+function matches(bytes: Uint8Array, signature: readonly number[]): boolean {
+  return signature.every((value, index) => bytes[index] === value);
+}
+
+function ascii(bytes: Uint8Array, offset: number, length: number): string {
+  if (bytes.byteLength < offset + length) return '';
+  return String.fromCharCode(...bytes.subarray(offset, offset + length));
 }
 
 function attachmentAdmissionError(attachment: PromptAttachmentInput, cause: unknown): Error {
