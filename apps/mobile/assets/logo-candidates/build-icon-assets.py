@@ -28,6 +28,9 @@ MARK_RATIO = 0.62
 ALPHA_FLOOR = 0.06
 ICON_BACKGROUND = (244, 246, 248)  # 暖白，不使用纯白
 ICON_MARK = (35, 37, 41, 255)  # 炭黑，不使用纯黑
+# iOS 26 Liquid Glass 会把图层提亮；仅 Icon Composer 图层使用更深的源色，
+# 配合关闭镜面高光，让主屏最终显示接近品牌炭黑，同时保留柔和阴影。
+ICON_GLASS_MARK = (12, 14, 17, 255)
 
 
 def estimate_background(im: Image.Image) -> tuple[int, int, int]:
@@ -135,10 +138,13 @@ def main() -> None:
         IMAGES / "splash-icon-dark.png", optimize=True
     )
 
-    # iOS 26 Icon Composer 包：暖白底 + 炭黑标记图层
+    # iOS 26 Icon Composer 包：暖白底 + 深色标记图层。
+    # 保留 glass 与柔和阴影，关闭镜面高光，避免 #232529 被提亮成灰色。
     expo_icon = ASSETS / "expo.icon"
     (expo_icon / "Assets").mkdir(parents=True, exist_ok=True)
-    fit(mark, 1024, 0.66, color=ICON_MARK).save(expo_icon / "Assets" / "kun-mark.png", optimize=True)
+    fit(mark, 1024, 0.66, color=ICON_GLASS_MARK).save(
+        expo_icon / "Assets" / "kun-mark.png", optimize=True
+    )
     fill = "extended-srgb:{:.5f},{:.5f},{:.5f},1.00000".format(
         *(channel / 255 for channel in ICON_BACKGROUND)
     )
@@ -152,9 +158,15 @@ def main() -> None:
         '      "layers" : [\n'
         "        {\n"
         '          "image-name" : "kun-mark.png",\n'
-        '          "name" : "kun"\n'
+        '          "name" : "kun",\n'
+        '          "glass" : true\n'
         "        }\n"
-        "      ]\n"
+        "      ],\n"
+        '      "shadow" : {\n'
+        '        "kind" : "layer-color",\n'
+        '        "opacity" : 0.5\n'
+        "      },\n"
+        '      "specular" : false\n'
         "    }\n"
         "  ],\n"
         '  "supported-platforms" : {\n'
