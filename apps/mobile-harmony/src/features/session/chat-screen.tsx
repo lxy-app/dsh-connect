@@ -42,6 +42,8 @@ import {
   attachmentIds,
   canSubmitPrompt,
   MAX_PROMPT_ATTACHMENTS,
+  readyToSend,
+  uploadPendingAttachments,
 } from '@shared/lib/prompt-attachments';
 import type { PromptAttachmentDraft } from '@shared/lib/prompt-attachments';
 import { pickAttachments } from '@/lib/attachment-picker';
@@ -653,17 +655,22 @@ function ChatScreenContent() {
       }
       const accepted: PromptAttachmentDraft[] = [];
       let rejected: string | null = null;
-      setAttachments((current) => {
-        const next = [...current];
-        for (const candidate of picked.drafts) {
-          const admission = admitAttachment(candidate, next);
-          if (admission.ok) next.push(admission.draft);
-          else rejected = admission.reason;
-        }
-        accepted.push(...next.slice(current.length));
-        return next;
-      });
+      const next = [...attachments];
+      for (const candidate of picked.drafts) {
+        const admission = admitAttachment(candidate, next);
+        if (admission.ok) {
+          next.push(admission.draft);
+          accepted.push(admission.draft);
+        } else rejected = admission.reason;
+      }
+      // A state updater must stay pure and may run after this function resumes.
+      // Merge the independently collected picks so their uploads always start.
+      setAttachments((current) => [
+        ...current,
+        ...accepted.filter((candidate) => !current.some((item) => item.localId === candidate.localId)),
+      ]);
       if (rejected) Alert.alert('部分附件未添加', rejected);
+      if (accepted.length === 0) return;
       setUploadingAttachments(true);
       try {
         for (const item of accepted) await uploadAttachment(item);
@@ -671,7 +678,7 @@ function ChatScreenContent() {
         setUploadingAttachments(false);
       }
     },
-    [attachments.length, uploadAttachment],
+    [attachments, uploadAttachment],
   );
 
   const removeAttachment = useCallback((localId: string) => {
@@ -690,18 +697,19 @@ function ChatScreenContent() {
   const send = async () => {
     const text = draft.trim();
     if (!canSubmitPrompt(text, attachments) || sending || uploadingAttachments || !canPrompt || modelPending) return;
-    // Attachments must all be staged before the prompt is accepted, so a
-    // partially uploaded message can never reach DSH.
-    const pending = attachments.filter((item) => item.state !== 'ready');
-    if (pending.length > 0) {
+    // Use the post-upload snapshot: the original React state still contains
+    // local/failed entries and none of the ids returned by these uploads.
+    let stagedAttachments = attachments;
+    if (attachments.some((item) => item.state !== 'ready')) {
       setUploadingAttachments(true);
       try {
-        for (const item of pending) await uploadAttachment(item);
+        stagedAttachments = await uploadPendingAttachments(attachments, uploadAttachment);
       } finally {
         setUploadingAttachments(false);
       }
     }
-    const stagedIds = attachmentIds(attachments.filter((item) => item.state === 'ready'));
+    if (!readyToSend(stagedAttachments)) return;
+    const stagedIds = attachmentIds(stagedAttachments);
     const requestId = createRequestId('mpr');
     const afterSeq = (transcript?.messages ?? []).reduce(
       (highest, message) => Math.max(highest, message.seq),
@@ -711,7 +719,7 @@ function ChatScreenContent() {
     setSending(true);
     setDraft('');
     setAttachments([]);
-    const optimisticAttachments = attachments.map((item) => ({
+    const optimisticAttachments = stagedAttachments.map((item) => ({
       attachmentId: item.attachmentId ?? item.localId,
       kind: item.kind,
       name: item.name,
@@ -746,7 +754,7 @@ function ChatScreenContent() {
       setOptimistic(null);
       setPendingReply(null);
       setDraft(text);
-      setAttachments(attachments);
+      setAttachments(stagedAttachments);
       Alert.alert('发送失败', describeMobileApiError(cause));
     } finally {
       setSending(false);

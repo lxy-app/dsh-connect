@@ -94,6 +94,25 @@ export function readyToSend(attachments: readonly PromptAttachmentDraft[]): bool
   return attachments.every((item) => item.state === 'ready' && item.attachmentId !== undefined);
 }
 
+/**
+ * Uploads drafts that are not ready and returns the resulting snapshot.
+ *
+ * Callers must send from this returned snapshot, not their pre-await React
+ * state: upload results carry the Server ids that the prompt needs to reference.
+ */
+export async function uploadPendingAttachments(
+  attachments: readonly PromptAttachmentDraft[],
+  upload: (item: PromptAttachmentDraft) => Promise<PromptAttachmentDraft>,
+): Promise<PromptAttachmentDraft[]> {
+  const staged = [...attachments];
+  for (let index = 0; index < staged.length; index += 1) {
+    const item = staged[index];
+    if (item === undefined || item.state === 'ready') continue;
+    staged[index] = await upload(item);
+  }
+  return staged;
+}
+
 /** Ids in composer order, which is the order the Server forwards them. */
 export function attachmentIds(attachments: readonly PromptAttachmentDraft[]): string[] {
   return attachments

@@ -6,7 +6,9 @@ import {
   getMobileSessionModel,
   getMobileTranscript,
   MobileApiError,
+  promptMobileSession,
   selectMobileSessionModel,
+  uploadMobileAttachment,
 } from './mobile-api';
 
 test('mobile session create posts only the supported grant-scoped fields', async (t) => {
@@ -224,4 +226,58 @@ test('mobile model selection posts the complete stable request without exposing 
   });
   assert.equal(requestBody.includes('mobile-token'), false);
   assert.equal(result.selected.reasoningEffort, 'high');
+});
+
+test('mobile attachment upload sends the picked bytes and returns the staging id', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let requestedUrl = '';
+  let requestHeaders = new Headers();
+  let requestBytes: number[] = [];
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = String(input);
+    requestHeaders = new Headers(init?.headers);
+    requestBytes = Array.from(init?.body as unknown as Uint8Array);
+    return new Response(JSON.stringify({
+      attachmentId: 'atu_camera', kind: 'image', name: '拍照 1.jpg', mime: 'image/jpeg', bytes: 4,
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const staged = await uploadMobileAttachment('https://connect.example.com/', 'mobile-token', 'sess-1', {
+    deviceId: 'dev-1', workspaceId: 'ws-1', name: '拍照 1.jpg', mime: 'image/jpeg',
+    bytes: new Uint8Array([0, 1, 2, 255]),
+  });
+
+  const url = new URL(requestedUrl);
+  assert.equal(url.pathname, '/v1/mobile/sessions/sess-1/attachments');
+  assert.equal(url.searchParams.get('deviceId'), 'dev-1');
+  assert.equal(url.searchParams.get('workspaceId'), 'ws-1');
+  assert.equal(requestHeaders.get('Authorization'), 'Bearer mobile-token');
+  assert.equal(requestHeaders.get('X-DSH-Attachment-Name-Encoding'), 'url');
+  assert.equal(decodeURIComponent(requestHeaders.get('X-DSH-Attachment-Name') ?? ''), '拍照 1.jpg');
+  assert.deepEqual(requestBytes, [0, 1, 2, 255]);
+  assert.equal(staged.attachmentId, 'atu_camera');
+});
+
+test('mobile prompt includes every freshly staged attachment id in composer order', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let requestBody = '';
+  globalThis.fetch = async (_input, init) => {
+    requestBody = String(init?.body ?? '');
+    return new Response(JSON.stringify({ accepted: true }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  await promptMobileSession('https://connect.example.com', 'mobile-token', 'sess-1', {
+    requestId: 'mpr-1', deviceId: 'dev-1', workspaceId: 'ws-1', text: '查看这些附件',
+    attachmentIds: ['atu_camera', 'atu_document'],
+  });
+
+  assert.deepEqual(JSON.parse(requestBody), {
+    requestId: 'mpr-1', deviceId: 'dev-1', workspaceId: 'ws-1', mode: 'queue', text: '查看这些附件',
+    attachments: [{ attachmentId: 'atu_camera' }, { attachmentId: 'atu_document' }],
+  });
+  assert.equal(requestBody.includes('mobile-token'), false);
 });

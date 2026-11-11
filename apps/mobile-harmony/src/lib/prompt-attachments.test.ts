@@ -9,6 +9,7 @@ import {
   formatBytes,
   isImageMime,
   readyToSend,
+  uploadPendingAttachments,
   MAX_PROMPT_ATTACHMENTS,
 } from '@shared/lib/prompt-attachments';
 
@@ -71,6 +72,37 @@ test('sending waits until every attachment is staged', () => {
   assert.equal(readyToSend([ready, local]), false);
   assert.equal(readyToSend([ready, failed]), false);
   assert.deepEqual(attachmentIds([ready, local, failed]), ['atu_1']);
+});
+
+test('send preparation returns the fresh ids produced by pending uploads', async () => {
+  const camera = createAttachmentDraft({ kind: 'image', name: 'camera.jpg', bytes: 10, uri: 'file:///camera' });
+  const document = createAttachmentDraft({ kind: 'file', name: 'notes.pdf', bytes: 20, uri: 'file:///notes' });
+  const uploaded: string[] = [];
+
+  const staged = await uploadPendingAttachments([camera, document], async (item) => {
+    uploaded.push(item.localId);
+    return { ...item, state: 'ready', attachmentId: `atu_${item.name}` };
+  });
+
+  assert.deepEqual(uploaded, [camera.localId, document.localId]);
+  assert.equal(readyToSend(staged), true);
+  assert.deepEqual(attachmentIds(staged), ['atu_camera.jpg', 'atu_notes.pdf']);
+  assert.equal(attachmentIds([camera, document]).length, 0);
+});
+
+test('send preparation preserves a failed upload so the prompt stays blocked', async () => {
+  const ready = { ...createAttachmentDraft({ kind: 'image', name: 'ready.png', bytes: 10, uri: 'file:///ready' }), state: 'ready' as const, attachmentId: 'atu_ready' };
+  const failedDraft = createAttachmentDraft({ kind: 'file', name: 'failed.zip', bytes: 20, uri: 'file:///failed' });
+
+  const staged = await uploadPendingAttachments([ready, failedDraft], async (item) => ({
+    ...item,
+    state: 'failed',
+    error: 'network',
+  }));
+
+  assert.equal(readyToSend(staged), false);
+  assert.deepEqual(attachmentIds(staged), ['atu_ready']);
+  assert.equal(staged[1]?.error, 'network');
 });
 
 test('failure summaries and byte formatting stay user-facing', () => {
