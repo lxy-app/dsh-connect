@@ -2,7 +2,7 @@
 
 这是实际的 DeepSeek Harness 桌面 Connector，不是根目录的交互原型。
 
-当前版本锁定 **DSH `0.2.2-rc.1`**。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。本次适配使用新的 `SessionController.events()` 历史接口，并按 `approval/request` / `user-questions/request` 的 `agent.id` 解析会话；审批的本地化 `displayReason` 在 Connector 内投影为协议 v1 的有界文本。模型选择使用公开的 `resolveAgent + llm + agent.model.select` 会话级路径，不依赖上游尚未提供的 `persistDefault` 参数。
+当前版本兼容 **DSH `0.2.2-alpha.2` / `0.2.2-rc.1`**。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。本次适配使用新的 `SessionController.events()` 历史接口，并按 `approval/request` / `user-questions/request` 的 `agent.id` 解析会话；审批的本地化 `displayReason` 在 Connector 内投影为协议 v1 的有界文本。模型选择使用公开的 `resolveAgent + llm + agent.model.select` 会话级路径，不依赖上游尚未提供的 `persistDefault` 参数。
 
 ## 已实现
 
@@ -122,7 +122,7 @@ npm --prefix connector/dsh-plugin run debug -- cancel --device dev_xxx --session
 
 `accepted` 仅表示 DSH 准入，完成必须等待对应 turn 的持久 `turn/end`。重复逻辑请求应复用相同 `--request-id`。
 
-DSH `0.2.2-rc.1` 的 Host follow 不接受 resume cursor。外部 cursor 只记录客户端已确认水位，Connector 始终获取最新 opening snapshot（`recovery:'latest_snapshot'`），再按 `(sessionId,seq)` 去重或用 page 修复空洞；不会伪称 Host 从旧 cursor 回放。
+DSH `0.2.2-alpha.2` / `0.2.2-rc.1` 的 Host follow 不接受 resume cursor。外部 cursor 只记录客户端已确认水位，Connector 始终获取最新 opening snapshot（`recovery:'latest_snapshot'`），再按 `(sessionId,seq)` 去重或用 page 修复空洞；不会伪称 Host 从旧 cursor 回放。
 
 ## 测试
 
