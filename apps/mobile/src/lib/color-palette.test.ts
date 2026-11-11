@@ -18,8 +18,9 @@ function contrastRatio(foreground: string, background: string): number {
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
-test('silver-white brand palette uses the confirmed neutral accents', () => {
-  assert.equal(Colors.light.accent, '#4B5563');
+test('silver-white brand palette uses the confirmed charcoal light accents', () => {
+  assert.equal(Colors.light.accent, '#232529');
+  assert.equal(Colors.light.textSecondary, '#232529');
   assert.equal(Colors.light.accentSoft, '#E8EDF2');
   assert.equal(Colors.dark.accent, '#F4F6F8');
   assert.equal(Colors.dark.accentSoft, '#353B43');
@@ -29,5 +30,13 @@ test('accent text remains readable in both color schemes', () => {
   for (const theme of [Colors.light, Colors.dark]) {
     assert.ok(contrastRatio(theme.onAccent, theme.accent) >= 4.5);
     assert.ok(contrastRatio(theme.accent, theme.accentSoft) >= 4.5);
+  }
+});
+
+test('secondary text and neutral icons remain readable on every themed surface', () => {
+  for (const theme of [Colors.light, Colors.dark]) {
+    for (const background of [theme.background, theme.surface, theme.surfaceMuted]) {
+      assert.ok(contrastRatio(theme.textSecondary, background) >= 4.5);
+    }
   }
 });

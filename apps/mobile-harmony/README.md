@@ -23,7 +23,7 @@ npm run doctor      # DevEco / SDK / Metro / RNOH 诊断
 
 ## 品牌主题
 
-`src/constants/theme.ts` 与主线 Mobile 使用同一套银白品牌令牌：浅色石墨 `#4B5563`、深色图标白 `#F4F6F8`，语义状态色独立保留。应用图标与启动资源由 `assets/logo-candidates/build-icon-assets.py` 生成；原生图标变化需重新执行 `setup:native` 和 HAP 构建，静态检查不代表真机视觉验收。
+`src/constants/theme.ts` 与主线 Mobile 使用同一套银白品牌令牌：浅色 accent 与 textSecondary 统一为品牌炭黑 `#232529`，分别覆盖灰色按钮、次级文字与未选中图标，主文字保持 `#181B20`；深色图标白 `#F4F6F8`，语义状态色独立保留。应用图标与启动资源由 `assets/logo-candidates/build-icon-assets.py` 生成；原生图标变化需重新执行 `setup:native` 和 HAP 构建，静态检查不代表真机视觉验收。
 
 ## 启动 Metro
 

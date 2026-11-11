@@ -49,7 +49,7 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 
 ### 品牌配色
 
-- `src/constants/theme.ts` 集中定义银白品牌主题：浅色 accent 为石墨 `#4B5563`、accentSoft 为 `#E8EDF2`；深色 accent 为图标白 `#F4F6F8`、accentSoft 为 `#353B43`，onAccent 分别使用白色与 `#171A1F` 保持对比。
+- `src/constants/theme.ts` 集中定义银白品牌主题：浅色 accent 与 textSecondary 统一为品牌炭黑 `#232529`，分别覆盖灰色按钮、次级文字与未选中图标，accentSoft 为 `#E8EDF2`，主文字保持 `#181B20`；深色 accent 为图标白 `#F4F6F8`、accentSoft 为 `#353B43`，onAccent 分别使用白色与 `#171A1F` 保持对比。
 - 成功、警告、危险等语义色独立于品牌色，不随本次中性配色调整。
 - `app.json` 的 Android 自适应图标、浅色/深色启动图和通知色使用同一套中性色；启动图由 `assets/logo-candidates/build-icon-assets.py` 生成。修改原生图标或启动配置后需要重新 prebuild 和原生构建。
 
