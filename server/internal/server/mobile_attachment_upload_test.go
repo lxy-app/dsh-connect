@@ -139,12 +139,39 @@ func TestMobilePromptCarriesUploadedAttachments(t *testing.T) {
 		t.Fatalf("text part not first: %+v", first)
 	}
 	image := rawParts[1].(map[string]any)
-	if image["type"] != "image" || image["attachmentId"] != pngResult.AttachmentID {
+	if image["type"] != "image" || image["attachmentId"] != pngResult.AttachmentID ||
+		image["name"] != "截图 01.png" || image["mime"] != "image/png" {
 		t.Fatalf("unexpected image part: %+v", image)
 	}
 	file := rawParts[2].(map[string]any)
-	if file["type"] != "file" || file["attachmentId"] != textResult.AttachmentID {
+	if file["type"] != "file" || file["attachmentId"] != textResult.AttachmentID ||
+		file["name"] != "demo.ts" || file["mime"] != "text/plain; charset=utf-8" {
 		t.Fatalf("unexpected file part: %+v", file)
+	}
+
+	// Attachment-only prompts are valid all the way through the Server contract.
+	go func() {
+		err := answerCommandCapturing(t, connector.connection, protocol.MethodSessionPrompt, received)
+		commandErr <- err
+	}()
+	status, payload = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions/sess-1/prompt", phone.AccessToken, map[string]any{
+		"requestId": "uplink-prompt-attachments-only", "deviceId": connector.deviceID, "workspaceId": "ws-1", "mode": "queue",
+		"attachments": []map[string]any{{"attachmentId": pngResult.AttachmentID}},
+	})
+	if err := <-commandErr; err != nil {
+		t.Fatalf("attachment-only prompt round trip: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("attachment-only prompt status=%d body=%s", status, payload)
+	}
+	params = <-received
+	rawParts, ok = params["content"].([]any)
+	if !ok || len(rawParts) != 1 {
+		t.Fatalf("unexpected attachment-only content: %+v", params["content"])
+	}
+	only := rawParts[0].(map[string]any)
+	if only["type"] != "image" || only["attachmentId"] != pngResult.AttachmentID || only["name"] != "截图 01.png" {
+		t.Fatalf("unexpected attachment-only part: %+v", only)
 	}
 }
 
@@ -193,32 +220,36 @@ func TestMobilePromptAttachmentOwnership(t *testing.T) {
 	})
 	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	mobileCode := issueMobilePairingCode(t, environment, ownerToken, "")
-	phone := pairMobile(t, environment, mobileCode.Code, "Owner Phone")
-	grantMobileRead(t, environment, connector, phone)
+	phoneA := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Phone A")
+	phoneB := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Phone B")
+	for _, phone := range []protocol.MobileSessionResponse{phoneA, phoneB} {
+		allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read", "prompt"})
+		createActiveGrantForTest(t, environment, phone, connector, []string{"read", "prompt"})
+	}
 
-	// Seeding a row through the store directly mirrors a staged upload owned by
-	// another phone; the prompt must refuse it.
+	// Both phones have active prompt grants. The second phone still cannot cite
+	// the first phone's upload because the staged row carries its mobile owner.
 	now := nowUTC()
 	if err := environment.server.store.CreateUploadedAttachment(t.Context(), store.SessionAttachmentRecord{
-		ID: "atu_foreign_owner_bytes", DeviceID: connector.deviceID, SessionID: "sess-1", WorkspaceID: "ws-1",
-		Source: protocol.AttachmentSourceUpload, Kind: "image", DisplayName: "x.png", Mime: "image/png",
+		ID: "atu_foreign_owner_bytes", DeviceID: connector.deviceID, MobileDeviceID: phoneA.MobileDeviceID,
+		SessionID: "sess-1", WorkspaceID: "ws-1", Source: protocol.AttachmentSourceUpload,
+		Kind: "image", DisplayName: "x.png", Mime: "image/png",
 		Bytes: 3, SHA256: "abc", State: protocol.AttachmentStateReady, ExpiresAt: now.Add(time.Hour),
 	}, now); err != nil {
 		t.Fatalf("seed attachment: %v", err)
 	}
 
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions/sess-1/prompt", phone.AccessToken, map[string]any{
+	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions/sess-1/prompt", phoneB.AccessToken, map[string]any{
 		"requestId": "ownership-1", "deviceId": connector.deviceID, "workspaceId": "ws-1", "mode": "queue",
 		"text":        "hi",
 		"attachments": []map[string]any{{"attachmentId": "atu_foreign_owner_bytes"}},
 	})
-	if status != http.StatusForbidden && status != http.StatusNotFound {
-		t.Fatalf("foreign attachment prompt status=%d body=%s", status, body)
+	if status != http.StatusForbidden {
+		t.Fatalf("foreign phone attachment prompt status=%d body=%s", status, body)
 	}
 
 	// A prompt with neither text nor attachments is refused outright.
-	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions/sess-1/prompt", phone.AccessToken, map[string]any{
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/sessions/sess-1/prompt", phoneB.AccessToken, map[string]any{
 		"requestId": "ownership-2", "deviceId": connector.deviceID, "workspaceId": "ws-1", "mode": "queue",
 	})
 	if status != http.StatusBadRequest {

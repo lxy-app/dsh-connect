@@ -14,30 +14,31 @@ import (
 
 // Mutation represents an operation that mutates the SessionAttachment nodes in the graph.
 type Mutation struct {
-	op              ent.Op
-	typ             string
-	device_id       *string
-	session_id      *string
-	workspace_id    *string
-	source          *Source
-	source_seq      *int64
-	addsource_seq   *int64
-	source_index    *int
-	addsource_index *int
-	kind            *Kind
-	display_name    *string
-	mime            *string
-	bytes           *int64
-	addbytes        *int64
-	sha256          *string
-	description     *string
-	state           *State
-	error_code      *string
-	created_at      *time.Time
-	updated_at      *time.Time
-	expires_at      *time.Time
-	clearedFields   map[string]struct{}
-	predicates      []predicate.SessionAttachment
+	op               ent.Op
+	typ              string
+	device_id        *string
+	mobile_device_id *string
+	session_id       *string
+	workspace_id     *string
+	source           *Source
+	source_seq       *int64
+	addsource_seq    *int64
+	source_index     *int
+	addsource_index  *int
+	kind             *Kind
+	display_name     *string
+	mime             *string
+	bytes            *int64
+	addbytes         *int64
+	sha256           *string
+	description      *string
+	state            *State
+	error_code       *string
+	created_at       *time.Time
+	updated_at       *time.Time
+	expires_at       *time.Time
+	clearedFields    map[string]struct{}
+	predicates       []predicate.SessionAttachment
 }
 
 // NewMutation creates a new Mutation for the SessionAttachment entity.
@@ -71,6 +72,38 @@ func (m *Mutation) DeviceID() (r string, exists bool) {
 // ResetDeviceID resets all changes to the "device_id" field.
 func (m *Mutation) ResetDeviceID() {
 	m.device_id = nil
+}
+
+// SetMobileDeviceID sets the "mobile_device_id" field.
+func (m *Mutation) SetMobileDeviceID(s string) {
+	m.mobile_device_id = &s
+}
+
+// MobileDeviceID returns the value of the "mobile_device_id" field in the mutation.
+func (m *Mutation) MobileDeviceID() (r string, exists bool) {
+	v := m.mobile_device_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMobileDeviceID clears the value of the "mobile_device_id" field.
+func (m *Mutation) ClearMobileDeviceID() {
+	m.mobile_device_id = nil
+	m.clearedFields[FieldMobileDeviceID] = struct{}{}
+}
+
+// MobileDeviceIDCleared returns if the "mobile_device_id" field was cleared in this mutation.
+func (m *Mutation) MobileDeviceIDCleared() bool {
+	_, ok := m.clearedFields[FieldMobileDeviceID]
+	return ok
+}
+
+// ResetMobileDeviceID resets all changes to the "mobile_device_id" field.
+func (m *Mutation) ResetMobileDeviceID() {
+	m.mobile_device_id = nil
+	delete(m.clearedFields, FieldMobileDeviceID)
 }
 
 // SetSessionID sets the "session_id" field.
@@ -510,9 +543,12 @@ func (m *Mutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *Mutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.device_id != nil {
 		fields = append(fields, FieldDeviceID)
+	}
+	if m.mobile_device_id != nil {
+		fields = append(fields, FieldMobileDeviceID)
 	}
 	if m.session_id != nil {
 		fields = append(fields, FieldSessionID)
@@ -572,6 +608,8 @@ func (m *Mutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case FieldDeviceID:
 		return m.DeviceID()
+	case FieldMobileDeviceID:
+		return m.MobileDeviceID()
 	case FieldSessionID:
 		return m.SessionID()
 	case FieldWorkspaceID:
@@ -626,6 +664,13 @@ func (m *Mutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDeviceID(v)
+		return nil
+	case FieldMobileDeviceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMobileDeviceID(v)
 		return nil
 	case FieldSessionID:
 		v, ok := value.(string)
@@ -808,6 +853,9 @@ func (m *Mutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *Mutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(FieldMobileDeviceID) {
+		fields = append(fields, FieldMobileDeviceID)
+	}
 	if m.FieldCleared(FieldSha256) {
 		fields = append(fields, FieldSha256)
 	}
@@ -831,6 +879,9 @@ func (m *Mutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *Mutation) ClearField(name string) error {
 	switch name {
+	case FieldMobileDeviceID:
+		m.ClearMobileDeviceID()
+		return nil
 	case FieldSha256:
 		m.ClearSha256()
 		return nil
@@ -850,6 +901,9 @@ func (m *Mutation) ResetField(name string) error {
 	switch name {
 	case FieldDeviceID:
 		m.ResetDeviceID()
+		return nil
+	case FieldMobileDeviceID:
+		m.ResetMobileDeviceID()
 		return nil
 	case FieldSessionID:
 		m.ResetSessionID()

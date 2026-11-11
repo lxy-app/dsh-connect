@@ -712,7 +712,7 @@ func (s *Server) handleMobileSessionPrompt(w http.ResponseWriter, r *http.Reques
 	if request.Text != "" {
 		content = append(content, protocol.ContentPart{Type: "text", Text: request.Text})
 	}
-	attachmentParts, attachmentError := s.promptAttachmentParts(r, request.DeviceID, request.WorkspaceID, sessionID, request.Attachments)
+	attachmentParts, attachmentError := s.promptAttachmentParts(r, actor.Device.Device.MobileDeviceID, request.DeviceID, request.WorkspaceID, sessionID, request.Attachments)
 	if attachmentError != nil {
 		writeAPIError(w, *attachmentError)
 		return

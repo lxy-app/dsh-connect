@@ -29,6 +29,20 @@ func (_c *SessionAttachmentCreate) SetDeviceID(v string) *SessionAttachmentCreat
 	return _c
 }
 
+// SetMobileDeviceID sets the "mobile_device_id" field.
+func (_c *SessionAttachmentCreate) SetMobileDeviceID(v string) *SessionAttachmentCreate {
+	_c.mutation.SetMobileDeviceID(v)
+	return _c
+}
+
+// SetNillableMobileDeviceID sets the "mobile_device_id" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableMobileDeviceID(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetMobileDeviceID(*v)
+	}
+	return _c
+}
+
 // SetSessionID sets the "session_id" field.
 func (_c *SessionAttachmentCreate) SetSessionID(v string) *SessionAttachmentCreate {
 	_c.mutation.SetSessionID(v)
@@ -380,6 +394,10 @@ func (_c *SessionAttachmentCreate) createSpec() (*SessionAttachment, *sqlgraph.C
 	if value, ok := _c.mutation.DeviceID(); ok {
 		_spec.SetField(sessionattachment.FieldDeviceID, field.TypeString, value)
 		_node.DeviceID = value
+	}
+	if value, ok := _c.mutation.MobileDeviceID(); ok {
+		_spec.SetField(sessionattachment.FieldMobileDeviceID, field.TypeString, value)
+		_node.MobileDeviceID = value
 	}
 	if value, ok := _c.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
@@ -741,6 +759,9 @@ func (u *SessionAttachmentUpsertOne) UpdateNewValues() *SessionAttachmentUpsertO
 	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
 		if _, exists := u.create.mutation.ID(); exists {
 			s.SetIgnore(sessionattachment.FieldID)
+		}
+		if _, exists := u.create.mutation.MobileDeviceID(); exists {
+			s.SetIgnore(sessionattachment.FieldMobileDeviceID)
 		}
 		if _, exists := u.create.mutation.CreatedAt(); exists {
 			s.SetIgnore(sessionattachment.FieldCreatedAt)
@@ -1224,6 +1245,9 @@ func (u *SessionAttachmentUpsertBulk) UpdateNewValues() *SessionAttachmentUpsert
 		for _, b := range u.create.builders {
 			if _, exists := b.mutation.ID(); exists {
 				s.SetIgnore(sessionattachment.FieldID)
+			}
+			if _, exists := b.mutation.MobileDeviceID(); exists {
+				s.SetIgnore(sessionattachment.FieldMobileDeviceID)
 			}
 			if _, exists := b.mutation.CreatedAt(); exists {
 				s.SetIgnore(sessionattachment.FieldCreatedAt)

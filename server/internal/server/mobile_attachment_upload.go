@@ -114,7 +114,8 @@ func (s *Server) handleMobileAttachmentUpload(w http.ResponseWriter, r *http.Req
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "deviceId, workspaceId and sessionId are required", false))
 		return
 	}
-	if _, commandError := s.authorizeMobileSession(r, deviceID, workspaceID, sessionID, "prompt"); commandError != nil {
+	actor, commandError := s.authorizeMobileSession(r, deviceID, workspaceID, sessionID, "prompt")
+	if commandError != nil {
 		writeAPIError(w, *commandError)
 		return
 	}
@@ -191,18 +192,19 @@ func (s *Server) handleMobileAttachmentUpload(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := s.store.CreateUploadedAttachment(r.Context(), store.SessionAttachmentRecord{
-		ID:          attachmentID,
-		DeviceID:    deviceID,
-		SessionID:   sessionID,
-		WorkspaceID: workspaceID,
-		Source:      protocol.AttachmentSourceUpload,
-		Kind:        kind,
-		DisplayName: displayName,
-		Mime:        mimeType,
-		Bytes:       int64(len(data)),
-		SHA256:      sha,
-		State:       protocol.AttachmentStateReady,
-		ExpiresAt:   now.Add(s.config.AttachmentTTL),
+		ID:             attachmentID,
+		DeviceID:       deviceID,
+		MobileDeviceID: actor.Device.Device.MobileDeviceID,
+		SessionID:      sessionID,
+		WorkspaceID:    workspaceID,
+		Source:         protocol.AttachmentSourceUpload,
+		Kind:           kind,
+		DisplayName:    displayName,
+		Mime:           mimeType,
+		Bytes:          int64(len(data)),
+		SHA256:         sha,
+		State:          protocol.AttachmentStateReady,
+		ExpiresAt:      now.Add(s.config.AttachmentTTL),
 	}, now); err != nil {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not record attachment", true))
 		return
@@ -265,7 +267,7 @@ func uploadExtension(name string) string {
 // file the desktop owns, not bytes the phone submitted.
 func (s *Server) promptAttachmentParts(
 	r *http.Request,
-	deviceID, workspaceID, sessionID string,
+	mobileDeviceID, deviceID, workspaceID, sessionID string,
 	attachments []protocol.MobilePromptAttachment,
 ) ([]protocol.ContentPart, *protocol.Error) {
 	if len(attachments) == 0 {
@@ -288,14 +290,14 @@ func (s *Server) promptAttachmentParts(
 		if err != nil {
 			return nil, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load attachment", true))
 		}
-		if row.Source != protocol.AttachmentSourceUpload || row.DeviceID != deviceID ||
-			row.SessionID != sessionID || row.WorkspaceID != workspaceID {
+		if row.Source != protocol.AttachmentSourceUpload || row.MobileDeviceID != mobileDeviceID ||
+			row.DeviceID != deviceID || row.SessionID != sessionID || row.WorkspaceID != workspaceID {
 			return nil, errorPtr(protocol.NewError(protocol.CodeForbidden, "attachment belongs to another session", false))
 		}
 		if row.State != protocol.AttachmentStateReady || row.SHA256 == "" {
 			return nil, errorPtr(protocol.NewError(protocol.CodeConflict, "attachment is not ready yet", true))
 		}
-		part := protocol.ContentPart{Type: "file", AttachmentID: row.ID}
+		part := protocol.ContentPart{Type: "file", AttachmentID: row.ID, Name: row.DisplayName, Mime: row.Mime}
 		if row.Kind == "image" {
 			part.Type = "image"
 		}

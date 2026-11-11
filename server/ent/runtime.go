@@ -256,31 +256,31 @@ func init() {
 	// sessionattachment.DeviceIDValidator is a validator for the "device_id" field. It is called by the builders before save.
 	sessionattachment.DeviceIDValidator = sessionattachmentDescDeviceID.Validators[0].(func(string) error)
 	// sessionattachmentDescSessionID is the schema descriptor for session_id field.
-	sessionattachmentDescSessionID := sessionattachmentFields[2].Descriptor()
+	sessionattachmentDescSessionID := sessionattachmentFields[3].Descriptor()
 	// sessionattachment.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
 	sessionattachment.SessionIDValidator = sessionattachmentDescSessionID.Validators[0].(func(string) error)
 	// sessionattachmentDescWorkspaceID is the schema descriptor for workspace_id field.
-	sessionattachmentDescWorkspaceID := sessionattachmentFields[3].Descriptor()
+	sessionattachmentDescWorkspaceID := sessionattachmentFields[4].Descriptor()
 	// sessionattachment.WorkspaceIDValidator is a validator for the "workspace_id" field. It is called by the builders before save.
 	sessionattachment.WorkspaceIDValidator = sessionattachmentDescWorkspaceID.Validators[0].(func(string) error)
 	// sessionattachmentDescDisplayName is the schema descriptor for display_name field.
-	sessionattachmentDescDisplayName := sessionattachmentFields[8].Descriptor()
+	sessionattachmentDescDisplayName := sessionattachmentFields[9].Descriptor()
 	// sessionattachment.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	sessionattachment.DisplayNameValidator = sessionattachmentDescDisplayName.Validators[0].(func(string) error)
 	// sessionattachmentDescMime is the schema descriptor for mime field.
-	sessionattachmentDescMime := sessionattachmentFields[9].Descriptor()
+	sessionattachmentDescMime := sessionattachmentFields[10].Descriptor()
 	// sessionattachment.MimeValidator is a validator for the "mime" field. It is called by the builders before save.
 	sessionattachment.MimeValidator = sessionattachmentDescMime.Validators[0].(func(string) error)
 	// sessionattachmentDescBytes is the schema descriptor for bytes field.
-	sessionattachmentDescBytes := sessionattachmentFields[10].Descriptor()
+	sessionattachmentDescBytes := sessionattachmentFields[11].Descriptor()
 	// sessionattachment.DefaultBytes holds the default value on creation for the bytes field.
 	sessionattachment.DefaultBytes = sessionattachmentDescBytes.Default.(int64)
 	// sessionattachmentDescCreatedAt is the schema descriptor for created_at field.
-	sessionattachmentDescCreatedAt := sessionattachmentFields[15].Descriptor()
+	sessionattachmentDescCreatedAt := sessionattachmentFields[16].Descriptor()
 	// sessionattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
 	sessionattachment.DefaultCreatedAt = sessionattachmentDescCreatedAt.Default.(func() time.Time)
 	// sessionattachmentDescUpdatedAt is the schema descriptor for updated_at field.
-	sessionattachmentDescUpdatedAt := sessionattachmentFields[16].Descriptor()
+	sessionattachmentDescUpdatedAt := sessionattachmentFields[17].Descriptor()
 	// sessionattachment.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	sessionattachment.DefaultUpdatedAt = sessionattachmentDescUpdatedAt.Default.(func() time.Time)
 	// sessionattachment.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

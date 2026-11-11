@@ -209,6 +209,9 @@ type ContentPart struct {
 	Text string `json:"text,omitempty"`
 	// AttachmentID names a Server-verified upload. It is never a path.
 	AttachmentID string `json:"attachmentId,omitempty"`
+	// Name and Mime come from the verified upload row, not from prompt input.
+	Name string `json:"name,omitempty"`
+	Mime string `json:"mime,omitempty"`
 }
 
 type Session struct {

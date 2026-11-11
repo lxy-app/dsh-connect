@@ -28,6 +28,10 @@ func (SessionAttachment) Fields() []ent.Field {
 		field.String("device_id").
 			NotEmpty().
 			Comment("Desktop Connector device that declared the file"),
+		field.String("mobile_device_id").
+			Optional().
+			Immutable().
+			Comment("Phone that staged an upload; empty for desktop declarations"),
 		field.String("session_id").
 			NotEmpty(),
 		field.String("workspace_id").

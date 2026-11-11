@@ -14,24 +14,25 @@ import (
 // declared for delivery. It deliberately carries no filesystem path: the path
 // never leaves the desktop Connector.
 type SessionAttachmentRecord struct {
-	ID          string
-	DeviceID    string
-	SessionID   string
-	WorkspaceID string
-	Source      string
-	SourceSeq   int64
-	SourceIndex int
-	Kind        string
-	DisplayName string
-	Mime        string
-	Bytes       int64
-	SHA256      string
-	Description string
-	State       string
-	ErrorCode   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	ExpiresAt   time.Time
+	ID             string
+	DeviceID       string
+	MobileDeviceID string
+	SessionID      string
+	WorkspaceID    string
+	Source         string
+	SourceSeq      int64
+	SourceIndex    int
+	Kind           string
+	DisplayName    string
+	Mime           string
+	Bytes          int64
+	SHA256         string
+	Description    string
+	State          string
+	ErrorCode      string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	ExpiresAt      time.Time
 }
 
 // AttachmentBlobRecord indexes one content-addressed blob under the attachment
@@ -306,24 +307,25 @@ func (s *Store) TouchAttachmentBlob(ctx context.Context, sha256 string, now time
 
 func attachmentRecordFromEnt(entity *ent.SessionAttachment) SessionAttachmentRecord {
 	return SessionAttachmentRecord{
-		ID:          entity.ID,
-		DeviceID:    entity.DeviceID,
-		SessionID:   entity.SessionID,
-		WorkspaceID: entity.WorkspaceID,
-		Source:      string(entity.Source),
-		SourceSeq:   entity.SourceSeq,
-		SourceIndex: entity.SourceIndex,
-		Kind:        string(entity.Kind),
-		DisplayName: entity.DisplayName,
-		Mime:        entity.Mime,
-		Bytes:       entity.Bytes,
-		SHA256:      entity.Sha256,
-		Description: entity.Description,
-		State:       string(entity.State),
-		ErrorCode:   entity.ErrorCode,
-		CreatedAt:   entity.CreatedAt,
-		UpdatedAt:   entity.UpdatedAt,
-		ExpiresAt:   entity.ExpiresAt,
+		ID:             entity.ID,
+		DeviceID:       entity.DeviceID,
+		MobileDeviceID: entity.MobileDeviceID,
+		SessionID:      entity.SessionID,
+		WorkspaceID:    entity.WorkspaceID,
+		Source:         string(entity.Source),
+		SourceSeq:      entity.SourceSeq,
+		SourceIndex:    entity.SourceIndex,
+		Kind:           string(entity.Kind),
+		DisplayName:    entity.DisplayName,
+		Mime:           entity.Mime,
+		Bytes:          entity.Bytes,
+		SHA256:         entity.Sha256,
+		Description:    entity.Description,
+		State:          string(entity.State),
+		ErrorCode:      entity.ErrorCode,
+		CreatedAt:      entity.CreatedAt,
+		UpdatedAt:      entity.UpdatedAt,
+		ExpiresAt:      entity.ExpiresAt,
 	}
 }
 
@@ -339,6 +341,7 @@ func (s *Store) CreateUploadedAttachment(ctx context.Context, record SessionAtta
 	_, err := s.client.SessionAttachment.Create().
 		SetID(record.ID).
 		SetDeviceID(record.DeviceID).
+		SetMobileDeviceID(record.MobileDeviceID).
 		SetSessionID(record.SessionID).
 		SetWorkspaceID(record.WorkspaceID).
 		SetSource(sessionattachment.SourceUpload).

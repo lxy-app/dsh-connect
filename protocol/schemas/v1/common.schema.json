@@ -153,7 +153,7 @@
       "additionalProperties": false
     },
     "ContentPart": {
-      "description": "One prompt content part. Text parts carry inline text; image and file parts reference an attachment this Session uploaded, so a caller can never cite bytes it did not upload.",
+      "description": "One prompt content part. Text parts carry inline text; image and file parts reference an attachment this Session uploaded. The Server may add the verified display name and MIME type for Connector staging; callers never supply paths or bytes.",
       "oneOf": [
         {
           "type": "object",
@@ -186,6 +186,16 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mime": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             }
           },
           "additionalProperties": false
@@ -201,6 +211,16 @@
               "const": "file"
             },
             "attachmentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mime": {
               "type": "string",
               "minLength": 1,
               "maxLength": 128
