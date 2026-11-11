@@ -891,8 +891,10 @@ App 选择（ImagePicker / DocumentPicker）
   → Server 存 blob、登记 source=upload 的 ready 行，返回 atu_ 前缀 id
   → prompt 请求携带 attachments[]（服务端校验归属：同手机、同会话、同工作区）
   → Connector 从 GET /v1/connector/uploads/{id} 取回字节
-  → Host fileUploads.uploadStream 生成回执
-  → prompt content 以 { type: 'file', receiptId } 引用
+  → 图片走 Host fileUploads.uploadImageStream，普通文件走 uploadStream
+  → prompt content 统一以 { type: 'file', receiptId } 引用（Host 将图片回执还原为 image block）
+  → 持久 user/message 的 image/file blocks 由 Connector 投影为 source=message 附件
+  → 手机按需加载时由 Host attachments.readImage / readFileStream 读取原始字节
 ```
 
 要点：
@@ -901,7 +903,10 @@ App 选择（ImagePicker / DocumentPicker）
 - **归属反向校验。** `promptAttachmentParts` 拒绝非 `upload` 来源、跨设备、跨会话、跨工作区、未 ready 的 id；桌面交付（`deliverable`/`tool`）的 id 不能拿来当上行附件。
 - **来源校验：** 上传要求 `prompt` scope（只读 grant 无法上传），`DSH_CONNECT_ATTACHMENTS` 需为 `readwrite`，`read` 模式下上传端点返回 404。
 - **名称安全：** 显示名不允许 `/`、`\`、NUL，最长 256 字符；MIME 以字节嗅探为准，识别为 `image/png|jpeg|webp|gif` 时按图片处理，其余按文件。
-- **Connector 单一入口：** 图片与文件都经 Host `fileUploads.uploadStream` 生成回执。DSH 0.2.2-rc.1 的 `PromptContentPart` 只有 text、image（内联 Base64）与 file（receiptId）三种，回执路径同时满足两类文件且不把 Base64 塞进 RPC。
+- **Connector 回执入口：** 图片经 `fileUploads.uploadImageStream` 保留图像模态，普通文件经 `uploadStream`；两者在 prompt 中都使用 `{type:'file', receiptId}`，由 DSH 自己解析图片回执，不把 Base64 塞进 RPC。
+- **原始元数据：** Server 从已校验的上传行补充 `name`/`mime`，Connector 不再用 `atu_` id 替代文件名；旧 Server 未提供元数据时保留兼容回退。
+- **纯附件与持久投影：** Connector 不再强制文字 part；持久 `user/message` 的图片/文件块会挂回对应用户消息。手机使用日志坐标生成的 `att_` id，DSH 的 `sha256:` 持久引用仅留在 Connector 内，读取前仍校验会话授权和大小。实时与快照 WSS 中的用户附件块也会剥离，仅作为安全 transcript 的刷新信号。
+- **手机归属：** 上传行记录 `mobile_device_id`，prompt 同时校验手机、桌面、会话与工作区，另一台授权手机也不能引用不属于自己的上传。
 
 ### 移动端交互
 
@@ -909,15 +914,18 @@ App 选择（ImagePicker / DocumentPicker）
 - 选中后进入输入区上方的草稿条，可逐项移除、失败单项重试、继续添加；最多 6 项，单文件 20 MB。
 - 存在附件时发送按钮可用，支持图文混发与纯附件发送；发送前保证所有附件处于 ready，否则不提交 prompt。
 - 选择后立即后台上传，失败停留在草稿条并可重试，不阻塞继续输入。
+- 发送使用上传完成后的最新附件快照；补传或重试成功后会携带新返回的附件 id，任一失败则保留草稿并阻止提交，不再静默退化为纯文字。
 
 ### 本轮验证
 
-- Server：`go test ./...` 通过；新增上行、拒权、归属与设备令牌下载用例。
-- Connector：TypeScript 检查与 117 项测试通过；新增 prompt 附件校验与回执转换用例。
-- Mobile：lint、typecheck、104 项测试与 iOS/Android bundle 导出通过；鸿蒙壳 lint + typecheck 通过。
+- Server：`go test ./...` 与 `go vet ./...` 通过；新增图文/纯附件上行、原始元数据、双手机归属与设备令牌下载用例。
+- Connector：TypeScript 检查与 124 项测试通过；覆盖纯附件 prompt、图片/文件回执、用户消息持久投影、WSS 持久引用剥离与两类 Host 字节读取。
+- Mobile：lint、typecheck、108 项测试与 iOS/Android bundle 导出通过；鸿蒙壳 lint、typecheck 与 110 项测试通过。
+- 跨语言 E2E：PostgreSQL 与 SQLite 均通过；新增手机图片/文件原始字节上传 → Connector 下载 → Host 图片/文件回执 → 纯附件 prompt 闭环。
 
 ### 未完成与边界
 
 - 鸿蒙壳可编译，但 RNOH 暂无 `expo-image-picker` / `expo-document-picker` 的 JS API（`@expo-harmony` 版只提供原生模块桩），当前明确提示「鸿蒙版暂不支持选择附件」，需另做鸿蒙原生选择器模块。
-- 未做 iOS/Android 真机验收；附件选择、相机权限与上传只在静态检查与单元测试层面验证。
+- 未做 iOS/Android 真机验收；附件选择、相机权限与上传只在静态检查、单元测试和受控 Host 跨端测试中验证。
+- 未做真实 DSH 0.2.2-rc.1 的完整 Agent 冒烟；图片完整解码、持久消息内容与真机相机仍需在安装更新后的桌面 Connector 和手机 App 后验收。
 - 未实现上传进度百分比、断点续传与后台上传；大文件在弱网下仍是一次性请求。
