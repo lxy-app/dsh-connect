@@ -35,6 +35,7 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
 import { groupTurns, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib/turn-grouping';
+import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
 import {
   admitAttachment,
   attachmentFailureSummary,
@@ -130,6 +131,7 @@ function ChatScreenContent() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [attachments, setAttachments] = useState<PromptAttachmentDraft[]>([]);
+  const attachmentUploads = useRef(new KeyedPublishQueue<PromptAttachmentDraft>());
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const keyboard = useKeyboardInset();
@@ -608,7 +610,7 @@ function ChatScreenContent() {
    * so the user can retry just that item.
    */
   const uploadAttachment = useCallback(
-    async (item: PromptAttachmentDraft): Promise<PromptAttachmentDraft> => {
+    (item: PromptAttachmentDraft): Promise<PromptAttachmentDraft> => attachmentUploads.current.run(item.localId, async () => {
       setAttachments((current) => current.map((entry) => (entry.localId === item.localId ? { ...entry, state: 'uploading', error: undefined } : entry)));
       try {
         const bytes = await readAttachmentBytes(item.uri);
@@ -636,7 +638,7 @@ function ChatScreenContent() {
         setAttachments((current) => current.map((entry) => (entry.localId === item.localId ? failed : entry)));
         return failed;
       }
-    },
+    }),
     [authorized, deviceId, readAttachmentBytes, sessionId, workspaceId],
   );
 

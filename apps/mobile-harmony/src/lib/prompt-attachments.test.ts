@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
 import {
   admitAttachment,
   attachmentFailureSummary,
@@ -11,6 +12,7 @@ import {
   readyToSend,
   uploadPendingAttachments,
   MAX_PROMPT_ATTACHMENTS,
+  type PromptAttachmentDraft,
 } from '@shared/lib/prompt-attachments';
 
 test('a picked file becomes a draft with a normalized name and type', () => {
@@ -103,6 +105,25 @@ test('send preparation preserves a failed upload so the prompt stays blocked', a
   assert.equal(readyToSend(staged), false);
   assert.deepEqual(attachmentIds(staged), ['atu_ready']);
   assert.equal(staged[1]?.error, 'network');
+});
+
+test('concurrent retry and send share one upload and one Server id', async () => {
+  const queue = new KeyedPublishQueue<PromptAttachmentDraft>();
+  const local = createAttachmentDraft({ kind: 'image', name: 'camera.jpg', bytes: 10, uri: 'file:///camera' });
+  let calls = 0;
+  const upload = (item: typeof local) => queue.run(item.localId, async () => {
+    calls += 1;
+    await new Promise(setImmediate);
+    return { ...item, state: 'ready' as const, attachmentId: 'atu_shared' };
+  });
+
+  const retry = upload(local);
+  const sending = uploadPendingAttachments([{ ...local, state: 'uploading' }], upload);
+  const [retried, staged] = await Promise.all([retry, sending]);
+
+  assert.equal(calls, 1);
+  assert.equal(retried.attachmentId, 'atu_shared');
+  assert.deepEqual(attachmentIds(staged), ['atu_shared']);
 });
 
 test('failure summaries and byte formatting stay user-facing', () => {
