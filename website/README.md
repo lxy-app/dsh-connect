@@ -104,7 +104,7 @@ src/app/                  App Router 页面、全局 Metadata 与 Sitemap
 src/components/           页面分区、交互组件、图标与真实内容数据
 src/App.test.tsx          组件交互回归测试
 src/test/                 Vitest / Testing Library 配置
-public/images/icon.png    来自 apps/mobile/assets/images/icon.png 的品牌资源
+public/images/icon.png    官网独立使用的紫底品牌图标，不随移动端银白图标改动
 public/                   robots、Manifest 与 llms.txt
 scripts/preview.mjs       子路径生产预览服务器
 scripts/verify-static.mjs 静态产物验证
@@ -114,4 +114,4 @@ scripts/verify-static.mjs 静态产物验证
 
 页面文案基于仓库已有产品和架构文档。设备、会话、审批与管理后台指标均为明确标注的模拟数据。正式 CTA 指向真实 GitHub 仓库，不包含虚构下载量、用户评价、价格或未确定的管理后台路由。
 
-如果移动端品牌图标更新，需要同步替换 `public/images/icon.png` 并重新构建。
+官网品牌色固定为浅色 violet `#6C5CE7` / 深色 violet `#9082FF`，首屏深色背景为 `#0B0C12`。如果官网紫色品牌图标更新，需要同步替换 `public/images/icon.png` 并重新构建；移动端银白＋炭黑图标不在此同步范围内。
