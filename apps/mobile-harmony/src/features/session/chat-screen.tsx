@@ -18,6 +18,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { File } from 'expo-file-system';
+
+import { AttachmentDraftBar } from '@/components/attachment-draft-bar';
 import { InteractionCard } from '@/features/interactions/interaction-card';
 import { ModelSheet } from '@/features/session/model-sheet';
 import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
@@ -34,11 +37,22 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
 import { groupTurns, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib/turn-grouping';
 import {
+  admitAttachment,
+  attachmentFailureSummary,
+  attachmentIds,
+  canSubmitPrompt,
+  MAX_PROMPT_ATTACHMENTS,
+} from '@shared/lib/prompt-attachments';
+import type { PromptAttachmentDraft } from '@shared/lib/prompt-attachments';
+import { pickAttachments } from '@/lib/attachment-picker';
+import type { AttachmentSource } from '@/lib/attachment-picker';
+import {
   cancelMobileSession,
   createRequestId,
   describeMobileApiError,
   getMobileTranscript,
   promptMobileSession,
+  uploadMobileAttachment,
 } from '@/lib/mobile-api';
 import { formatTime } from '@shared/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
@@ -114,6 +128,8 @@ function ChatScreenContent() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [attachments, setAttachments] = useState<PromptAttachmentDraft[]>([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
@@ -581,9 +597,111 @@ function ChatScreenContent() {
     }
   }, [authorized, deviceId, loadingOlder, olderCursor, sessionId, workspaceId]);
 
+  /** Reads one picked local file into memory for upload. */
+  const readAttachmentBytes = useCallback(async (uri: string): Promise<Uint8Array> => {
+    const file = new File(uri);
+    const bytes = await file.bytes();
+    return bytes;
+  }, []);
+
+  /**
+   * Uploads one draft and records the Server id on it. A failure keeps the draft
+   * so the user can retry just that item.
+   */
+  const uploadAttachment = useCallback(
+    async (item: PromptAttachmentDraft): Promise<PromptAttachmentDraft> => {
+      setAttachments((current) => current.map((entry) => (entry.localId === item.localId ? { ...entry, state: 'uploading', error: undefined } : entry)));
+      try {
+        const bytes = await readAttachmentBytes(item.uri);
+        const staged = await authorized((serverUrl, token) =>
+          uploadMobileAttachment(serverUrl, token, sessionId, {
+            deviceId,
+            workspaceId,
+            name: item.name,
+            mime: item.mime,
+            bytes,
+          }),
+        );
+        const ready: PromptAttachmentDraft = {
+          ...item,
+          state: 'ready',
+          attachmentId: staged.attachmentId,
+          mime: staged.mime,
+          bytes: staged.bytes,
+          error: undefined,
+        };
+        setAttachments((current) => current.map((entry) => (entry.localId === item.localId ? ready : entry)));
+        return ready;
+      } catch (cause) {
+        const failed: PromptAttachmentDraft = { ...item, state: 'failed', error: describeMobileApiError(cause) };
+        setAttachments((current) => current.map((entry) => (entry.localId === item.localId ? failed : entry)));
+        return failed;
+      }
+    },
+    [authorized, deviceId, readAttachmentBytes, sessionId, workspaceId],
+  );
+
+  /** Opens one system picker and stages whatever the user chose. */
+  const addAttachments = useCallback(
+    async (source: AttachmentSource) => {
+      setMoreOptionsOpen(false);
+      const picked = await pickAttachments(source, { remainingSlots: MAX_PROMPT_ATTACHMENTS - attachments.length });
+      if (picked.kind === 'canceled') return;
+      if (picked.kind === 'denied') {
+        Alert.alert('无法添加附件', picked.reason);
+        return;
+      }
+      const accepted: PromptAttachmentDraft[] = [];
+      let rejected: string | null = null;
+      setAttachments((current) => {
+        const next = [...current];
+        for (const candidate of picked.drafts) {
+          const admission = admitAttachment(candidate, next);
+          if (admission.ok) next.push(admission.draft);
+          else rejected = admission.reason;
+        }
+        accepted.push(...next.slice(current.length));
+        return next;
+      });
+      if (rejected) Alert.alert('部分附件未添加', rejected);
+      setUploadingAttachments(true);
+      try {
+        for (const item of accepted) await uploadAttachment(item);
+      } finally {
+        setUploadingAttachments(false);
+      }
+    },
+    [attachments.length, uploadAttachment],
+  );
+
+  const removeAttachment = useCallback((localId: string) => {
+    setAttachments((current) => current.filter((item) => item.localId !== localId));
+  }, []);
+
+  const retryAttachment = useCallback(
+    (localId: string) => {
+      const item = attachments.find((entry) => entry.localId === localId);
+      if (!item || item.state === 'uploading') return;
+      void uploadAttachment(item);
+    },
+    [attachments, uploadAttachment],
+  );
+
   const send = async () => {
     const text = draft.trim();
-    if (!text || sending || !canPrompt || modelPending) return;
+    if (!canSubmitPrompt(text, attachments) || sending || uploadingAttachments || !canPrompt || modelPending) return;
+    // Attachments must all be staged before the prompt is accepted, so a
+    // partially uploaded message can never reach DSH.
+    const pending = attachments.filter((item) => item.state !== 'ready');
+    if (pending.length > 0) {
+      setUploadingAttachments(true);
+      try {
+        for (const item of pending) await uploadAttachment(item);
+      } finally {
+        setUploadingAttachments(false);
+      }
+    }
+    const stagedIds = attachmentIds(attachments.filter((item) => item.state === 'ready'));
     const requestId = createRequestId('mpr');
     const afterSeq = (transcript?.messages ?? []).reduce(
       (highest, message) => Math.max(highest, message.seq),
@@ -592,11 +710,22 @@ function ChatScreenContent() {
     streamClearAfter.current = afterSeq;
     setSending(true);
     setDraft('');
+    setAttachments([]);
+    const optimisticAttachments = attachments.map((item) => ({
+      attachmentId: item.attachmentId ?? item.localId,
+      kind: item.kind,
+      name: item.name,
+      mime: item.mime,
+      bytes: item.bytes,
+      source: 'message',
+      state: 'ready',
+    }));
     setOptimistic({
       id: `local-${requestId}`,
       seq: Number.MAX_SAFE_INTEGER,
       role: 'user',
       text,
+      ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
       occurredAt: new Date().toISOString(),
     });
     stickToBottom.current = true;
@@ -607,6 +736,7 @@ function ChatScreenContent() {
           deviceId,
           workspaceId,
           text,
+          ...(stagedIds.length > 0 ? { attachmentIds: stagedIds } : {}),
         }),
       );
       setPendingReply({ since: Date.now(), afterSeq, text });
@@ -616,6 +746,7 @@ function ChatScreenContent() {
       setOptimistic(null);
       setPendingReply(null);
       setDraft(text);
+      setAttachments(attachments);
       Alert.alert('发送失败', describeMobileApiError(cause));
     } finally {
       setSending(false);
@@ -827,7 +958,8 @@ function ChatScreenContent() {
     if (next !== 'sessions') router.navigate({ pathname: '/', params: { tab: next } });
   };
   const voiceActive = voiceMode && (voicePreparing || voiceListening || voiceStopping);
-  const showSend = !voiceMode && (inputFocused || draft.trim().length > 0 || sending);
+  const showSend =
+    !voiceMode && (inputFocused || draft.trim().length > 0 || attachments.length > 0 || sending || uploadingAttachments);
   const voiceActiveText = voiceCancelArmed
     ? '松开取消'
     : voicePreparing
@@ -1107,6 +1239,23 @@ function ChatScreenContent() {
               </View>
             </View>
           ) : null}
+          {voiceActive ? null : (
+            <AttachmentDraftBar
+              attachments={attachments}
+              disabled={sending || uploadingAttachments}
+              onAdd={() => {
+                setMoreOptionsOpen(true);
+                void refreshModel();
+              }}
+              onRemove={removeAttachment}
+              onRetry={retryAttachment}
+            />
+          )}
+          {attachmentFailureSummary(attachments) && !voiceActive ? (
+            <Text style={[styles.attachmentFailure, { color: theme.danger }]}>
+              {attachmentFailureSummary(attachments)}
+            </Text>
+          ) : null}
           <View style={[styles.composeBox, { backgroundColor: theme.surfaceMuted }, voiceActive && styles.composeBoxHidden]}>
             <View style={styles.voiceComposerRow}>
               <Pressable
@@ -1176,11 +1325,22 @@ function ChatScreenContent() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="发送"
-                  disabled={!draft.trim() || sending || modelPending !== null}
+                  disabled={!canSubmitPrompt(draft, attachments) || sending || uploadingAttachments || modelPending !== null}
                   onPress={() => void send()}
-                  style={({ pressed }) => [styles.send, { backgroundColor: theme.accent, opacity: !draft.trim() || sending || modelPending !== null ? 0.4 : pressed ? 0.75 : 1 }]}
+                  style={({ pressed }) => [
+                    styles.send,
+                    {
+                      backgroundColor: theme.accent,
+                      opacity:
+                        !canSubmitPrompt(draft, attachments) || sending || uploadingAttachments || modelPending !== null
+                          ? 0.4
+                          : pressed
+                            ? 0.75
+                            : 1,
+                    },
+                  ]}
                 >
-                  {sending ? <ActivityIndicator color={theme.onAccent} size="small" /> : <Text style={[styles.sendText, { color: theme.onAccent }]}>↑</Text>}
+                  {sending || uploadingAttachments ? <ActivityIndicator color={theme.onAccent} size="small" /> : <Text style={[styles.sendText, { color: theme.onAccent }]}>↑</Text>}
                 </Pressable>
               ) : (
                 <Pressable
@@ -1233,6 +1393,8 @@ function ChatScreenContent() {
         visible={moreOptionsOpen}
         catalog={modelCatalog}
         refreshing={modelRefreshing}
+        attachmentSlots={MAX_PROMPT_ATTACHMENTS - attachments.length}
+        onPickAttachments={(source) => void addAttachments(source)}
         onClose={() => setMoreOptionsOpen(false)}
         onOpenModel={() => {
           setMoreOptionsOpen(false);
@@ -1606,6 +1768,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '700',
   },
+  attachmentFailure: { fontSize: Typography.caption, paddingHorizontal: 6, paddingBottom: 6 },
   composer: {
     position: 'relative',
     paddingHorizontal: 12,
