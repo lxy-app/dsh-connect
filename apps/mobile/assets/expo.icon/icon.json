@@ -7,9 +7,15 @@
       "layers" : [
         {
           "image-name" : "kun-mark.png",
-          "name" : "kun"
+          "name" : "kun",
+          "glass" : true
         }
-      ]
+      ],
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : false
     }
   ],
   "supported-platforms" : {
