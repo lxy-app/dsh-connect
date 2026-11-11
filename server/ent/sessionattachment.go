@@ -24,7 +24,7 @@ type SessionAttachment struct {
 	SessionID string `json:"session_id,omitempty"`
 	// WorkspaceID holds the value of the "workspace_id" field.
 	WorkspaceID string `json:"workspace_id,omitempty"`
-	// Source holds the value of the "source" field.
+	// deliverable|message|tool describe desktop files; upload is a phone upload staged for one prompt
 	Source sessionattachment.Source `json:"source,omitempty"`
 	// Session event sequence that declared the file
 	SourceSeq int64 `json:"source_seq,omitempty"`

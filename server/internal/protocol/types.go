@@ -57,6 +57,9 @@ const (
 	AttachmentSourceDeliverable = "deliverable"
 	AttachmentSourceMessage     = "message"
 	AttachmentSourceTool        = "tool"
+	// AttachmentSourceUpload marks bytes this phone uploaded for one prompt. The
+	// row is staged before the prompt is accepted and is only referenced by id.
+	AttachmentSourceUpload = "upload"
 )
 
 // Attachment error codes stay stable across the Connector and the App.
@@ -198,9 +201,14 @@ type Device struct {
 	LastSeenAt       *time.Time  `json:"lastSeenAt,omitempty"`
 }
 
+// ContentPart is one prompt content part. Text parts carry inline text; image
+// and file parts reference an attachment the Session already owns, so a caller
+// can never cite bytes it did not upload.
 type ContentPart struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type string `json:"type"` // text | image | file
+	Text string `json:"text,omitempty"`
+	// AttachmentID names a Server-verified upload. It is never a path.
+	AttachmentID string `json:"attachmentId,omitempty"`
 }
 
 type Session struct {
@@ -569,8 +577,26 @@ type MobilePromptRequest struct {
 	DeviceID    string `json:"deviceId"`
 	WorkspaceID string `json:"workspaceId"`
 	Mode        string `json:"mode"`
-	Text        string `json:"text"`
-	TimeoutMS   int    `json:"timeoutMs,omitempty"`
+	Text        string `json:"text,omitempty"`
+	// Attachments are ids this phone uploaded for this Session. The Server
+	// verifies ownership before building the prompt content, so a phone can
+	// never reference bytes it did not upload.
+	Attachments []MobilePromptAttachment `json:"attachments,omitempty"`
+	TimeoutMS   int                      `json:"timeoutMs,omitempty"`
+}
+
+// MobilePromptAttachment references one staged upload by its opaque id.
+type MobilePromptAttachment struct {
+	AttachmentID string `json:"attachmentId"`
+}
+
+// MobileAttachmentUploadResult is returned once the staged bytes are indexed.
+type MobileAttachmentUploadResult struct {
+	AttachmentID string `json:"attachmentId"`
+	Kind         string `json:"kind"` // image | file
+	Name         string `json:"name"`
+	Mime         string `json:"mime"`
+	Bytes        int64  `json:"bytes"`
 }
 
 type MobileCancelRequest struct {

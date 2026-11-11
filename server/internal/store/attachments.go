@@ -329,6 +329,39 @@ func attachmentRecordFromEnt(entity *ent.SessionAttachment) SessionAttachmentRec
 
 // initialAttachmentState keeps a declaration's failed/unavailable verdict so the
 // App can explain the refusal; anything else starts as "known".
+// CreateUploadedAttachment records one phone upload that is already complete.
+//
+// Unlike UpsertSessionAttachments it is not a "learned declaration": the bytes
+// are stored, so the row starts in "ready" and carries its digest and blob. The
+// id is server-minted, so a duplicate means a programming error rather than a
+// transcript refresh.
+func (s *Store) CreateUploadedAttachment(ctx context.Context, record SessionAttachmentRecord, now time.Time) error {
+	_, err := s.client.SessionAttachment.Create().
+		SetID(record.ID).
+		SetDeviceID(record.DeviceID).
+		SetSessionID(record.SessionID).
+		SetWorkspaceID(record.WorkspaceID).
+		SetSource(sessionattachment.SourceUpload).
+		SetSourceSeq(record.SourceSeq).
+		SetSourceIndex(record.SourceIndex).
+		SetKind(sessionattachment.Kind(record.Kind)).
+		SetDisplayName(record.DisplayName).
+		SetMime(record.Mime).
+		SetBytes(record.Bytes).
+		SetSha256(record.SHA256).
+		SetState(sessionattachment.StateReady).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		SetExpiresAt(record.ExpiresAt).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("create uploaded attachment %s: %w", record.ID, err)
+	}
+	return nil
+}
+
+// initialAttachmentState maps a declared state onto the only two values a
+// learned row may start in.
 func initialAttachmentState(state string) sessionattachment.State {
 	switch state {
 	case string(sessionattachment.StateFailed):

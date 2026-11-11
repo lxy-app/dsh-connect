@@ -33,7 +33,8 @@ func (SessionAttachment) Fields() []ent.Field {
 		field.String("workspace_id").
 			NotEmpty(),
 		field.Enum("source").
-			Values("deliverable", "message", "tool"),
+			Values("deliverable", "message", "tool", "upload").
+			Comment("deliverable|message|tool describe desktop files; upload is a phone upload staged for one prompt"),
 		field.Int64("source_seq").
 			Comment("Session event sequence that declared the file"),
 		field.Int("source_index").

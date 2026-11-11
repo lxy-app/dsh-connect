@@ -115,6 +115,7 @@ const (
 	SourceDeliverable Source = "deliverable"
 	SourceMessage     Source = "message"
 	SourceTool        Source = "tool"
+	SourceUpload      Source = "upload"
 )
 
 func (s Source) String() string {
@@ -124,7 +125,7 @@ func (s Source) String() string {
 // SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
 func SourceValidator(s Source) error {
 	switch s {
-	case SourceDeliverable, SourceMessage, SourceTool:
+	case SourceDeliverable, SourceMessage, SourceTool, SourceUpload:
 		return nil
 	default:
 		return fmt.Errorf("sessionattachment: invalid enum value for source field: %q", s)

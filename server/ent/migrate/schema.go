@@ -328,7 +328,7 @@ var (
 		{Name: "device_id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "workspace_id", Type: field.TypeString},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"deliverable", "message", "tool"}},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"deliverable", "message", "tool", "upload"}},
 		{Name: "source_seq", Type: field.TypeInt64},
 		{Name: "source_index", Type: field.TypeInt},
 		{Name: "kind", Type: field.TypeEnum, Enums: []string{"image", "file"}, Default: "file"},
