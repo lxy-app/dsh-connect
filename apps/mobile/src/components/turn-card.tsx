@@ -7,7 +7,6 @@ import { MarkdownText } from '@/components/markdown';
 import { ReadAloudButton } from '@/components/read-aloud-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { formatTime } from '@shared/lib/format';
 import { markdownToPlainText } from '@/lib/markdown';
 import type { TurnGroup } from '@shared/lib/turn-grouping';
 import type { MobileMessage } from '@shared/types/mobile';
@@ -65,29 +64,28 @@ export function TurnCard({
   const hasBody = steps.length > 0 || Boolean(group.final) || group.attachments.length > 0;
   if (!hasBody && !liveText) return null;
 
-  const time = group.final?.occurredAt ?? new Date(group.endedAt).toISOString();
-
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={running ? '收起执行过程' : open ? '收起执行过程' : '展开执行过程'}
-        accessibilityState={{ expanded: open }}
-        onPress={() => {
-          manual.current = true;
-          setOpen((current) => !current);
-        }}
-        style={({ pressed }) => [styles.head, pressed && styles.pressed]}
-      >
-        <View style={[styles.state, running ? null : { backgroundColor: theme.accentSoft }]}>
-          {running
-            ? <ActivityIndicator color={theme.accent} size="small" />
-            : <Text style={[styles.check, { color: theme.success }]}>✓</Text>}
-        </View>
-        <Text style={[styles.title, { color: theme.text }]}>{running ? '深度求索中' : '已完成'}</Text>
-        <Text style={[styles.meta, { color: theme.textSecondary }]}>· 用时 {elapsed}</Text>
-        <Text style={[styles.chevron, { color: theme.textSecondary, transform: [{ rotate: open ? '90deg' : '0deg' }] }]}>›</Text>
-      </Pressable>
+    <View style={styles.card}>
+      <View style={styles.headRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={running ? '收起执行过程' : open ? '收起执行过程' : '展开执行过程'}
+          accessibilityState={{ expanded: open }}
+          onPress={() => {
+            manual.current = true;
+            setOpen((current) => !current);
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.head, pressed && styles.pressed]}
+        >
+          {running ? <ActivityIndicator color={theme.textSecondary} size="small" /> : null}
+          <Text style={[styles.title, { color: theme.textSecondary }]}>{running ? '深度求索中' : '已完成'}</Text>
+          <Text style={[styles.chevron, { color: theme.textSecondary, transform: [{ rotate: open ? '90deg' : '0deg' }] }]}>›</Text>
+        </Pressable>
+        {group.final && finalText ? (
+          <ReadAloudButton text={preview} playbackKey={`${playbackScope}:turn-${group.key}`} disabled={readAloudDisabled} style={styles.tts} />
+        ) : null}
+      </View>
 
       {open ? (
         <View style={styles.steps}>
@@ -102,12 +100,12 @@ export function TurnCard({
           {steps.length === 0 && !liveText && !group.final ? (
             <Text style={[styles.empty, { color: theme.textSecondary }]}>正在等待执行步骤…</Text>
           ) : null}
+          <Text style={[styles.elapsed, { color: theme.textSecondary }]}>用时 {elapsed}</Text>
         </View>
       ) : null}
 
       {finalText || group.attachments.length > 0 ? (
-        <View style={[styles.final, open && { borderTopColor: theme.border }]}
-        >
+        <View style={styles.final}>
           {finalText ? (
             renderedAsMarkdown ? (
               <MarkdownText
@@ -146,12 +144,6 @@ export function TurnCard({
               </Text>
             </Pressable>
           ) : null}
-          <View style={styles.foot}>
-            {group.final && finalText ? (
-              <ReadAloudButton text={preview} playbackKey={`${playbackScope}:turn-${group.key}`} disabled={readAloudDisabled} />
-            ) : null}
-            <Text style={[styles.time, { color: theme.textSecondary }]}>{formatTime(time)}</Text>
-          </View>
         </View>
       ) : null}
     </View>
@@ -205,14 +197,14 @@ function elapsedLabel(ms: number): string {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, marginTop: 12, marginBottom: 14, overflow: 'hidden' },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 11 },
-  state: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  check: { fontSize: 13, fontWeight: '700' },
-  title: { fontSize: Typography.control, fontWeight: '700' },
-  meta: { flex: 1, fontSize: Typography.body, fontVariant: ['tabular-nums'] },
-  chevron: { fontSize: 18, lineHeight: 18 },
-  steps: { paddingHorizontal: 12, paddingBottom: 8, gap: 6 },
+  card: { marginTop: 10, marginBottom: 6 },
+  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, alignSelf: 'flex-start' },
+  tts: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 4, borderRadius: 8 },
+  title: { fontSize: Typography.control, fontWeight: '600' },
+  chevron: { fontSize: 17, lineHeight: 18 },
+  steps: { paddingBottom: 4, gap: 6 },
+  elapsed: { fontSize: Typography.caption, lineHeight: 18, marginTop: 2 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 24 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   stepLabel: { fontSize: Typography.body, fontWeight: '600' },
@@ -221,11 +213,9 @@ const styles = StyleSheet.create({
   narration: { fontSize: Typography.body, lineHeight: 22, paddingLeft: 13 },
   live: { paddingTop: 2 },
   empty: { fontSize: Typography.body, paddingVertical: 4 },
-  final: { paddingHorizontal: 12, paddingBottom: 10, borderTopWidth: 1, borderTopColor: 'transparent' },
+  final: { paddingBottom: 2 },
   finalText: { fontSize: Typography.reading, lineHeight: 24 },
   expand: { alignSelf: 'flex-start', paddingVertical: 6 },
   expandText: { fontSize: Typography.body, fontWeight: '600' },
-  foot: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
-  time: { marginLeft: 'auto', fontSize: Typography.caption, fontVariant: ['tabular-nums'] },
   pressed: { opacity: 0.6 },
 });

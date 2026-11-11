@@ -31,7 +31,7 @@ import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
-import { groupTurns, runningTurnIndex } from '@shared/lib/turn-grouping';
+import { groupTurns, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib/turn-grouping';
 import {
   cancelMobileSession,
   createRequestId,
@@ -981,8 +981,14 @@ function ChatScreenContent() {
         ) : turns.length > 0 ? (
           turns.map((group, index) => {
             const running = index === runningIndex;
+            const timeLabel = shouldShowTimeDivider(turns[index - 1], group)
+              ? formatTime(new Date(group.startedAt).toISOString())
+              : '';
             return (
               <View key={group.key}>
+                {timeLabel ? (
+                  <Text style={[styles.timeDivider, { color: theme.statusNeutral }]}>{timeLabel}</Text>
+                ) : null}
                 {group.user ? (
                   <MessageRow
                     attachmentAuth={attachmentAuth}
@@ -1080,7 +1086,7 @@ function ChatScreenContent() {
           style={[
             styles.composer,
             {
-              backgroundColor: theme.surface,
+              backgroundColor: theme.background,
               paddingBottom: 10,
             },
           ]}
@@ -1301,7 +1307,7 @@ function MessageRow({
           styles.bubble,
           !user && styles.bubbleAssistant,
           user
-            ? { backgroundColor: theme.accent, borderBottomRightRadius: 6 }
+            ? { backgroundColor: theme.bubbleUser }
             : { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1, borderBottomLeftRadius: 6 },
         ]}
       >
@@ -1316,7 +1322,7 @@ function MessageRow({
         ) : (
           <Text
             numberOfLines={collapsible && !expanded ? 14 : undefined}
-            style={[styles.bubbleText, { color: user ? theme.onAccent : theme.text }]}
+            style={[styles.bubbleText, { color: user ? theme.onBubbleUser : theme.text }]}
             selectable
           >
             {preview}
@@ -1342,29 +1348,21 @@ function MessageRow({
             onPress={() => setExpanded((current) => !current)}
             style={({ pressed }) => [styles.expandAction, pressed && styles.pressed]}
           >
-            <Text style={[styles.expandText, { color: user ? theme.onAccent : theme.accent }]}>
+            <Text style={[styles.expandText, { color: user ? theme.onBubbleUser : theme.accent }]}>
               {expanded ? '收起' : `展开全文（${message.text.length} 字）`}
             </Text>
           </Pressable>
         ) : null}
         {state ? (
-          <Text style={[styles.messageState, { color: theme.onAccent }]}>
+          <Text style={[styles.messageState, { color: user ? theme.onBubbleUser : theme.accent }]}>
             {state === 'sending' ? '发送中…' : '已排队'}
           </Text>
         ) : null}
-        <View style={styles.messageFooter}>
-          {!user ? (
+        {!user ? (
+          <View style={styles.messageFooter}>
             <ReadAloudButton text={preview} playbackKey={`${playbackScope}:message-${message.seq}`} style={styles.messageTts} />
-          ) : null}
-          <Text
-            style={[
-              styles.messageTime,
-              { color: user ? theme.onAccent : theme.textSecondary, opacity: user ? 0.7 : 1 },
-            ]}
-          >
-            {streaming ? '流式接收中' : formatTime(message.occurredAt)}
-          </Text>
-        </View>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -1530,13 +1528,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
   },
+  timeDivider: {
+    alignSelf: 'center',
+    fontSize: Typography.caption,
+    lineHeight: 17,
+    marginTop: 2,
+    marginBottom: 8,
+    fontVariant: ['tabular-nums'],
+  },
   messageRowUser: {
     justifyContent: 'flex-end',
   },
   bubble: {
-    maxWidth: '84%',
-    borderRadius: 16,
-    paddingHorizontal: 13,
+    maxWidth: '80%',
+    borderRadius: 20,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 5,
   },
@@ -1565,11 +1571,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 6,
     minHeight: 24,
-  },
-  messageTime: {
-    fontSize: Typography.caption,
-    lineHeight: 17,
-    marginLeft: 'auto',
   },
   messageState: {
     fontSize: Typography.caption,

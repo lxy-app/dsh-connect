@@ -26,6 +26,12 @@ test('silver-white brand palette uses the confirmed charcoal light accents', () 
   assert.equal(Colors.dark.accentSoft, '#353B43');
 });
 
+test('dark chat surfaces follow the WorkBuddy near-black palette', () => {
+  assert.equal(Colors.dark.background, '#1A1A1A');
+  assert.equal(Colors.dark.bubbleUser, '#383838');
+  assert.equal(Colors.light.bubbleUser, Colors.light.accent);
+});
+
 test('accent text remains readable in both color schemes', () => {
   for (const theme of [Colors.light, Colors.dark]) {
     assert.ok(contrastRatio(theme.onAccent, theme.accent) >= 4.5);
@@ -38,5 +44,11 @@ test('secondary text and neutral icons remain readable on every themed surface',
     for (const background of [theme.background, theme.surface, theme.surfaceMuted]) {
       assert.ok(contrastRatio(theme.textSecondary, background) >= 4.5);
     }
+  }
+});
+
+test('user bubbles keep readable text', () => {
+  for (const theme of [Colors.light, Colors.dark]) {
+    assert.ok(contrastRatio(theme.onBubbleUser, theme.bubbleUser) >= 4.5);
   }
 });

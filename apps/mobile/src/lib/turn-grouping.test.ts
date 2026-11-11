@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupTurns, runningTurnIndex } from '@shared/lib/turn-grouping';
+import { groupTurns, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib/turn-grouping';
 import type { MobileMessage } from '@shared/types/mobile';
 
 function message(partial: Partial<MobileMessage> & Pick<MobileMessage, 'seq' | 'role'>): MobileMessage {
@@ -118,4 +118,19 @@ test('duration derives from the turn messages', () => {
   ]);
 
   assert.equal(turns[0]?.endedAt - (turns[0]?.startedAt ?? 0), 1_000);
+});
+
+test('a centered time divider only appears after a five-minute gap', () => {
+  const base = Date.parse('2026-11-11T00:00:00.000Z');
+  const at = (offsetMs: number) => base + offsetMs;
+
+  assert.equal(shouldShowTimeDivider(undefined, { startedAt: at(0) }), true);
+  assert.equal(shouldShowTimeDivider({ endedAt: at(0) }, { startedAt: at(2 * 60_000) }), false);
+  assert.equal(shouldShowTimeDivider({ endedAt: at(0) }, { startedAt: at(5 * 60_000) }), true);
+  assert.equal(shouldShowTimeDivider({ endedAt: at(0) }, { startedAt: at(0) }), false);
+});
+
+test('a missing timestamp never renders a divider', () => {
+  assert.equal(shouldShowTimeDivider(undefined, { startedAt: 0 }), false);
+  assert.equal(shouldShowTimeDivider({ endedAt: 0 }, { startedAt: 1_000 }), true);
 });

@@ -131,10 +131,12 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
 
         {interactions.length === 0 ? (
           withoutApproval.length > 0 ? null : (
-            <EmptyState
-              title="没有待处理事项"
-              description="DSH 需要你审批工具调用或回答问题时，会在这里出现；桌面端批准后会自动消失。"
-            />
+            <View style={styles.emptyState}>
+              <EmptyState
+                title="没有待处理事项"
+                description="DSH 需要你审批工具调用或回答问题时，会在这里出现；桌面端批准后会自动消失。"
+              />
+            </View>
           )
         ) : (
           interactions.map((interaction) => (
@@ -229,6 +231,9 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingBottom: 32,
+  },
+  emptyState: {
+    marginHorizontal: 16,
   },
   item: {
     marginBottom: 4,

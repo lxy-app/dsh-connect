@@ -31,6 +31,24 @@ export function runningTurnIndex(turns: readonly TurnGroup[], active: boolean): 
   return active ? turns.length - 1 : -1;
 }
 
+/** Messages within five minutes share one centered time divider. */
+export const TIME_DIVIDER_GAP_MS = 5 * 60 * 1_000;
+
+/**
+ * Decides whether a turn needs the WorkBuddy-style centered timestamp above it.
+ * The gap is measured from the previous turn's last event so a long reply does
+ * not force a divider before the very next prompt.
+ */
+export function shouldShowTimeDivider(
+  previous: Pick<TurnGroup, 'endedAt'> | undefined,
+  current: Pick<TurnGroup, 'startedAt'>,
+  gapMs = TIME_DIVIDER_GAP_MS,
+): boolean {
+  if (current.startedAt <= 0) return false;
+  if (!previous || previous.endedAt <= 0) return true;
+  return current.startedAt - previous.endedAt >= gapMs;
+}
+
 /**
  * Groups a transcript into turns.
  *
