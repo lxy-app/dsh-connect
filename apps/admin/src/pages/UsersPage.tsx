@@ -234,7 +234,7 @@ export function UsersPage() {
         return associated.length ? (
           <Space size={4} wrap>
             {associated.map((policy) => (
-              <Tag key={policy.policyId}>{policy.name}</Tag>
+              <Tag key={policy.policyId} color={policy.enabled ? 'blue' : 'default'}>{policy.name}</Tag>
             ))}
           </Space>
         ) : (
@@ -389,7 +389,7 @@ export function UsersPage() {
                         <Space size={4} wrap>
                           {preview.policyIds.map((policyId) => {
                             const policy = policies.find((candidate) => candidate.policyId === policyId);
-                            return <Tag key={policyId}>{policy?.name ?? policyId}</Tag>;
+                            return <Tag key={policyId} color="blue">{policy?.name ?? policyId}</Tag>;
                           })}
                         </Space>
                       ) : (
@@ -421,7 +421,7 @@ export function UsersPage() {
                                     <Space key={workspace.id} size={4} wrap>
                                       <Tag>{workspace.name}</Tag>
                                       {workspace.scopes.map((scope) => (
-                                        <Tag key={scope}>{scope}</Tag>
+                                        <Tag key={scope} color="blue">{scope}</Tag>
                                       ))}
                                     </Space>
                                   ))}
@@ -434,7 +434,7 @@ export function UsersPage() {
                             <div style={{ marginTop: 6 }}>
                               {desktop.scopes.length ? (
                                 <Space size={4} wrap>
-                                  {desktop.scopes.map((scope) => <Tag key={scope}>{scope}</Tag>)}
+                                  {desktop.scopes.map((scope) => <Tag key={scope} color="blue">{scope}</Tag>)}
                                 </Space>
                               ) : <Text type="secondary">无</Text>}
                             </div>
