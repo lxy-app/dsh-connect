@@ -137,6 +137,79 @@
 .more-row-chevron{flex:0 0 auto;color:var(--muted);display:grid;place-items:center}
 .more-dot{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:var(--brand)}
 .more-note{margin-top:12px;color:var(--muted);font-size:10px;line-height:1.6;text-align:center}
+/* M3 uplink attachments: compact drafts, native-picker simulations and per-item recovery. */
+.voice-compose.text-mode.has-attachments .send{display:grid}
+.voice-compose.text-mode.has-attachments .compose-plus{display:none}
+.attachment-draft{display:flex;gap:8px;align-items:center;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none;transition:opacity .18s}
+.attachment-draft::-webkit-scrollbar{display:none}
+.composer.voice-active .attachment-draft{opacity:0;pointer-events:none}
+.draft-attachment{position:relative;flex:0 0 auto;width:64px;height:64px}
+.draft-attachment-preview{width:64px;height:64px;padding:0;border:1px solid var(--border);border-radius:15px;overflow:hidden;background:var(--surface2);display:block;color:var(--text)}
+.draft-attachment-preview img{width:100%;height:100%;display:block;object-fit:cover}
+.draft-attachment.file{width:196px}
+.draft-attachment.file .draft-attachment-preview{width:196px;height:64px;padding:9px 28px 9px 9px;display:flex;align-items:center;gap:8px;text-align:left}
+.draft-file-icon{width:34px;height:38px;flex:0 0 34px;border-radius:9px;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center}
+.draft-file-copy{min-width:0;flex:1}
+.draft-file-name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:650}
+.draft-file-meta{display:block;margin-top:4px;color:var(--muted);font-size:9px}
+.draft-attachment-remove{position:absolute;right:-5px;top:-5px;width:20px;height:20px;padding:0;border:2px solid var(--bg);border-radius:50%;background:var(--text);color:var(--bg);display:grid;place-items:center;box-shadow:0 2px 6px #0002}
+.draft-attachment-add{width:52px;height:64px;flex:0 0 52px;border:1px dashed var(--border);border-radius:15px;background:transparent;color:var(--muted);display:grid;place-items:center}
+.draft-attachment-add:hover{border-color:var(--brand);color:var(--brand);background:var(--brand-soft)}
+.attachment-sheet{width:100%;max-height:84%;display:flex;flex-direction:column;background:var(--surface);border-radius:24px 24px 38px 38px;box-shadow:0 -15px 50px #0002;padding-top:10px}
+.attachment-sheet-head{flex:0 0 auto;padding:12px 20px 10px}
+.attachment-sheet-head .sheet-handle{margin-bottom:12px}
+.attachment-sheet-title{font-size:17px;font-weight:730;letter-spacing:-.2px}
+.attachment-sheet-sub{margin-top:5px;color:var(--muted);font-size:11px;line-height:1.55}
+.attachment-sheet-scroll{flex:1;min-height:0;overflow:auto;padding:4px 16px 12px}
+.attachment-media-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.attachment-media-option{position:relative;aspect-ratio:1;padding:0;border:2px solid transparent;border-radius:14px;overflow:hidden;background:var(--surface2)}
+.attachment-media-option img{width:100%;height:100%;display:block;object-fit:cover}
+.attachment-media-option.on{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
+.attachment-media-check{position:absolute;right:6px;top:6px;width:21px;height:21px;border:1px solid #fff9;border-radius:50%;background:#17191f66;color:transparent;display:grid;place-items:center;backdrop-filter:blur(4px)}
+.attachment-media-option.on .attachment-media-check{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.attachment-media-name{position:absolute;left:0;right:0;bottom:0;padding:18px 7px 6px;background:linear-gradient(transparent,#111b);color:#fff;font-size:9px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attachment-file-list{display:flex;flex-direction:column;gap:7px}
+.attachment-file-option{width:100%;min-height:62px;display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:13px;background:var(--surface);color:var(--text);text-align:left}
+.attachment-file-option:hover:not(:disabled),.attachment-file-option.on{border-color:var(--brand);background:var(--brand-soft)}
+.attachment-file-option:disabled{opacity:.5}
+.attachment-file-option .draft-file-icon{width:36px;height:40px;flex-basis:36px;background:var(--surface2)}
+.attachment-file-option-copy{flex:1;min-width:0}
+.attachment-file-option-name{display:block;font-size:12px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attachment-file-option-meta{display:block;margin-top:4px;color:var(--muted);font-size:10px}
+.attachment-file-check{width:20px;height:20px;flex:0 0 20px;border:1px solid var(--border);border-radius:50%;display:grid;place-items:center;color:transparent}
+.attachment-file-option.on .attachment-file-check{border-color:var(--brand);background:var(--brand);color:var(--on-brand)}
+.attachment-file-limit{flex:0 0 auto;color:var(--orange);font-size:9px}
+.attachment-sheet-foot{flex:0 0 auto;padding:11px 20px 18px;border-top:1px solid var(--border);background:var(--surface)}
+.attachment-selection-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;color:var(--muted);font-size:10px;line-height:1.5}
+.attachment-confirm{width:100%;min-height:42px}
+.attachment-preview-layer{position:absolute;inset:34px 0 0;z-index:60;background:#101115f2;color:#f5f6f8;display:flex;flex-direction:column;animation:attachmentPreviewIn .18s ease-out}
+.attachment-preview-head{display:flex;align-items:center;gap:10px;padding:14px 16px}
+.attachment-preview-title{flex:1;min-width:0;font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attachment-preview-close{width:34px;height:34px;border:1px solid #ffffff2b;border-radius:50%;background:#ffffff12;color:#fff;display:grid;place-items:center}
+.attachment-preview-body{flex:1;min-height:0;display:grid;place-items:center;padding:8px 16px;overflow:hidden}
+.attachment-preview-body img{display:block;max-width:100%;max-height:100%;object-fit:contain;border-radius:12px;box-shadow:0 12px 42px #0006}
+.attachment-preview-foot{padding:16px 20px 24px;text-align:center}
+.attachment-preview-name{font-size:13px;font-weight:650;word-break:break-all}
+.attachment-preview-meta{margin-top:6px;color:#b8bbc4;font-size:11px}
+.attachment-preview-foot .btn{margin-top:15px;border-color:#ffffff30;background:#ffffff12;color:#fff}
+@keyframes attachmentPreviewIn{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.attachment-preview-layer{animation:none}}
+.message-text{white-space:pre-wrap}
+.message-attachments{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:8px;min-width:218px;max-width:264px}
+.message-text+.message-attachments{margin-top:9px}
+.message-attachment{position:relative;min-width:0;border-radius:12px;overflow:hidden}
+.message-attachment.image{background:#ffffff16}
+.message-image-open{display:block;width:100%;height:92px;padding:0;border:0;background:var(--surface2);overflow:hidden}
+.message-image-open img{display:block;width:100%;height:100%;object-fit:cover}
+.message-attachment-name{display:block;padding:6px 7px 7px;color:inherit;font-size:9px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.message-attachment.file{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:9px;border:1px solid #ffffff24;background:#ffffff10;color:inherit}
+.message-attachment.file .draft-file-icon{width:30px;height:34px;flex-basis:30px;background:#ffffff16;color:inherit}
+.message-attachment.file .draft-file-name{font-size:10px}
+.message-attachment.file .draft-file-meta{color:inherit;opacity:.68}
+.message-upload-overlay{position:absolute;inset:0 0 25px;display:flex;align-items:center;justify-content:center;background:#1118;color:#fff;font-size:10px;font-weight:650;pointer-events:none}
+.message-attachment-retry{display:inline-flex;align-items:center;justify-content:center;gap:4px;margin:0 6px 7px;padding:4px 7px;border:1px solid currentColor;border-radius:7px;background:transparent;color:inherit;font-size:9px}
+.message-attachment.file .message-attachment-retry{flex:0 0 auto;margin:0}
+.message-upload-summary{margin-top:8px;font-size:10px;line-height:1.5;opacity:.78}
 /* Turn folding: one card per DSH turn, steps folded behind a single header. */
 .turn-wrap{margin:0 0 14px}
 .turn-card{border:1px solid var(--border);border-radius:15px;background:var(--surface);overflow:hidden}
@@ -449,16 +522,75 @@ function moreSheetHtml(){
   return `<div class="sheet-layer" data-action="close-more"><div class="more-sheet" role="dialog" aria-modal="true" aria-label="更多输入选项">
     <div class="more-handle"></div>
     <div class="more-grid">
-      <button class="more-tile soon" data-action="more-attach" title="附件发送尚未开放">${icon('camera',20)}<span>拍照</span></button>
-      <button class="more-tile soon" data-action="more-attach" title="附件发送尚未开放">${icon('image',20)}<span>照片 / 视频</span></button>
-      <button class="more-tile soon" data-action="more-attach" title="附件发送尚未开放">${icon('paperclip',20)}<span>添加文件</span></button>
+      <button class="more-tile" data-action="open-camera" title="拍摄照片">${icon('camera',20)}<span>拍照</span></button>
+      <button class="more-tile" data-action="open-media-picker" title="选择照片或视频">${icon('image',20)}<span>照片 / 视频</span></button>
+      <button class="more-tile" data-action="open-file-picker" title="添加文件">${icon('paperclip',20)}<span>添加文件</span></button>
     </div>
     <div class="more-list">
       <button class="more-row" data-action="more-model"><span class="more-row-icon">${icon('chip',15)}</span><span class="more-row-title">选择模型</span>${modelIsChanged()?'<span class="more-dot" aria-hidden="true"></span>':''}<span class="more-row-value">${esc(modelTrace())}</span><span class="more-row-chevron">${icon('chevron',13)}</span></button>
       <button class="more-row" data-action="more-voice"><span class="more-row-icon">${icon('volume',15)}</span><span class="more-row-title">语音与播报</span><span class="more-row-value">${ttsConfig.connected?'已连接':'未连接'}</span><span class="more-row-chevron">${icon('chevron',13)}</span></button>
     </div>
-    <div class="more-note">附件发送将在 M3 开放，当前可使用文字或语音输入。</div>
+    <div class="more-note">图片与文件随当前指令发送 · 单文件不超过 20 MB</div>
   </div></div>`;
+}
+/* M3 attachment uplink prototype. All picks, progress and retries are simulated locally. */
+let attachmentPicker='',pickerSelection=[],draftAttachments=[],attachmentDraftOwner='s1',attachmentPreview=null,attachmentSerial=0;
+function demoAttachmentImage(label,from,to,accent){
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="540" viewBox="0 0 720 540"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="720" height="540" rx="32" fill="url(#g)"/><circle cx="602" cy="92" r="118" fill="${accent}" opacity=".18"/><circle cx="92" cy="470" r="180" fill="${accent}" opacity=".12"/><rect x="54" y="58" width="612" height="424" rx="24" fill="#fff" opacity=".88"/><rect x="86" y="94" width="180" height="18" rx="9" fill="${accent}" opacity=".8"/><rect x="86" y="134" width="548" height="1" fill="#232529" opacity=".12"/><rect x="88" y="176" width="162" height="112" rx="16" fill="${accent}" opacity=".15"/><rect x="278" y="176" width="162" height="112" rx="16" fill="${accent}" opacity=".24"/><rect x="468" y="176" width="164" height="112" rx="16" fill="${accent}" opacity=".36"/><path d="M92 402 198 332l92 42 134-94 202 122" fill="none" stroke="${accent}" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/><text x="86" y="452" font-family="-apple-system,BlinkMacSystemFont,PingFang SC,sans-serif" font-size="24" font-weight="650" fill="#232529">${label}</text></svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
+}
+const attachmentMedia=[
+  {sampleId:'media-architecture',kind:'image',name:'移动端架构图.png',bytes:1887436,mime:'image/png',src:demoAttachmentImage('移动端架构图','#dce8f5','#f5f7fa','#536f8c')},
+  {sampleId:'media-prototype',kind:'image',name:'会话页原型对比.png',bytes:2467604,mime:'image/png',src:demoAttachmentImage('会话页原型对比','#e7e4f5','#f8f7fb','#776b9e')},
+  {sampleId:'media-flow',kind:'image',name:'附件链路草图.jpg',bytes:1321205,mime:'image/jpeg',src:demoAttachmentImage('附件链路草图','#dcefe8','#f6faf8','#417c68')},
+  {sampleId:'media-screen',kind:'image',name:'会话页截图.png',bytes:989184,mime:'image/png',src:demoAttachmentImage('会话页截图','#30343b','#606a78','#e4e9f0')}
+];
+const attachmentFiles=[
+  {sampleId:'file-pdf',kind:'file',name:'移动端附件需求.pdf',bytes:2936012,mime:'application/pdf',type:'PDF'},
+  {sampleId:'file-md',kind:'file',name:'接口字段说明.md',bytes:49152,mime:'text/markdown',type:'MD'},
+  {sampleId:'file-retry',kind:'file',name:'弱网复现日志.txt',bytes:12288,mime:'text/plain',type:'TXT',failOnce:true,demoNote:'可演示失败重试'},
+  {sampleId:'file-large',kind:'file',name:'release-package.zip',bytes:25804800,mime:'application/zip',type:'ZIP',disabled:true}
+];
+function currentAttachmentSessionId(){return (selectedSession||sessions[0]||{}).id||'s1'}
+function ensureAttachmentDraftOwner(){const id=currentAttachmentSessionId();if(attachmentDraftOwner!==id){attachmentDraftOwner=id;draftAttachments=[];pickerSelection=[];attachmentPicker='';attachmentPreview=null}}
+function formatAttachmentBytes(bytes){if(bytes>=1048576)return (bytes/1048576).toFixed(bytes>=10485760?1:2)+' MB';return Math.max(1,Math.round(bytes/1024))+' KB'}
+function closeAttachmentPicker(){attachmentPicker='';pickerSelection=[]}
+function addDraftAttachments(items){
+  let added=0,duplicate=0,limited=0;
+  items.forEach(item=>{
+    if(draftAttachments.some(existing=>existing.name===item.name)){duplicate++;return}
+    if(draftAttachments.length>=6){limited++;return}
+    draftAttachments.push({...item,id:'att_draft_'+Date.now()+'_'+(++attachmentSerial),status:'ready'});added++;
+  });
+  closeAttachmentPicker();moreSheetOpen=false;renderMobile();
+  if(added)toast(`已添加 ${added} 个附件，可补充文字后一起发送`);
+  else if(duplicate)toast('所选附件已在草稿中');
+  else if(limited)toast('每条消息最多添加 6 个附件');
+}
+function attachmentPickerHtml(){
+  if(!attachmentPicker)return '';
+  const media=attachmentPicker==='media';
+  const samples=media?attachmentMedia:attachmentFiles;
+  const title=media?'选择照片 / 视频':'选择文件';
+  const content=media?`<div class="attachment-media-grid">${samples.map(item=>{const on=pickerSelection.includes(item.sampleId);return `<button class="attachment-media-option ${on?'on':''}" data-action="toggle-attachment-sample" data-sample-id="${item.sampleId}" aria-pressed="${on}" aria-label="${on?'取消选择':'选择'} ${attr(item.name)}"><img src="${attr(item.src)}" alt=""><span class="attachment-media-check">${icon('check',12)}</span><span class="attachment-media-name">${esc(item.name)}</span></button>`}).join('')}</div>`:`<div class="attachment-file-list">${samples.map(item=>{const on=pickerSelection.includes(item.sampleId);return `<button class="attachment-file-option ${on?'on':''}" data-action="toggle-attachment-sample" data-sample-id="${item.sampleId}" aria-pressed="${on}" ${item.disabled?'disabled':''}><span class="draft-file-icon">${icon('file',17)}</span><span class="attachment-file-option-copy"><span class="attachment-file-option-name">${esc(item.name)}</span><span class="attachment-file-option-meta">${esc(item.type)} · ${formatAttachmentBytes(item.bytes)}${item.demoNote?' · '+esc(item.demoNote):''}</span></span>${item.disabled?'<span class="attachment-file-limit">超过 20 MB</span>':`<span class="attachment-file-check">${icon('check',12)}</span>`}</button>`}).join('')}</div>`;
+  return `<div class="sheet-layer" data-action="close-attachment-picker"><div class="attachment-sheet" role="dialog" aria-modal="true" aria-label="${title}"><div class="attachment-sheet-head"><div class="sheet-handle"></div><div class="attachment-sheet-title">${title}</div><div class="attachment-sheet-sub">${media?'可多选；选中后先进入草稿，不会立即发送。':'支持 PDF、文档、文本与压缩包；单文件不超过 20 MB。'}</div></div><div class="attachment-sheet-scroll">${content}</div><div class="attachment-sheet-foot"><div class="attachment-selection-meta"><span>已选 ${pickerSelection.length} 项 · 每条消息最多 6 项</span><span>原型不读取本机内容</span></div><button class="btn primary attachment-confirm" data-action="confirm-attachment-picker" ${pickerSelection.length?'':'disabled'}>添加${pickerSelection.length?' '+pickerSelection.length+' 项':''}</button></div></div></div>`;
+}
+function attachmentDraftHtml(){
+  if(!draftAttachments.length)return '';
+  return `<div class="attachment-draft" aria-label="待发送附件">${draftAttachments.map(item=>`<div class="draft-attachment ${item.kind==='file'?'file':'image'}">${item.kind==='image'?`<button class="draft-attachment-preview" data-action="preview-draft-attachment" data-attachment-id="${item.id}" aria-label="预览 ${attr(item.name)}"><img src="${attr(item.src)}" alt="${attr(item.name)}"></button>`:`<div class="draft-attachment-preview"><span class="draft-file-icon">${icon('file',16)}</span><span class="draft-file-copy"><span class="draft-file-name">${esc(item.name)}</span><span class="draft-file-meta">${esc(item.type||'FILE')} · ${formatAttachmentBytes(item.bytes)}</span></span></div>`}<button class="draft-attachment-remove" data-action="remove-draft-attachment" data-attachment-id="${item.id}" title="移除 ${attr(item.name)}" aria-label="移除 ${attr(item.name)}">${icon('x',11)}</button></div>`).join('')}<button class="draft-attachment-add" data-action="open-more" title="继续添加附件" aria-label="继续添加附件">${icon('plus',18)}</button></div>`;
+}
+function attachmentPreviewHtml(){
+  if(!attachmentPreview)return '';
+  const item=attachmentPreview.item;
+  return `<div class="attachment-preview-layer" data-action="close-attachment-preview"><div class="attachment-preview-head"><div class="attachment-preview-title">${esc(item.name)}</div><button class="attachment-preview-close" data-action="close-attachment-preview" aria-label="关闭图片预览">${icon('x',17)}</button></div><div class="attachment-preview-body"><img src="${attr(item.src)}" alt="${attr(item.name)}"></div><div class="attachment-preview-foot"><div class="attachment-preview-name">${esc(item.name)}</div><div class="attachment-preview-meta">${formatAttachmentBytes(item.bytes)} · ${attachmentPreview.source==='draft'?'待发送':'已发送'}</div>${attachmentPreview.source==='draft'?`<button class="btn" data-action="remove-preview-draft">移除附件</button>`:''}</div></div>`;
+}
+function messageAttachmentsHtml(message){
+  if(!message.attachments||!message.attachments.length)return '';
+  return `<div class="message-attachments">${message.attachments.map(item=>{
+    if(item.kind==='image')return `<div class="message-attachment image ${item.status}"><button class="message-image-open" data-action="preview-sent-attachment" data-attachment-id="${item.id}" aria-label="预览 ${attr(item.name)}" ${item.status==='ready'?'':'disabled'}><img src="${attr(item.src)}" alt="${attr(item.name)}"></button>${item.status==='uploading'?`<span class="message-upload-overlay">上传中 ${item.progress||0}%</span>`:item.status==='failed'?'<span class="message-upload-overlay">上传失败</span>':''}<span class="message-attachment-name">${esc(item.name)}</span>${item.status==='failed'?`<button class="message-attachment-retry" data-action="retry-message-attachment" data-message-id="${message.id}" data-attachment-id="${item.id}">${icon('refresh',11)}重试</button>`:''}</div>`;
+    const meta=item.status==='uploading'?`上传中 ${item.progress||0}%`:item.status==='failed'?'上传失败':`${item.type||'FILE'} · ${formatAttachmentBytes(item.bytes)}`;
+    return `<div class="message-attachment file ${item.status}"><span class="draft-file-icon">${icon(item.status==='failed'?'x':'file',15)}</span><span class="draft-file-copy"><span class="draft-file-name">${esc(item.name)}</span><span class="draft-file-meta">${esc(meta)}</span></span>${item.status==='failed'?`<button class="message-attachment-retry" data-action="retry-message-attachment" data-message-id="${message.id}" data-attachment-id="${item.id}">${icon('refresh',11)}重试</button>`:item.status==='ready'?icon('check',13):''}</div>`;
+  }).join('')}</div>`;
 }
 function modelSheetHtml(){
   if(!modelSheetOpen)return '';
@@ -516,9 +648,10 @@ function drawerSessionItem(s,current){return `<button class="drawer-session ${cu
 function renderDrawerPreserveScroll(){const previous=document.querySelector('.drawer-scroll');const top=previous?previous.scrollTop:0;renderMobile();const next=document.querySelector('.drawer-scroll');if(next)next.scrollTop=top}
 function sessionDrawerHtml(){if(!sessionDrawerOpen)return '';if(!mobileVisibleDevices().length){sessionDrawerOpen=false;return ''}const device=mobileVisibleDevices().find(d=>d.name===currentDevice)||mobileVisibleDevices()[0];const current=selectedSession||sessions[0];const workspaceHtml=device.workspaces.map(name=>{const items=sessions.filter(s=>s.device===currentDevice&&s.workspace===name);const open=drawerExpandedWorkspace===name;const shown=open?items.slice(0,drawerSessionLimit):[];const remaining=Math.max(0,items.length-shown.length);return `<div class="drawer-workspace-group"><div class="drawer-workspace-row"><button class="drawer-workspace ${name===currentWorkspace?'on':''} ${open?'open':''}" data-action="drawer-workspace" data-workspace="${attr(name)}" aria-expanded="${open}">${icon('folder',16)}<span class="drawer-workspace-name">${attr(name)}</span><span class="drawer-workspace-count">${items.length}</span>${icon('chevron',13)}</button><button class="drawer-workspace-add" data-action="drawer-new-workspace" data-workspace="${attr(name)}" title="在 ${attr(name)} 中新建会话" aria-label="在 ${attr(name)} 中新建会话">${icon('plus',15)}</button></div>${open?`<div class="drawer-workspace-sessions">${shown.length?shown.map(s=>drawerSessionItem(s,current)).join(''):'<div class="drawer-empty">这个工作区还没有会话</div>'}${remaining>0?`<button class="drawer-more" data-action="drawer-more-sessions" data-workspace="${attr(name)}">查看更多（${remaining}）</button>`:items.length>5?`<button class="drawer-more collapse" data-action="drawer-collapse-sessions" data-workspace="${attr(name)}">收起</button>`:''}</div>`:''}</div>`}).join('');return `<div class="session-drawer-layer"><button class="session-drawer-backdrop" data-action="close-session-drawer" aria-label="关闭会话侧边栏"></button><aside class="session-drawer" role="dialog" aria-modal="true" aria-label="设备、工作区与会话"><div class="drawer-device-wrap"><button class="drawer-device ${drawerDeviceMenu?'open':''}" data-action="toggle-device-menu" aria-expanded="${drawerDeviceMenu}"><span class="drawer-device-icon">${icon('monitor',18)}<span class="dot ${device.online?'':'drawer-offline'}"></span></span><span class="grow"><span class="drawer-device-name">${device.name}</span><span class="drawer-device-meta" style="display:block">${device.online?'在线 · 延迟 18ms':'离线 · 可查看历史会话'}</span></span>${icon('chevron',15)}</button>${drawerDeviceMenu?`<div class="drawer-device-menu">${mobileVisibleDevices().map(d=>`<button class="drawer-device-option ${d.name===currentDevice?'on':''}" data-action="drawer-device" data-device="${attr(d.name)}"><span class="dot ${d.online?'':'drawer-offline'}"></span><span>${d.name}</span>${d.name===currentDevice?icon('check',13):''}</button>`).join('')}</div>`:''}</div><button class="drawer-new" data-action="drawer-new-session">${icon('plus',16)}新建会话<span style="color:var(--muted);font-size:12px;font-weight:400">· ${attr(currentWorkspace)}</span></button><div class="drawer-scroll"><div class="drawer-section-head">工作区<span>${device.workspaces.length} 个 · 展开查看会话</span></div>${workspaceHtml}</div><div class="drawer-footer"><span class="dot ${device.online?'':'drawer-offline'}"></span>${device.online?'设备在线':'设备离线'} · 每个工作区默认展示 5 条会话</div></aside></div>`}
 function chat(){
+  ensureAttachmentDraftOwner();
   const s=selectedSession||sessions[0];
   const voiceActive=voiceStatus!=='idle';
-  return `<div class="chat-head"><button class="icon-btn" data-action="open-session-drawer" title="设备、工作区与会话" aria-label="打开会话侧边栏">${icon('menu')}</button><div class="chat-title"><div class="chat-name">${esc(s.title)}</div><div class="chat-state">● ${esc(s.device)} · ${esc(s.workspace)}</div></div><button class="icon-btn" data-action="new" title="新建会话" aria-label="新建会话">${icon('plus',18)}</button></div><div class="chat-messages" id="chatMessages"><div class="date">今天 21:58</div>${messages.map(messageHtml).join('')}</div><div class="composer ${voiceActive?'voice-active':''}"><div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="compose-box voice-compose ${voiceMode?'voice-mode':'text-mode'} ${chatDraft.trim()?'has-draft':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="按住说话，松手发送，上移取消" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'?'disabled':''}><span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span></button><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button>`:`<textarea id="draft" rows="1" aria-label="输入消息" placeholder="发消息或按住说话…">${esc(chatDraft)}</textarea><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button><button class="send" data-action="send" title="发送" aria-label="发送">${icon('send',16)}</button>`}</div></div>`
+  return `<div class="chat-head"><button class="icon-btn" data-action="open-session-drawer" title="设备、工作区与会话" aria-label="打开会话侧边栏">${icon('menu')}</button><div class="chat-title"><div class="chat-name">${esc(s.title)}</div><div class="chat-state">● ${esc(s.device)} · ${esc(s.workspace)}</div></div><button class="icon-btn" data-action="new" title="新建会话" aria-label="新建会话">${icon('plus',18)}</button></div><div class="chat-messages" id="chatMessages"><div class="date">今天 21:58</div>${messages.map(messageHtml).join('')}</div><div class="composer ${voiceActive?'voice-active':''}">${attachmentDraftHtml()}<div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="compose-box voice-compose ${voiceMode?'voice-mode':'text-mode'} ${chatDraft.trim()||draftAttachments.length?'has-draft':''} ${draftAttachments.length?'has-attachments':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="按住说话，松手发送，上移取消" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'?'disabled':''}><span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span></button><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button>`:`<textarea id="draft" rows="1" aria-label="输入消息" placeholder="发消息或按住说话…">${esc(chatDraft)}</textarea><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button><button class="send" data-action="send" title="发送" aria-label="发送">${icon('send',16)}</button>`}</div></div>`
 }
 function voiceFeedbackHtml(){if(voiceStatus==='idle')return '';const processing=voiceStatus==='processing';return `<div class="voice-release-copy">${processing?'正在识别并发送…':voiceCancelArmed?'松开取消':'松手发送，上移取消'}</div><div class="voice-wave" aria-hidden="true">${Array.from({length:25},(_,i)=>`<i style="--i:${i}"></i>`).join('')}</div>`}
 function elapsedLabel(ms){const total=Math.max(0,Math.floor(ms/1000));const m=Math.floor(total/60);const s=total%60;return m>0?`${m} 分 ${s} 秒`:`${s} 秒`}
@@ -559,7 +692,13 @@ function turnHtml(turn,index){
   const final=turn.final?`<div class="turn-final"><div class="final-text">${esc(turn.final.text)}</div><div class="turn-foot"><button class="message-tts" data-action="play-turn" data-turn-index="${index}" title="使用 TTS 朗读这条回复">${icon('volume',13)}朗读</button><span class="turn-time">${esc(turn.final.time)}</span></div></div>`:'';
   return `<div class="turn-wrap"><div class="turn-card">${head}${body}${final}</div></div>`;
 }
-function messageHtml(m,index){if(m.role==='turn')return turnHtml(m,index);if(m.role==='tool')return `<div class="tool-card"><div class="tool-head"><div class="tool-icon">${icon('command',15)}</div>${m.name}<span style="margin-left:auto">${badge('成功','success')}</span></div><div class="code">${m.command}</div><div class="message-time">${m.result}</div></div>`;return `<div class="message ${m.role==='user'?'user':m.role==='assistant'?'assistant':''}"><div class="bubble">${esc(m.text)}<div class="message-time">${m.time}</div></div>${m.role==='assistant'?`<button class="message-tts" data-action="play-message" data-message-index="${index}" title="使用 TTS 朗读此回复">${icon('volume',13)}朗读</button>`:''}</div>`}
+function messageHtml(m,index){
+  if(m.role==='turn')return turnHtml(m,index);
+  if(m.role==='tool')return `<div class="tool-card"><div class="tool-head"><div class="tool-icon">${icon('command',15)}</div>${m.name}<span style="margin-left:auto">${badge('成功','success')}</span></div><div class="code">${m.command}</div><div class="message-time">${m.result}</div></div>`;
+  const uploadSummary=m.uploadState==='uploading'?'<div class="message-upload-summary">附件上传完成后才会发送指令</div>':m.uploadState==='failed'?'<div class="message-upload-summary">部分附件上传失败，指令尚未发送；可只重试失败项。</div>':'';
+  const messageIdentity=m.id?` data-upload-message="${attr(m.id)}"`:'';
+  return `<div class="message ${m.role==='user'?'user':m.role==='assistant'?'assistant':''}"${messageIdentity}><div class="bubble">${m.text?`<div class="message-text">${esc(m.text)}</div>`:''}${messageAttachmentsHtml(m)}${uploadSummary}<div class="message-time">${m.time}</div></div>${m.role==='assistant'?`<button class="message-tts" data-action="play-message" data-message-index="${index}" title="使用 TTS 朗读此回复">${icon('volume',13)}朗读</button>`:''}</div>`;
+}
 function tasks(){return `<div class="phone-scroll"><div class="mobile-head"><div><div class="mobile-title">待办</div><div class="mobile-sub">${approvalState==='pending'?'1 项需要你的处理':'待办已清空'}</div></div><button class="icon-btn" data-action="notify">${icon('refresh',16)}</button></div><div class="section-label">需要处理</div>${approvalState==='pending'?`<button class="approval-card clickable" data-page="approval"><div class="approval-top"><div class="risk">${icon('shield')}</div><div><div class="approval-title">运行集成测试</div><div class="approval-sub">高风险操作 · 剩余 04:38</div></div><span style="margin-left:auto">${icon('chevron',16)}</span></div><div class="approval-body">修复 WebSocket 断线重连 · server</div><div class="code">pnpm test:integration</div>${badge('等待你的决定','warn')}</button>`:`<div class="info-card" style="text-align:center;padding:28px;color:var(--muted)">${icon('check',26)}<div style="margin-top:9px">待办已清空</div></div>`}<div class="section-label">稍后关注</div><div class="approval-card"><div class="approval-top"><div class="risk" style="color:var(--red)">${icon('activity')}</div><div><div class="approval-title">推送证书即将到期</div><div class="approval-sub">系统提醒 · 7 天后到期</div></div></div><div class="approval-body">更新 APNs 证书后，后台通知才能正常送达。</div><button class="btn" data-action="notify">查看设置</button></div></div>`}
 function approval(){return `<div class="phone-scroll"><div class="detail-head"><button class="icon-btn" data-page="tasks">${icon('back',17)}</button><div class="detail-title">操作审批</div>${badge('高风险','warn')}</div><div class="info-card"><div style="display:flex;gap:12px;align-items:center"><div class="risk">${icon('command',19)}</div><div><div class="approval-title">运行集成测试</div><div class="approval-sub">bash · 22:04:18</div></div></div><div class="code">pnpm test:integration\n--workspace server</div><div class="approval-body" style="margin-bottom:0">Agent 需要运行完整集成测试，验证断线恢复期间不会重复提交指令。</div></div><div class="section-label">影响范围</div><div class="info-card">${[['桌面设备','MacBook Pro'],['工作区','server'],['会话','修复 WebSocket 断线重连'],['发起者','DeepSeek Agent'],['有效期','04:38']].map(([k,v])=>`<div class="info-row"><span>${k}</span><span>${v}</span></div>`).join('')}</div><div class="warning">此操作会在桌面工作区执行命令。请确认命令、路径和会话上下文。批准仅对本次请求有效。</div><div class="button-row"><button class="btn danger" data-action="reject">拒绝</button><button class="btn primary" data-action="allow">${icon('shield',15)}允许一次</button></div><button class="btn ghost" style="width:100%;margin-top:8px" data-action="view-session">查看会话</button></div>`}
 function userPolicyLabel(name){return policySelection.members.includes(name)?'移动端研发组':'未关联策略'}
@@ -674,7 +813,7 @@ function createSession(){
 }
 function sheetHtml(){if(!sheet)return '';const approve=sheet==='approval';return `<div class="sheet-layer" data-action="close-sheet"><div class="sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><div class="sheet-icon">${icon(approve?'shield':'logout',27)}</div><div class="sheet-title">${approve?'使用 Face ID 确认':'解除这台设备的配对？'}</div><div class="sheet-copy">${approve?'你正在允许 MacBook Pro 执行一次集成测试。此授权不会应用到其他命令。':'解除后将阻止新的远程指令。桌面上的现有会话和正在运行的任务不会被删除。'}</div><div class="button-row"><button class="btn" data-action="close-sheet">再想想</button><button class="btn ${approve?'primary':'danger'}" data-action="${approve?'confirm-allow':'confirm-revoke'}">${approve?'验证并允许':'确认解除'}</button></div></div></div>`}
 function renderChatPreservingScroll(){const before=document.getElementById('chatMessages');const top=before?before.scrollTop:0;renderMobile();const after=document.getElementById('chatMessages');if(after)after.scrollTop=top}
-function renderMobile(){let content=mobilePage==='sessions'?chat():mobilePage==='chat'?chat():mobilePage==='tasks'?tasks():mobilePage==='approval'?approval():mobilePage==='devices'?devices():mobilePage==='desktopAuth'?desktopAuth():mobilePage==='phoneRecovery'?phoneRecovery():mobilePage==='new'?newSession():mobilePage==='voiceSettings'?voiceServiceSettings():profile();document.getElementById('phone').innerHTML=`<div class="phone-status"><span>9:41</span><div class="notch"></div><span>5G ▰</span></div><div class="phone-body">${content}</div>${sessionDrawerHtml()}${['sessions','chat','tasks','devices','profile'].includes(mobilePage)?nav():''}${sheetHtml()}${modelSheetHtml()}${moreSheetHtml()}`;document.getElementById('guideList').innerHTML=guide.map(([id,title,sub],i)=>`<button class="guide-item ${mobilePage===id?'on':''}" data-page="${id}"><span class="num">${String(i+1).padStart(2,'0')}</span><div><div style="font-size:12px;font-weight:650">${title}</div><div style="font-size:9px;color:var(--muted);margin-top:3px">${sub}</div></div></button>`).join('');document.getElementById('flows').innerHTML=[['接收通知','任务完成或需要审批'],['核对上下文','设备、工作区与工具参数'],['安全推进','发送指令或允许一次'],['断线恢复','按会话游标补齐事件']].map(([t,c],i)=>`<div class="flow"><div class="flow-line"><div class="flow-dot">${i+1}</div></div><div><div class="flow-title">${t}</div><div class="flow-copy">${c}</div></div></div>`).join('');hydrate(document.getElementById('mobileView'));const cm=document.getElementById('chatMessages');if(cm)cm.scrollTop=cm.scrollHeight;startTurnTimer()}
+function renderMobile(){let content=mobilePage==='sessions'?chat():mobilePage==='chat'?chat():mobilePage==='tasks'?tasks():mobilePage==='approval'?approval():mobilePage==='devices'?devices():mobilePage==='desktopAuth'?desktopAuth():mobilePage==='phoneRecovery'?phoneRecovery():mobilePage==='new'?newSession():mobilePage==='voiceSettings'?voiceServiceSettings():profile();document.getElementById('phone').innerHTML=`<div class="phone-status"><span>9:41</span><div class="notch"></div><span>5G ▰</span></div><div class="phone-body">${content}</div>${sessionDrawerHtml()}${['sessions','chat','tasks','devices','profile'].includes(mobilePage)?nav():''}${sheetHtml()}${modelSheetHtml()}${moreSheetHtml()}${attachmentPickerHtml()}${attachmentPreviewHtml()}`;document.getElementById('guideList').innerHTML=guide.map(([id,title,sub],i)=>`<button class="guide-item ${mobilePage===id?'on':''}" data-page="${id}"><span class="num">${String(i+1).padStart(2,'0')}</span><div><div style="font-size:12px;font-weight:650">${title}</div><div style="font-size:9px;color:var(--muted);margin-top:3px">${sub}</div></div></button>`).join('');document.getElementById('flows').innerHTML=[['接收通知','任务完成或需要审批'],['核对上下文','设备、工作区与工具参数'],['安全推进','发送指令或允许一次'],['断线恢复','按会话游标补齐事件']].map(([t,c],i)=>`<div class="flow"><div class="flow-line"><div class="flow-dot">${i+1}</div></div><div><div class="flow-title">${t}</div><div class="flow-copy">${c}</div></div></div>`).join('');hydrate(document.getElementById('mobileView'));const cm=document.getElementById('chatMessages');if(cm)cm.scrollTop=cm.scrollHeight;startTurnTimer()}
 const adminNav=[['overview','home','概览'],['users','users','用户与角色'],['devices','monitor','设备管理'],['policies','lock','访问策略'],['running','activity','运行与会话'],['approvals','shield','审批策略'],['audit','list','审计日志'],['settings','settings','系统设置']];
 const adminSessions=[['设计 DSH Connect 高保真原型','sess_8fa2','MacBook Pro','李伟','active','刚刚'],['修复 WebSocket 断线重连','sess_72bc','MacBook Pro','陈晨','pending','2 分钟前'],['实现会话事件协议','sess_31de','Mac Studio','李伟','finished','18:26'],['补充移动端断网测试','sess_19a8','Mac Studio','王敏','error','17:42']];
 function metric(ic,label,value,delta,down=false){return `<div class="metric"><div class="metric-top"><span>${label}</span><div class="metric-icon">${icon(ic,16)}</div></div><div class="metric-value">${value}</div><div class="metric-delta ${down?'down':''}">${delta}</div></div>`}
@@ -799,7 +938,36 @@ document.addEventListener('click',e=>{const el=e.target.closest('button');if(!el
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&policyOpen){policyOpen='';renderAdmin()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet){sheet='';renderMobile()}if(e.key==='Enter'&&!e.shiftKey&&e.target.id==='draft'){e.preventDefault();document.querySelector('[data-action="send"]').click()}});
 document.addEventListener('input',e=>{if(e.target.id==='sessionSearch'){const q=e.target.value.toLowerCase();document.querySelectorAll('.session-card').forEach(card=>{const s=sessions.find(x=>x.id===card.dataset.session);card.classList.toggle('hidden',!(s.title+s.workspace).toLowerCase().includes(q))})}});
-function sendChatMessage(text){const value=text.trim();if(!value){toast('请输入补充指令');return false}messages.push({role:'user',text:value,time:'刚刚'});renderMobile();toast('DSH 已接受指令（模拟）');setTimeout(()=>{messages.push({role:'assistant',text:'收到。我会沿用当前工作区与权限策略继续执行，并在需要审批时通知你。',time:'刚刚'});if(mobilePage==='chat')renderMobile()},700);return true}
+function finishAttachmentMessage(message,targetMessages){
+  if(message.uploadState==='sent'||message.attachments.some(item=>item.status!=='ready'))return;
+  message.uploadState='sent';
+  if(messages.includes(message)&&mobilePage==='chat')renderMobile();
+  toast('附件已就绪，指令已发送（模拟）');
+  setTimeout(()=>{
+    targetMessages.push({role:'assistant',text:`已收到 ${message.attachments.length} 个附件${message.text?'和补充指令':''}。附件会作为当前会话的消息内容交给 DSH（模拟）。`,time:'刚刚'});
+    if(messages===targetMessages&&mobilePage==='chat')renderMobile();
+  },700);
+}
+function sendChatMessage(text){
+  const value=text.trim();
+  const outgoing=draftAttachments.map(item=>({...item,status:'uploading',progress:8}));
+  if(!value&&!outgoing.length){toast('请输入补充指令或添加附件');return false}
+  if(!outgoing.length){
+    messages.push({role:'user',text:value,time:'刚刚'});renderMobile();toast('DSH 已接受指令（模拟）');setTimeout(()=>{messages.push({role:'assistant',text:'收到。我会沿用当前工作区与权限策略继续执行，并在需要审批时通知你。',time:'刚刚'});if(mobilePage==='chat')renderMobile()},700);return true;
+  }
+  const targetMessages=messages;
+  const message={id:'msg_attachment_'+Date.now()+'_'+(++attachmentSerial),role:'user',text:value,time:'刚刚',attachments:outgoing,uploadState:'uploading'};
+  targetMessages.push(message);draftAttachments=[];chatDraft='';renderMobile();toast(`正在上传 ${outgoing.length} 个附件（模拟）`);
+  setTimeout(()=>{if(message.uploadState!=='uploading')return;outgoing.forEach(item=>{if(item.status==='uploading')item.progress=46});if(messages.includes(message)&&mobilePage==='chat')renderMobile()},350);
+  setTimeout(()=>{
+    if(message.uploadState!=='uploading')return;
+    outgoing.forEach(item=>{if(item.failOnce){item.status='failed';item.progress=0}else{item.status='ready';item.progress=100}});
+    const failed=outgoing.some(item=>item.status==='failed');message.uploadState=failed?'failed':'ready';
+    if(messages.includes(message)&&mobilePage==='chat')renderMobile();
+    if(failed)toast('有附件上传失败，指令尚未发送');else finishAttachmentMessage(message,targetMessages);
+  },900);
+  return true;
+}
 function syncChatDraft(){const draft=document.getElementById('draft');if(draft)chatDraft=draft.value}
 function readTtsForm(){const provider=document.getElementById('ttsProvider');if(!provider)return;const next={provider:provider.value,endpoint:document.getElementById('ttsEndpoint').value.trim(),apiKey:document.getElementById('ttsApiKey').value,model:document.getElementById('ttsModel').value.trim(),voice:document.getElementById('ttsVoice').value,speed:document.getElementById('ttsSpeed').value};const changed=['provider','endpoint','apiKey','model'].some(key=>next[key]!==ttsConfig[key]);ttsConfig={...ttsConfig,...next,connected:changed?false:ttsConfig.connected,saved:changed?false:ttsConfig.saved}}
 function updateVoiceUi(){
@@ -837,6 +1005,62 @@ document.addEventListener('input',e=>{if(e.target.id==='draft'){chatDraft=e.targ
 document.addEventListener('change',e=>{if(e.target.id==='newDevice'){const prompt=document.getElementById('newPrompt');if(prompt)newSessionDraft=prompt.value;currentDevice=e.target.value;const device=mobileVisibleDevices().find(d=>d.name===currentDevice);currentWorkspace=device.workspaces[0];drawerExpandedWorkspace=currentWorkspace;drawerSessionLimit=5;newSessionError='';renderMobile()}if(e.target.id==='newWorkspace'){const prompt=document.getElementById('newPrompt');if(prompt)newSessionDraft=prompt.value;currentWorkspace=e.target.value;drawerExpandedWorkspace=currentWorkspace;newSessionError='';renderMobile()}if(e.target.id==='ttsProvider'){readTtsForm();const provider=ttsProviders[e.target.value];ttsConfig.provider=e.target.value;ttsConfig.endpoint=provider.endpoint;ttsConfig.model=provider.model;ttsConfig.connected=false;ttsConfig.saved=false;renderMobile()}});
 document.addEventListener('click',e=>{const el=e.target.closest('button');if(!el)return;if(el.dataset.session){const selected=sessions.find(s=>s.id===el.dataset.session);if(selected){currentDevice=selected.device;currentWorkspace=selected.workspace;drawerExpandedWorkspace=selected.workspace;const sessionIndex=sessions.filter(s=>s.device===selected.device&&s.workspace===selected.workspace).findIndex(s=>s.id===selected.id);drawerSessionLimit=Math.max(5,sessionIndex+1)}sessionDrawerOpen=false;drawerDeviceMenu=false;chatDraft='';voiceMode=false;voiceStatus='idle';renderMobile();return}if(el.dataset.page&&el.dataset.page!=='chat'&&voiceStatus==='listening'){clearInterval(voiceTimer);voiceStatus='idle';voiceMode=false}const action=el.dataset.action;if(action==='open-session-drawer'){if(voiceStatus!=='idle')return;syncChatDraft();sessionDrawerOpen=true;drawerDeviceMenu=false;renderMobile()}else if(action==='close-session-drawer'){sessionDrawerOpen=false;drawerDeviceMenu=false;renderMobile()}else if(action==='toggle-device-menu'){drawerDeviceMenu=!drawerDeviceMenu;renderMobile()}else if(action==='drawer-device'){currentDevice=el.dataset.device;const device=mobileVisibleDevices().find(d=>d.name===currentDevice);currentWorkspace=device.workspaces[0];drawerExpandedWorkspace=currentWorkspace;drawerSessionLimit=5;drawerDeviceMenu=false;renderMobile();toast('已切换到 '+currentDevice+'，请选择工作区或会话')}else if(action==='drawer-workspace'){const name=el.dataset.workspace;currentWorkspace=name;drawerExpandedWorkspace=drawerExpandedWorkspace===name?'':name;drawerSessionLimit=5;drawerDeviceMenu=false;renderDrawerPreserveScroll()}else if(action==='drawer-more-sessions'){currentWorkspace=el.dataset.workspace;drawerExpandedWorkspace=currentWorkspace;drawerSessionLimit=Number.MAX_SAFE_INTEGER;renderDrawerPreserveScroll()}else if(action==='drawer-collapse-sessions'){drawerSessionLimit=5;renderDrawerPreserveScroll()}else if(action==='drawer-new-workspace'){currentWorkspace=el.dataset.workspace;drawerExpandedWorkspace=currentWorkspace;drawerSessionLimit=5;sessionDrawerOpen=false;drawerDeviceMenu=false;newSessionError='';mobilePage='new';renderMobile()}else if(action==='drawer-new-session'){sessionDrawerOpen=false;drawerDeviceMenu=false;newSessionError='';mobilePage='new';renderMobile()}else if(action==='toggle-voice-mode'){if(voiceStatus!=='idle')return;syncChatDraft();voiceMode=!voiceMode;renderMobile()}else if(action==='toggle-voice-input'){voiceEnabled=!voiceEnabled;if(!voiceEnabled)voiceMode=false;renderMobile();toast(voiceEnabled?'语音输入已开启':'语音输入已关闭')}else if(action==='toggle-tts-key'){readTtsForm();showTtsKey=!showTtsKey;renderMobile()}else if(action==='test-tts'){readTtsForm();if(!ttsConfig.endpoint||!ttsConfig.apiKey.trim()||!ttsConfig.model){toast('请完整填写服务地址、凭据和模型');return}ttsTesting=true;ttsConfig.connected=false;renderMobile();setTimeout(()=>{ttsTesting=false;ttsConfig.connected=true;ttsConfig.saved=true;if(mobilePage==='voiceSettings')renderMobile();toast(ttsProviders[ttsConfig.provider].name+' TTS 连接成功（模拟）')},900)}else if(action==='save-tts'){readTtsForm();if(!ttsConfig.endpoint||!ttsConfig.apiKey.trim()||!ttsConfig.model){toast('请完整填写服务地址、凭据和模型');return}ttsConfig.saved=true;renderMobile();toast('TTS 服务配置已保存到本次原型会话')}else if(action==='preview-tts'){if(!ttsConfig.connected){toast('请先完成 TTS 连接测试');return}toast('正在试听「'+ttsConfig.voice+'」（模拟）')}else if(action==='toggle-tts-autoplay'){readTtsForm();ttsConfig.autoPlay=!ttsConfig.autoPlay;renderMobile();toast(ttsConfig.autoPlay?'Agent 回复自动播报已开启':'Agent 回复自动播报已关闭')}else if(action==='play-message'){if(!ttsConfig.connected){toast('请先在“我的”中配置并连接 TTS 服务');return}const message=messages[Number(el.dataset.messageIndex)];if(message)toast('正在通过 '+ttsProviders[ttsConfig.provider].name+' 朗读回复（模拟）')}else if(action==='open-model-sheet'){if(voiceStatus!=='idle')return;syncChatDraft();modelSheetNotice='';modelSheetOpen=true;renderMobile()}else if(action==='pick-model'){selectSessionModel(el.dataset.provider,el.dataset.model)}else if(action==='pick-effort'){selectModelEffort(el.dataset.effort)}else if(action==='send'){chatDraft='';voiceMode=false;voiceStatus='idle';const draft=document.getElementById('draft');if(draft)draft.value=''}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sessionDrawerOpen){sessionDrawerOpen=false;drawerDeviceMenu=false;renderMobile()}});
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-action]');
+  if(!el)return;
+  const action=el.dataset.action;
+  const handled=['open-camera','open-media-picker','open-file-picker','close-attachment-picker','toggle-attachment-sample','confirm-attachment-picker','remove-draft-attachment','preview-draft-attachment','preview-sent-attachment','close-attachment-preview','remove-preview-draft','retry-message-attachment'];
+  if(!handled.includes(action))return;
+  if((action==='close-attachment-picker'||action==='close-attachment-preview')&&el.classList.contains('sheet-layer')||action==='close-attachment-preview'&&el.classList.contains('attachment-preview-layer')){
+    if(e.target!==el)return;
+  }
+  e.preventDefault();e.stopImmediatePropagation();
+  if(action==='open-camera'){
+    syncChatDraft();moreSheetOpen=false;
+    addDraftAttachments([{...attachmentMedia[2],sampleId:'camera-photo',name:'拍摄照片.jpg',bytes:1651507,mime:'image/jpeg'}]);
+  }else if(action==='open-media-picker'||action==='open-file-picker'){
+    syncChatDraft();moreSheetOpen=false;attachmentPreview=null;pickerSelection=[];attachmentPicker=action==='open-media-picker'?'media':'file';renderMobile();
+  }else if(action==='close-attachment-picker'){
+    closeAttachmentPicker();renderMobile();
+  }else if(action==='toggle-attachment-sample'){
+    const sample=[...attachmentMedia,...attachmentFiles].find(item=>item.sampleId===el.dataset.sampleId);if(!sample||sample.disabled)return;
+    const index=pickerSelection.indexOf(sample.sampleId);
+    if(index>=0)pickerSelection.splice(index,1);
+    else{if(draftAttachments.length+pickerSelection.length>=6){toast('每条消息最多添加 6 个附件');return}pickerSelection.push(sample.sampleId)}
+    renderMobile();
+  }else if(action==='confirm-attachment-picker'){
+    const source=attachmentPicker==='media'?attachmentMedia:attachmentFiles;
+    addDraftAttachments(source.filter(item=>pickerSelection.includes(item.sampleId)&&!item.disabled));
+  }else if(action==='remove-draft-attachment'){
+    const index=draftAttachments.findIndex(item=>item.id===el.dataset.attachmentId);if(index>=0)draftAttachments.splice(index,1);
+    if(attachmentPreview?.item.id===el.dataset.attachmentId)attachmentPreview=null;renderMobile();
+  }else if(action==='preview-draft-attachment'){
+    const item=draftAttachments.find(candidate=>candidate.id===el.dataset.attachmentId);if(item){attachmentPreview={item,source:'draft'};renderMobile()}
+  }else if(action==='preview-sent-attachment'){
+    const item=messages.flatMap(message=>message.attachments||[]).find(candidate=>candidate.id===el.dataset.attachmentId&&candidate.status==='ready');if(item){attachmentPreview={item,source:'sent'};renderMobile()}
+  }else if(action==='close-attachment-preview'){
+    attachmentPreview=null;renderMobile();
+  }else if(action==='remove-preview-draft'){
+    if(attachmentPreview?.source==='draft'){const id=attachmentPreview.item.id;draftAttachments=draftAttachments.filter(item=>item.id!==id)}attachmentPreview=null;renderMobile();
+  }else if(action==='retry-message-attachment'){
+    const targetMessages=messages;
+    const message=targetMessages.find(candidate=>candidate.id===el.dataset.messageId);
+    const item=message?.attachments?.find(candidate=>candidate.id===el.dataset.attachmentId);
+    if(!message||!item||item.status!=='failed')return;
+    item.failOnce=false;item.status='uploading';item.progress=18;message.uploadState='uploading';renderMobile();toast('正在重试这个附件，其他附件无需重新上传');
+    setTimeout(()=>{
+      item.status='ready';item.progress=100;
+      const failed=message.attachments.some(candidate=>candidate.status==='failed');message.uploadState=failed?'failed':'ready';
+      if(messages.includes(message)&&mobilePage==='chat')renderMobile();
+      if(!failed)finishAttachmentMessage(message,targetMessages);
+    },700);
+  }
+},true);
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(attachmentPreview){e.preventDefault();e.stopImmediatePropagation();attachmentPreview=null;renderMobile()}
+  else if(attachmentPicker){e.preventDefault();e.stopImmediatePropagation();closeAttachmentPicker();renderMobile()}
+},true);
 try{if(localStorage.getItem('dsh-prototype-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}hydrate();renderMobile();renderAdmin();renderConnector();
 </script>
 </body>
