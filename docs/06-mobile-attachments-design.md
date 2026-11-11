@@ -904,9 +904,10 @@ App 选择（ImagePicker / DocumentPicker）
 - **来源校验：** 上传要求 `prompt` scope（只读 grant 无法上传），`DSH_CONNECT_ATTACHMENTS` 需为 `readwrite`，`read` 模式下上传端点返回 404。
 - **名称安全：** 显示名不允许 `/`、`\`、NUL，最长 256 字符；MIME 以字节嗅探为准，识别为 `image/png|jpeg|webp|gif` 时按图片处理，其余按文件。
 - **Connector 回执入口：** 图片经 `fileUploads.uploadImageStream` 保留图像模态，普通文件经 `uploadStream`；两者在 prompt 中都使用 `{type:'file', receiptId}`，由 DSH 自己解析图片回执，不把 Base64 塞进 RPC。
-- **原始元数据：** Server 从已校验的上传行补充 `name`/`mime`，Connector 不再用 `atu_` id 替代文件名；旧 Server 未提供元数据时保留兼容回退。
+- **原始元数据：** Server 从已校验的上传行补充 `name`/`mime`，Connector 不再用 `atu_` id 替代文件名；旧 Server 未提供图片 MIME 时按字节签名识别，Host 缺少图片上传能力时明确拒绝，不静默降级为文件。
 - **纯附件与持久投影：** Connector 不再强制文字 part；持久 `user/message` 的图片/文件块会挂回对应用户消息。手机使用日志坐标生成的 `att_` id，DSH 的 `sha256:` 持久引用仅留在 Connector 内，读取前仍校验会话授权和大小。实时与快照 WSS 中的用户附件块也会剥离，仅作为安全 transcript 的刷新信号。
 - **手机归属：** 上传行记录 `mobile_device_id`，prompt 同时校验手机、桌面、会话与工作区，另一台授权手机也不能引用不属于自己的上传。
+- **并发与传输预算：** 同一草稿的重试和发送共享上传 Promise，只产生一个 Server id；message/deliverable/tool 共用 12 项附件上限和 63 KiB 消息体预算（为响应信封预留 1 KiB）。
 
 ### 移动端交互
 
@@ -919,8 +920,8 @@ App 选择（ImagePicker / DocumentPicker）
 ### 本轮验证
 
 - Server：`go test ./...` 与 `go vet ./...` 通过；新增图文/纯附件上行、原始元数据、双手机归属与设备令牌下载用例。
-- Connector：TypeScript 检查与 124 项测试通过；覆盖纯附件 prompt、图片/文件回执、用户消息持久投影、WSS 持久引用剥离与两类 Host 字节读取。
-- Mobile：lint、typecheck、108 项测试与 iOS/Android bundle 导出通过；鸿蒙壳 lint、typecheck 与 110 项测试通过。
+- Connector：TypeScript 检查与 130 项测试通过；覆盖纯附件 prompt、图片/文件回执、用户消息持久投影、WSS 持久引用剥离、统一传输预算与两类 Host 字节读取。
+- Mobile：lint、typecheck、109 项测试与 iOS/Android bundle 导出通过；鸿蒙壳 lint、typecheck 与 111 项测试通过。
 - 跨语言 E2E：PostgreSQL 与 SQLite 均通过；新增手机图片/文件原始字节上传 → Connector 下载 → Host 图片/文件回执 → 纯附件 prompt 闭环。
 
 ### 未完成与边界
