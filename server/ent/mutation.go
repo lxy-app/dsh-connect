@@ -3203,6 +3203,23 @@ func (m *SessionAttachmentMutation) OldDeviceID(ctx context.Context) (v string, 
 	return oldValue.DeviceID, nil
 }
 
+// OldMobileDeviceID returns the old "mobile_device_id" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldMobileDeviceID(ctx context.Context) (v string, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldMobileDeviceID is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldMobileDeviceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMobileDeviceID: %w", err)
+	}
+	return oldValue.MobileDeviceID, nil
+}
+
 // OldSessionID returns the old "session_id" field's value of the SessionAttachment entity.
 // If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
@@ -3482,6 +3499,8 @@ func (m *SessionAttachmentMutation) OldField(ctx context.Context, name string) (
 	switch name {
 	case sessionattachment.FieldDeviceID:
 		return m.OldDeviceID(ctx)
+	case sessionattachment.FieldMobileDeviceID:
+		return m.OldMobileDeviceID(ctx)
 	case sessionattachment.FieldSessionID:
 		return m.OldSessionID(ctx)
 	case sessionattachment.FieldWorkspaceID:

@@ -1,4 +1,4 @@
-import type { SessionAddress, SessionPageRequest, SessionPromptRequest, TurnWindow } from '../host-api.js';
+import type { SessionAddress, SessionPageRequest, TurnWindow } from '../host-api.js';
 import { isRecord } from '../types.js';
 import { protocolError } from './request-cache.js';
 
@@ -26,28 +26,83 @@ export function sessionAddress(sessionId: unknown): SessionAddress {
   return { kind: 'session', sessionId };
 }
 
-export function promptInput(params: PromptInputParams, requestId: string): SessionPromptRequest {
+export interface PromptContentInput {
+  readonly type: 'text';
+  readonly text: string;
+}
+
+/** One attachment reference the Server verified before forwarding the prompt. */
+export interface PromptAttachmentInput {
+  readonly type: 'image' | 'file';
+  readonly attachmentId: string;
+  /** Server-owned display metadata; optional for compatibility with older Servers. */
+  readonly name?: string;
+  readonly mime?: string;
+}
+
+/** One Host prompt content part: text stays inline, attachments cite an id. */
+export type PromptPartInput = PromptContentInput | PromptAttachmentInput;
+
+/** Connector-side prompt request, still carrying attachment ids for admission. */
+export interface PromptRequestInput {
+  readonly requestId: string;
+  readonly sessionId: string;
+  readonly mode: 'queue' | 'steer';
+  readonly content: readonly PromptPartInput[];
+  readonly attachments?: readonly PromptAttachmentInput[];
+  readonly clientTimeZone?: string;
+}
+
+export function promptInput(params: PromptInputParams, requestId: string): PromptRequestInput {
   if (params.mode !== undefined && params.mode !== 'queue' && params.mode !== 'steer') {
     throw protocolError('invalid_request', 'mode must be queue or steer');
   }
   if (!Array.isArray(params.content) || params.content.length === 0) {
     throw protocolError('invalid_request', 'At least one prompt content part is required');
   }
-  const content = params.content.map((part: unknown) => {
-    if (!isRecord(part) || part.type !== 'text' || typeof part.text !== 'string' || !part.text.trim()) {
-      throw protocolError('unsupported_content', 'P0 connectors accept non-empty text prompt parts only');
+  const content = params.content.map((part: unknown): PromptPartInput => {
+    if (!isRecord(part) || typeof part.type !== 'string') {
+      throw protocolError('unsupported_content', 'Prompt content parts must be text or an attachment');
     }
-    return { type: 'text' as const, text: part.text };
+    if (part.type === 'text') {
+      if (typeof part.text !== 'string' || !part.text.trim()) {
+        throw protocolError('unsupported_content', 'Text prompt parts must carry non-empty text');
+      }
+      return { type: 'text', text: part.text };
+    }
+    if (part.type === 'image' || part.type === 'file') {
+      if (typeof part.attachmentId !== 'string' || !part.attachmentId.trim()) {
+        throw protocolError('unsupported_content', 'Attachment parts must carry an attachmentId');
+      }
+      return {
+        type: part.type,
+        attachmentId: part.attachmentId,
+        ...part.name === undefined ? {} : { name: requiredText(part.name, 'name', 256) },
+        ...part.mime === undefined ? {} : { mime: requiredText(part.mime, 'mime', 128) },
+      };
+    }
+    throw protocolError('unsupported_content', 'Prompt content parts must be text or an attachment');
   });
-  const textBytes = content.reduce((total, part) => total + Buffer.byteLength(part.text), 0);
+  const textBytes = content.reduce(
+    (total, part) => total + (part.type === 'text' ? Buffer.byteLength(part.text) : 0),
+    0,
+  );
   if (textBytes > 64 * 1024) {
     throw protocolError('payload_too_large', 'Text prompts are limited to 64 KiB');
   }
+  const attachments = content.filter((part): part is PromptAttachmentInput => part.type !== 'text');
+  const hostContent = content.map((part) => (part.type === 'text' ? part : {
+    type: part.type,
+    attachmentId: part.attachmentId,
+    ...part.name === undefined ? {} : { name: part.name },
+    ...part.mime === undefined ? {} : { mime: part.mime },
+  }));
   return {
     requestId,
     sessionId: sessionAddress(params.sessionId).sessionId,
     mode: params.mode ?? 'queue',
-    content,
+    content: hostContent,
+    ...(attachments.length === 0 ? {} : { attachments }),
     clientTimeZone: params.clientTimeZone ?? 'UTC',
   };
 }

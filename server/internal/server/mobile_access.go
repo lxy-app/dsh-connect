@@ -695,8 +695,12 @@ func (s *Server) handleMobileSessionPrompt(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "mode must be queue or steer", false))
 		return
 	}
-	if !validText(request.Text, 64*1024) {
-		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "text is required and limited to 64 KiB", false))
+	if !validText(request.Text, 64*1024) && len(request.Attachments) == 0 {
+		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "text or attachments are required", false))
+		return
+	}
+	if request.Text != "" && !validText(request.Text, 64*1024) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "text is limited to 64 KiB", false))
 		return
 	}
 	actor, commandError := s.authorizeMobileSession(r, request.DeviceID, request.WorkspaceID, sessionID, "prompt")
@@ -704,10 +708,20 @@ func (s *Server) handleMobileSessionPrompt(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, *commandError)
 		return
 	}
+	content := make([]protocol.ContentPart, 0, len(request.Attachments)+1)
+	if request.Text != "" {
+		content = append(content, protocol.ContentPart{Type: "text", Text: request.Text})
+	}
+	attachmentParts, attachmentError := s.promptAttachmentParts(r, actor.Device.Device.MobileDeviceID, request.DeviceID, request.WorkspaceID, sessionID, request.Attachments)
+	if attachmentError != nil {
+		writeAPIError(w, *attachmentError)
+		return
+	}
+	content = append(content, attachmentParts...)
 	params := map[string]any{
 		"sessionId":      sessionID,
 		"mode":           request.Mode,
-		"content":        []protocol.ContentPart{{Type: "text", Text: request.Text}},
+		"content":        content,
 		"clientTimeZone": "UTC",
 	}
 	result, commandError := s.router.Execute(

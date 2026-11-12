@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { WorkspaceFilesService } from '../src/host-api.js';
-import { hostAttachmentByteReader } from '../src/lib/runtime.js';
+import type { HostAttachmentsService, WorkspaceFilesService } from '../src/host-api.js';
+import type { StoredMessageDeclaration } from '../src/lib/attachment-index.js';
+import { hostAttachmentByteReader, hostMessageAttachmentReader } from '../src/lib/runtime.js';
 
 function request(signal: AbortSignal) {
   return {
@@ -38,6 +39,41 @@ test('Host attachment reads use the complete-file contract instead of an oversiz
   assert.deepEqual(receivedScope, { sessionId: 'sess-1', workspaceRoot: '/work/a' });
   assert.equal(receivedPath, '/work/a/diagram.png');
   assert.equal(receivedSignal, signal);
+});
+
+test('Host message attachment reads preserve image refs and assemble file streams', async () => {
+  const signal = new AbortController().signal;
+  const image: StoredMessageDeclaration = {
+    attachmentId: 'att_image', sessionId: 'sess-1', workspaceId: 'ws-a', source: 'message', seq: 7,
+    name: '拍摄.png', kind: 'image', mime: 'image/png', bytes: 3,
+    reference: { attachmentId: `sha256:${'a'.repeat(64)}`, mediaType: 'image/png', bytes: 3, width: 10, height: 10 },
+  };
+  const file: StoredMessageDeclaration = {
+    attachmentId: 'att_file', sessionId: 'sess-1', workspaceId: 'ws-a', source: 'message', seq: 7,
+    name: 'notes.bin', kind: 'file', mime: 'application/octet-stream', bytes: 4,
+    reference: { attachmentId: `sha256:${'b'.repeat(64)}`, name: 'notes.bin', bytes: 4 },
+  };
+  const attachments: HostAttachmentsService = {
+    async readImage(ref, readSignal) {
+      assert.equal(ref, image.reference);
+      assert.equal(readSignal, signal);
+      return { data: new Uint8Array([1, 2, 3]) };
+    },
+    async *readFileStream(ref, readSignal) {
+      assert.equal(ref, file.reference);
+      assert.equal(readSignal, signal);
+      yield new Uint8Array([4, 5]);
+      yield new Uint8Array([6, 7]);
+    },
+  };
+  const read = hostMessageAttachmentReader(attachments);
+
+  assert.deepEqual(await read({ sessionId: 'sess-1', declaration: image, maxBytes: 10, signal }), new Uint8Array([1, 2, 3]));
+  assert.deepEqual(await read({ sessionId: 'sess-1', declaration: file, maxBytes: 4, signal }), new Uint8Array([4, 5, 6, 7]));
+  await assert.rejects(
+    read({ sessionId: 'sess-1', declaration: file, maxBytes: 3, signal }),
+    { code: 'attachment_too_large' },
+  );
 });
 
 test('Host complete-file size errors keep the attachment_too_large verdict', async () => {

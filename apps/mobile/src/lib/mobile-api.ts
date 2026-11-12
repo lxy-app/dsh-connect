@@ -30,6 +30,7 @@ import type {
 } from '@shared/types/mobile';
 
 const API_TIMEOUT_MS = 15_000;
+const ATTACHMENT_UPLOAD_TIMEOUT_MS = 120_000;
 
 export class MobileApiError extends Error {
   readonly code: string;
@@ -371,6 +372,8 @@ export async function promptMobileSession(
     workspaceId: string;
     text: string;
     mode?: 'queue' | 'steer';
+    /** Ids staged by uploadMobileAttachment for this same Session. */
+    attachmentIds?: readonly string[];
   },
 ): Promise<void> {
   await requestJSON(
@@ -385,9 +388,68 @@ export async function promptMobileSession(
         workspaceId: input.workspaceId,
         mode: input.mode ?? 'queue',
         text: input.text,
+        ...(input.attachmentIds === undefined || input.attachmentIds.length === 0
+          ? {}
+          : { attachments: input.attachmentIds.map((attachmentId) => ({ attachmentId })) }),
       },
     },
   );
+}
+
+/**
+ * Stages one picked file for the current Session and returns its Server id.
+ *
+ * The id is only meaningful to this phone, Session and workspace, and it is
+ * what the prompt references. Bytes never travel through the prompt body.
+ */
+export async function uploadMobileAttachment(
+  serverUrl: string,
+  accessToken: string,
+  sessionId: string,
+  input: {
+    deviceId: string;
+    workspaceId: string;
+    name: string;
+    mime: string;
+    bytes: Uint8Array;
+  },
+): Promise<{ attachmentId: string; kind: 'image' | 'file'; name: string; mime: string; bytes: number }> {
+  const query = `deviceId=${encodeURIComponent(input.deviceId)}&workspaceId=${encodeURIComponent(input.workspaceId)}`;
+  const response = await requestRaw(
+    serverUrl,
+    `/v1/mobile/sessions/${encodeURIComponent(sessionId)}/attachments?${query}`,
+    {
+      method: 'POST',
+      accessToken,
+      binary: input.bytes,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-DSH-Attachment-Name': encodeURIComponent(input.name),
+        'X-DSH-Attachment-Name-Encoding': 'url',
+      },
+    },
+  );
+  const text = await response.text();
+  let payload: unknown;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    throw new MobileApiError('invalid_response', 'Server 返回了非 JSON 响应。', response.status);
+  }
+  if (payload === null || typeof payload !== 'object') {
+    throw new MobileApiError('invalid_response', 'Server 未返回附件信息。', response.status);
+  }
+  const record = payload as Record<string, unknown>;
+  if (typeof record.attachmentId !== 'string' || record.attachmentId.length === 0) {
+    throw new MobileApiError('invalid_response', 'Server 未返回附件标识。', response.status);
+  }
+  return {
+    attachmentId: record.attachmentId,
+    kind: record.kind === 'image' ? 'image' : 'file',
+    name: typeof record.name === 'string' ? record.name : input.name,
+    mime: typeof record.mime === 'string' ? record.mime : input.mime,
+    bytes: typeof record.bytes === 'number' ? record.bytes : input.bytes.byteLength,
+  };
 }
 
 export async function cancelMobileSession(
@@ -431,6 +493,52 @@ type RequestOptions = {
   accessToken?: string;
 };
 
+type RawRequestOptions = {
+  method: 'POST';
+  accessToken: string;
+  binary: Uint8Array;
+  headers: Record<string, string>;
+};
+
+/**
+ * Posts raw bytes with a longer timeout than JSON calls, because an attachment
+ * can be several megabytes on a slow mobile network.
+ */
+async function requestRaw(baseUrl: string, path: string, options: RawRequestOptions): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ATTACHMENT_UPLOAD_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${normalizeServerUrl(baseUrl)}${path}`, {
+      method: options.method,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${options.accessToken}`,
+        ...options.headers,
+      },
+      // React Native's fetch accepts a typed array as a body; DOM typing does not.
+      body: options.binary as unknown as BodyInit,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new MobileApiError('timeout', '上传附件超时，请重试。', 0, true);
+    }
+    throw new MobileApiError(
+      'network_error',
+      error instanceof Error ? error.message : '无法连接 Server。',
+      0,
+      true,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) {
+    throw await responseError(response);
+  }
+  return response;
+}
+
 async function request(baseUrl: string, path: string, options: RequestOptions): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
@@ -464,6 +572,11 @@ async function request(baseUrl: string, path: string, options: RequestOptions): 
     return response;
   }
 
+  throw await responseError(response);
+}
+
+/** Maps one non-OK response onto the App's error type. */
+async function responseError(response: Response): Promise<MobileApiError> {
   let code = response.status === 401 ? 'unauthorized' : 'http_error';
   let message = response.statusText || `HTTP ${response.status}`;
   let retryable = response.status >= 500;
@@ -477,7 +590,7 @@ async function request(baseUrl: string, path: string, options: RequestOptions): 
   } catch {
     // Non-JSON error responses still map to a useful status-based error.
   }
-  throw new MobileApiError(code, message, response.status, retryable);
+  return new MobileApiError(code, message, response.status, retryable);
 }
 
 function parseSessionResponse(value: unknown): MobileSessionResponse {

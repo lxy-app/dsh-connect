@@ -16,6 +16,8 @@ const (
 	FieldID = "id"
 	// FieldDeviceID holds the string denoting the device_id field in the database.
 	FieldDeviceID = "device_id"
+	// FieldMobileDeviceID holds the string denoting the mobile_device_id field in the database.
+	FieldMobileDeviceID = "mobile_device_id"
 	// FieldSessionID holds the string denoting the session_id field in the database.
 	FieldSessionID = "session_id"
 	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
@@ -56,6 +58,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldDeviceID,
+	FieldMobileDeviceID,
 	FieldSessionID,
 	FieldWorkspaceID,
 	FieldSource,
@@ -115,6 +118,7 @@ const (
 	SourceDeliverable Source = "deliverable"
 	SourceMessage     Source = "message"
 	SourceTool        Source = "tool"
+	SourceUpload      Source = "upload"
 )
 
 func (s Source) String() string {
@@ -124,7 +128,7 @@ func (s Source) String() string {
 // SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
 func SourceValidator(s Source) error {
 	switch s {
-	case SourceDeliverable, SourceMessage, SourceTool:
+	case SourceDeliverable, SourceMessage, SourceTool, SourceUpload:
 		return nil
 	default:
 		return fmt.Errorf("sessionattachment: invalid enum value for source field: %q", s)
@@ -197,6 +201,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByDeviceID orders the results by the device_id field.
 func ByDeviceID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDeviceID, opts...).ToFunc()
+}
+
+// ByMobileDeviceID orders the results by the mobile_device_id field.
+func ByMobileDeviceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMobileDeviceID, opts...).ToFunc()
 }
 
 // BySessionID orders the results by the session_id field.

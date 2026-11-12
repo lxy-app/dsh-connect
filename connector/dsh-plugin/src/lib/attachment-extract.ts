@@ -23,6 +23,36 @@ export interface ExtractOptions {
   readonly minimumSeq?: number;
 }
 
+export type MessageAttachmentReference =
+  | {
+      readonly attachmentId: string;
+      readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+      readonly bytes: number;
+      readonly width: number;
+      readonly height: number;
+      readonly name?: string;
+    }
+  | {
+      readonly attachmentId: string;
+      readonly name: string;
+      readonly bytes: number;
+    };
+
+/** One immutable DSH attachment learned from a persisted user message. */
+export interface MessageAttachmentCandidate {
+  readonly attachmentId: string;
+  readonly source: 'message';
+  readonly seq: number;
+  readonly index: number;
+  readonly reference: MessageAttachmentReference;
+  readonly kind: 'image' | 'file';
+  readonly name: string;
+  readonly mime: string;
+  readonly bytes: number;
+  readonly width?: number;
+  readonly height?: number;
+}
+
 interface RawRecord {
   readonly event: {
     readonly type: string;
@@ -109,6 +139,88 @@ export function extractAttachmentCandidates(records: readonly RawRecord[], optio
     }
   }
   return candidates;
+}
+
+/**
+ * Reads durable image/file blocks from one persisted user message. The mobile
+ * id is derived from the Session coordinates; DSH's sha256 ref stays private
+ * to the Connector and is only used by the Host attachment service.
+ */
+export function extractMessageAttachmentCandidates(
+  message: unknown,
+  options: { readonly sessionId: string; readonly seq: number },
+): MessageAttachmentCandidate[] {
+  if (!isRecord(message) || !Array.isArray(message.content)) return [];
+  const candidates: MessageAttachmentCandidate[] = [];
+  message.content.forEach((block, index) => {
+    if (!isRecord(block) || (block.type !== 'image' && block.type !== 'file') || !isRecord(block.attachment)) return;
+    const ref = block.attachment;
+    if (typeof ref.attachmentId !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(ref.attachmentId)) return;
+    if (!validByteLength(ref.bytes)) return;
+    const base = {
+      attachmentId: attachmentID(options.sessionId, 'message', options.seq, index),
+      source: 'message' as const,
+      seq: options.seq,
+      index,
+      bytes: ref.bytes,
+    };
+    if (block.type === 'image') {
+      if (!isImageMediaType(ref.mediaType) || !validDimension(ref.width) || !validDimension(ref.height)) return;
+      const reference = {
+        attachmentId: ref.attachmentId,
+        mediaType: ref.mediaType,
+        bytes: ref.bytes,
+        width: ref.width,
+        height: ref.height,
+        ...typeof ref.name === 'string' && ref.name.trim() ? { name: displayNameOf(ref.name) } : {},
+      };
+      candidates.push({
+        ...base,
+        reference,
+        kind: 'image',
+        name: reference.name ?? '图片',
+        mime: ref.mediaType,
+        width: ref.width,
+        height: ref.height,
+      });
+      return;
+    }
+    if (typeof ref.name !== 'string' || !ref.name.trim()) return;
+    const name = displayNameOf(ref.name);
+    candidates.push({
+      ...base,
+      reference: { attachmentId: ref.attachmentId, name, bytes: ref.bytes },
+      kind: 'file',
+      name,
+      mime: guessMessageFileMime(name),
+    });
+  });
+  return candidates;
+}
+
+function validByteLength(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function validDimension(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function isImageMediaType(value: unknown): value is 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' {
+  return value === 'image/png' || value === 'image/jpeg' || value === 'image/webp' || value === 'image/gif';
+}
+
+function guessMessageFileMime(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.md')) return 'text/markdown';
+  if (lower.endsWith('.txt') || lower.endsWith('.log')) return 'text/plain';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  return 'application/octet-stream';
 }
 
 function candidate(input: {

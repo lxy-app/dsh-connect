@@ -1,21 +1,33 @@
 import type { FileBaseline } from './attachment-policy.js';
+import type { MessageAttachmentReference } from './attachment-extract.js';
 
-/** A declaration the Connector resolved and may later read. */
-export interface StoredDeclaration {
+interface StoredDeclarationBase {
   readonly attachmentId: string;
   readonly sessionId: string;
   readonly workspaceId: string;
-  readonly source: 'deliverable' | 'tool';
   readonly seq: number;
-  /** Desktop-only absolute path; never serialized to the Server. */
-  readonly path: string;
   readonly name: string;
   readonly description?: string;
   readonly kind: 'image' | 'file';
   readonly mime: string;
   readonly bytes: number;
+}
+
+export interface StoredPathDeclaration extends StoredDeclarationBase {
+  readonly source: 'deliverable' | 'tool';
+  /** Desktop-only absolute path; never serialized to the Server. */
+  readonly path: string;
   readonly baseline: FileBaseline;
 }
+
+export interface StoredMessageDeclaration extends StoredDeclarationBase {
+  readonly source: 'message';
+  /** Immutable DSH reference; never accepted directly from the phone. */
+  readonly reference: MessageAttachmentReference;
+}
+
+/** A declaration the Connector resolved and may later read. */
+export type StoredDeclaration = StoredPathDeclaration | StoredMessageDeclaration;
 
 /**
  * Per-session attachment index.

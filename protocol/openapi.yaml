@@ -1381,6 +1381,76 @@ paths:
         "503": {$ref: "#/components/responses/DeviceOffline"}
         "504": {$ref: "#/components/responses/CommandTimeout"}
         "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/sessions/{sessionId}/attachments:
+    post:
+      tags: [mobileAccess]
+      operationId: uploadMobileAttachment
+      summary: Stage one attachment the phone will reference from a prompt
+      description: |
+        Requires an active `prompt` grant; a read-only grant cannot stage bytes.
+        The body is the raw file, the display name travels in
+        `X-DSH-Attachment-Name` (percent-encoded when
+        `X-DSH-Attachment-Name-Encoding: url` is set), and the identity is
+        supplied in the query string. The returned id may only be referenced by a
+        prompt from this same phone, Session and workspace, and the id carries no
+        desktop path.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {$ref: "#/components/parameters/SessionId"}
+        - {name: deviceId, in: query, required: true, schema: {type: string}}
+        - {name: workspaceId, in: query, required: true, schema: {type: string}}
+        - {name: X-DSH-Attachment-Name, in: header, required: false, schema: {type: string, maxLength: 256}}
+        - {name: X-DSH-Attachment-Name-Encoding, in: header, required: false, schema: {type: string, enum: [url]}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        "201":
+          description: The bytes are stored and may be referenced by id.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileAttachmentUploadResult}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The body length does not match Content-Length.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "413":
+          description: The file exceeds the configured attachment size limit.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
+  /v1/connector/uploads/{attachmentId}:
+    get:
+      tags: [connector]
+      operationId: downloadConnectorUpload
+      summary: Read one staged phone upload for the owning desktop
+      description: |
+        The Connector fetches the bytes of a phone upload so it can stage them in
+        DSH and cite the Host receipt in the prompt. Only the device that owns the
+        Session may read them; desktop-declared attachments are not served here.
+      security:
+        - connectorDevice: []
+      parameters:
+        - {name: attachmentId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The staged bytes.
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalError"}
   /v1/mobile/attachments/{attachmentId}:
     get:
       tags: [mobileAccess]

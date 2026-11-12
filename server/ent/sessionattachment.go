@@ -20,11 +20,13 @@ type SessionAttachment struct {
 	ID string `json:"id,omitempty"`
 	// Desktop Connector device that declared the file
 	DeviceID string `json:"device_id,omitempty"`
+	// Phone that staged an upload; empty for desktop declarations
+	MobileDeviceID string `json:"mobile_device_id,omitempty"`
 	// SessionID holds the value of the "session_id" field.
 	SessionID string `json:"session_id,omitempty"`
 	// WorkspaceID holds the value of the "workspace_id" field.
 	WorkspaceID string `json:"workspace_id,omitempty"`
-	// Source holds the value of the "source" field.
+	// deliverable|message|tool describe desktop files; upload is a phone upload staged for one prompt
 	Source sessionattachment.Source `json:"source,omitempty"`
 	// Session event sequence that declared the file
 	SourceSeq int64 `json:"source_seq,omitempty"`
@@ -62,7 +64,7 @@ func (*SessionAttachment) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case sessionattachment.FieldSourceSeq, sessionattachment.FieldSourceIndex, sessionattachment.FieldBytes:
 			values[i] = new(sql.NullInt64)
-		case sessionattachment.FieldID, sessionattachment.FieldDeviceID, sessionattachment.FieldSessionID, sessionattachment.FieldWorkspaceID, sessionattachment.FieldSource, sessionattachment.FieldKind, sessionattachment.FieldDisplayName, sessionattachment.FieldMime, sessionattachment.FieldSha256, sessionattachment.FieldDescription, sessionattachment.FieldState, sessionattachment.FieldErrorCode:
+		case sessionattachment.FieldID, sessionattachment.FieldDeviceID, sessionattachment.FieldMobileDeviceID, sessionattachment.FieldSessionID, sessionattachment.FieldWorkspaceID, sessionattachment.FieldSource, sessionattachment.FieldKind, sessionattachment.FieldDisplayName, sessionattachment.FieldMime, sessionattachment.FieldSha256, sessionattachment.FieldDescription, sessionattachment.FieldState, sessionattachment.FieldErrorCode:
 			values[i] = new(sql.NullString)
 		case sessionattachment.FieldCreatedAt, sessionattachment.FieldUpdatedAt, sessionattachment.FieldExpiresAt:
 			values[i] = new(sql.NullTime)
@@ -92,6 +94,12 @@ func (_m *SessionAttachment) assignValues(columns []string, values []any) error 
 				return fmt.Errorf("unexpected type %T for field device_id", values[i])
 			} else if value.Valid {
 				_m.DeviceID = value.String
+			}
+		case sessionattachment.FieldMobileDeviceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field mobile_device_id", values[i])
+			} else if value.Valid {
+				_m.MobileDeviceID = value.String
 			}
 		case sessionattachment.FieldSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -227,6 +235,9 @@ func (_m *SessionAttachment) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("device_id=")
 	builder.WriteString(_m.DeviceID)
+	builder.WriteString(", ")
+	builder.WriteString("mobile_device_id=")
+	builder.WriteString(_m.MobileDeviceID)
 	builder.WriteString(", ")
 	builder.WriteString("session_id=")
 	builder.WriteString(_m.SessionID)

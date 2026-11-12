@@ -69,6 +69,11 @@ func DeviceID(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldDeviceID, v))
 }
 
+// MobileDeviceID applies equality check predicate on the "mobile_device_id" field. It's identical to MobileDeviceIDEQ.
+func MobileDeviceID(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldMobileDeviceID, v))
+}
+
 // SessionID applies equality check predicate on the "session_id" field. It's identical to SessionIDEQ.
 func SessionID(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldSessionID, v))
@@ -197,6 +202,81 @@ func DeviceIDEqualFold(v string) predicate.SessionAttachment {
 // DeviceIDContainsFold applies the ContainsFold predicate on the "device_id" field.
 func DeviceIDContainsFold(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldContainsFold(FieldDeviceID, v))
+}
+
+// MobileDeviceIDEQ applies the EQ predicate on the "mobile_device_id" field.
+func MobileDeviceIDEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDNEQ applies the NEQ predicate on the "mobile_device_id" field.
+func MobileDeviceIDNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDIn applies the In predicate on the "mobile_device_id" field.
+func MobileDeviceIDIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldMobileDeviceID, vs...))
+}
+
+// MobileDeviceIDNotIn applies the NotIn predicate on the "mobile_device_id" field.
+func MobileDeviceIDNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldMobileDeviceID, vs...))
+}
+
+// MobileDeviceIDGT applies the GT predicate on the "mobile_device_id" field.
+func MobileDeviceIDGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDGTE applies the GTE predicate on the "mobile_device_id" field.
+func MobileDeviceIDGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDLT applies the LT predicate on the "mobile_device_id" field.
+func MobileDeviceIDLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDLTE applies the LTE predicate on the "mobile_device_id" field.
+func MobileDeviceIDLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDContains applies the Contains predicate on the "mobile_device_id" field.
+func MobileDeviceIDContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDHasPrefix applies the HasPrefix predicate on the "mobile_device_id" field.
+func MobileDeviceIDHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDHasSuffix applies the HasSuffix predicate on the "mobile_device_id" field.
+func MobileDeviceIDHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDIsNil applies the IsNil predicate on the "mobile_device_id" field.
+func MobileDeviceIDIsNil() predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIsNull(FieldMobileDeviceID))
+}
+
+// MobileDeviceIDNotNil applies the NotNil predicate on the "mobile_device_id" field.
+func MobileDeviceIDNotNil() predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotNull(FieldMobileDeviceID))
+}
+
+// MobileDeviceIDEqualFold applies the EqualFold predicate on the "mobile_device_id" field.
+func MobileDeviceIDEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldMobileDeviceID, v))
+}
+
+// MobileDeviceIDContainsFold applies the ContainsFold predicate on the "mobile_device_id" field.
+func MobileDeviceIDContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldMobileDeviceID, v))
 }
 
 // SessionIDEQ applies the EQ predicate on the "session_id" field.

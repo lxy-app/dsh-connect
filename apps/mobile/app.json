@@ -77,6 +77,14 @@
           "enableBackgroundRemoteNotifications": false
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允许 $(PRODUCT_NAME) 访问照片，把图片作为附件发送给桌面 DSH。",
+          "cameraPermission": "允许 $(PRODUCT_NAME) 使用相机拍摄附件照片。",
+          "microphonePermission": false
+        }
+      ],
       "expo-sqlite",
       [
         "expo-speech-recognition",

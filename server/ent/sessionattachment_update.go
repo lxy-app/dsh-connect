@@ -384,6 +384,9 @@ func (_u *SessionAttachmentUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if value, ok := _u.mutation.DeviceID(); ok {
 		_spec.SetField(sessionattachment.FieldDeviceID, field.TypeString, value)
 	}
+	if _u.mutation.MobileDeviceIDCleared() {
+		_spec.ClearField(sessionattachment.FieldMobileDeviceID, field.TypeString)
+	}
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
 	}
@@ -852,6 +855,9 @@ func (_u *SessionAttachmentUpdateOne) sqlSave(ctx context.Context) (_node *Sessi
 	}
 	if value, ok := _u.mutation.DeviceID(); ok {
 		_spec.SetField(sessionattachment.FieldDeviceID, field.TypeString, value)
+	}
+	if _u.mutation.MobileDeviceIDCleared() {
+		_spec.ClearField(sessionattachment.FieldMobileDeviceID, field.TypeString)
 	}
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)

@@ -28,12 +28,17 @@ func (SessionAttachment) Fields() []ent.Field {
 		field.String("device_id").
 			NotEmpty().
 			Comment("Desktop Connector device that declared the file"),
+		field.String("mobile_device_id").
+			Optional().
+			Immutable().
+			Comment("Phone that staged an upload; empty for desktop declarations"),
 		field.String("session_id").
 			NotEmpty(),
 		field.String("workspace_id").
 			NotEmpty(),
 		field.Enum("source").
-			Values("deliverable", "message", "tool"),
+			Values("deliverable", "message", "tool", "upload").
+			Comment("deliverable|message|tool describe desktop files; upload is a phone upload staged for one prompt"),
 		field.Int64("source_seq").
 			Comment("Session event sequence that declared the file"),
 		field.Int("source_index").

@@ -326,9 +326,10 @@ var (
 	SessionAttachmentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true},
 		{Name: "device_id", Type: field.TypeString},
+		{Name: "mobile_device_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "workspace_id", Type: field.TypeString},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"deliverable", "message", "tool"}},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"deliverable", "message", "tool", "upload"}},
 		{Name: "source_seq", Type: field.TypeInt64},
 		{Name: "source_index", Type: field.TypeInt},
 		{Name: "kind", Type: field.TypeEnum, Enums: []string{"image", "file"}, Default: "file"},
@@ -352,17 +353,17 @@ var (
 			{
 				Name:    "sessionattachment_device_id_session_id",
 				Unique:  false,
-				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[2]},
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[3]},
 			},
 			{
 				Name:    "sessionattachment_state",
 				Unique:  false,
-				Columns: []*schema.Column{SessionAttachmentsColumns[13]},
+				Columns: []*schema.Column{SessionAttachmentsColumns[14]},
 			},
 			{
 				Name:    "sessionattachment_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionAttachmentsColumns[17]},
+				Columns: []*schema.Column{SessionAttachmentsColumns[18]},
 			},
 		},
 	}

@@ -1166,14 +1166,28 @@
       },
       "additionalProperties": false
     },
+    "MobilePromptAttachment": {
+      "description": "One attachment uploaded by this phone for the current Session. The id was returned by the upload endpoint and never carries a desktop path.",
+      "type": "object",
+      "required": [
+        "attachmentId"
+      ],
+      "properties": {
+        "attachmentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
     "MobilePromptRequest": {
       "type": "object",
       "required": [
         "requestId",
         "deviceId",
         "workspaceId",
-        "mode",
-        "text"
+        "mode"
       ],
       "properties": {
         "requestId": {
@@ -1200,13 +1214,58 @@
         },
         "text": {
           "type": "string",
-          "minLength": 1,
           "maxLength": 65536
+        },
+        "attachments": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/MobilePromptAttachment"
+          }
         },
         "timeoutMs": {
           "type": "integer",
           "minimum": 0,
           "maximum": 120000
+        }
+      },
+      "additionalProperties": false
+    },
+    "MobileAttachmentUploadResult": {
+      "description": "Result of staging one phone upload for the current Session.",
+      "type": "object",
+      "required": [
+        "attachmentId",
+        "kind",
+        "name",
+        "mime",
+        "bytes"
+      ],
+      "properties": {
+        "attachmentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "image",
+            "file"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "mime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false

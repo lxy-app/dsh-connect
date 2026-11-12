@@ -153,21 +153,82 @@
       "additionalProperties": false
     },
     "ContentPart": {
-      "type": "object",
-      "required": [
-        "type",
-        "text"
-      ],
-      "properties": {
-        "type": {
-          "const": "text"
+      "description": "One prompt content part. Text parts carry inline text; image and file parts reference an attachment this Session uploaded. The Server may add the verified display name and MIME type for Connector staging; callers never supply paths or bytes.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
         },
-        "text": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "attachmentId"
+          ],
+          "properties": {
+            "type": {
+              "const": "image"
+            },
+            "attachmentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mime": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "attachmentId"
+          ],
+          "properties": {
+            "type": {
+              "const": "file"
+            },
+            "attachmentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mime": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "additionalProperties": false
         }
-      },
-      "additionalProperties": false
+      ]
     },
     "ModelSelection": {
       "type": "object",

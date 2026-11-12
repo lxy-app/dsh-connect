@@ -107,8 +107,15 @@ func (s *Server) attachmentsEnabled() bool {
 	return s.config.AttachmentsMode != attachmentsModeOff
 }
 
+// attachmentsWritable reports whether phones may upload new attachments.
+// "read" keeps every download path working while refusing new uploads.
+func (s *Server) attachmentsWritable() bool {
+	return s.config.AttachmentsMode == attachmentsModeReadWrite
+}
+
 func (s *Server) attachmentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/mobile/attachments/{attachmentId}", s.mobileAuth(s.handleMobileAttachment))
+	s.mobileAttachmentRoutes(mux)
 	mux.HandleFunc("POST /v1/connector/attachments/{attachmentId}", s.handleConnectorAttachmentUpload)
 }
 

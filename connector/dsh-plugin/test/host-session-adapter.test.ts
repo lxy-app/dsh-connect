@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { HostSessionAdapter } from '../src/lib/host-session-adapter.js';
-import type { AttachmentWiring } from '../src/lib/host-session-adapter.js';
+import type { AttachmentWiring, PromptAttachmentAdmitterWiring } from '../src/lib/host-session-adapter.js';
 import { WorkspacePolicy } from '../src/lib/workspace-policy.js';
 import type {
   LlmRuntime,
@@ -47,6 +47,7 @@ interface SetupOverrides {
   readonly controller?: Partial<SessionController>;
   readonly llm?: LlmRuntime;
   readonly attachments?: AttachmentWiring;
+  readonly promptAttachments?: PromptAttachmentAdmitterWiring;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -112,6 +113,7 @@ function setup(overrides: SetupOverrides = {}) {
     controller, llm, workspaceRegistry, policy, deviceId: 'dev-1', emit: (event) => emitted.push(event),
     logger: { warn() {} },
     ...(overrides.attachments ? { attachments: overrides.attachments } : {}),
+    ...(overrides.promptAttachments ? { promptAttachments: overrides.promptAttachments } : {}),
   });
   return { adapter, emitted, calls, controller, workspaces };
 }
@@ -152,6 +154,45 @@ test('prompt preserves DSH request semantics and AbortSignal', async () => {
   assert.equal(prompt[1].requestId, 'req-2');
   assert.equal(prompt[1].mode, 'steer');
   assert.equal(prompt[2], signal);
+});
+
+test('attachment-only prompts complete download, Host staging and controller admission', async () => {
+  const downloaded: string[] = [];
+  const { adapter, calls } = setup({
+    promptAttachments: {
+      uploads: {
+        async uploadImageStream({ name, mediaType }) {
+          assert.equal(name, '拍摄.png');
+          assert.equal(mediaType, 'image/png');
+          return { receiptId: 'receipt-image' };
+        },
+        async uploadStream({ name }) {
+          assert.equal(name, 'notes.txt');
+          return { receiptId: 'receipt-file' };
+        },
+      },
+      downloads: async ({ attachmentId }) => {
+        downloaded.push(attachmentId);
+        return new TextEncoder().encode(attachmentId);
+      },
+    },
+  });
+
+  await adapter.prompt({
+    sessionId: 's1', workspaceId: 'ws-a',
+    content: [
+      { type: 'image', attachmentId: 'atu_image', name: '拍摄.png', mime: 'image/png' },
+      { type: 'file', attachmentId: 'atu_file', name: 'notes.txt', mime: 'text/plain' },
+    ],
+  }, { signal: new AbortController().signal, requestId: 'req-attachments' });
+
+  assert.deepEqual(downloaded, ['atu_image', 'atu_file']);
+  const prompt = calls.find((call): call is PromptCall => call[0] === 'prompt');
+  assert.ok(prompt);
+  assert.deepEqual(prompt[1].content, [
+    { type: 'file', receiptId: 'receipt-image' },
+    { type: 'file', receiptId: 'receipt-file' },
+  ]);
 });
 
 test('create rejects arbitrary cwd even inside an authorized workspace', async () => {
@@ -200,6 +241,42 @@ test('compact follow omits the bulky opening snapshot payload', async () => {
   assert.equal(data.compact, true);
   assert.equal('records' in data, false);
   assert.equal('projections' in data, false);
+  adapter.dispose();
+});
+
+test('live and snapshot user messages never expose durable attachment refs', async () => {
+  const durableRef = `sha256:${'d'.repeat(64)}`;
+  const attachmentBlock = {
+    type: 'image',
+    attachment: { attachmentId: durableRef, mediaType: 'image/png', bytes: 3, width: 10, height: 10 },
+  };
+  const { adapter, emitted } = setup({
+    controller: {
+      follow() {
+        return (async function* () {
+          yield {
+            type: 'snapshot', header: { id: 's1', createdAt: 500, version: 1, isSeeded: false }, cursor: 1,
+            records: [{ type: 'event' as const, event: {
+              type: 'user/message', seq: 1, time: 1_000,
+              data: { id: 'snapshot-user', content: [{ type: 'text', text: 'snapshot' }, attachmentBlock] },
+            } }],
+            hasMore: false, projections: { asOfSeq: 1, values: {} },
+          };
+          yield { type: 'event', event: {
+            type: 'user/message', seq: 2, time: 2_000,
+            data: { id: 'live-user', content: [attachmentBlock] },
+          } };
+        }());
+      },
+    },
+  });
+  await adapter.follow({ sessionId: 's1', workspaceId: 'ws-a' });
+  for (let i = 0; i < 20 && emitted.length < 2; i += 1) await new Promise(setImmediate);
+
+  assert.equal(emitted.length, 2);
+  assert.equal(JSON.stringify(emitted).includes(durableRef), false);
+  const live = asRecord(asRecord(eventAt(emitted, 1).data).payload);
+  assert.deepEqual(live.content, []);
   adapter.dispose();
 });
 
@@ -561,4 +638,123 @@ test('transcript never mounts an empty turn delivery on the previous turn', asyn
   assert.equal(result.messages[1]?.delivery, true);
   assert.equal(result.messages[1]?.seq, 5);
   assert.equal(result.messages[1]?.attachments?.[0]?.name, 'diagram.png');
+});
+
+test('transcript projects user attachments and fetches their durable Host bytes', async () => {
+  const imageRef = `sha256:${'a'.repeat(64)}`;
+  const fileRef = `sha256:${'b'.repeat(64)}`;
+  const records = [
+    { type: 'event' as const, event: { type: 'user/message', seq: 7, time: 7_000, data: {
+      id: 'u-7', role: 'user', source: { kind: 'user' },
+      content: [
+        { type: 'text', text: '看图和文件' },
+        { type: 'image', attachment: {
+          attachmentId: imageRef, mediaType: 'image/png', bytes: 3, width: 640, height: 480, name: '拍摄.png',
+        } },
+        { type: 'file', attachment: { attachmentId: fileRef, name: 'notes.pdf', bytes: 4 } },
+      ],
+    } } },
+  ];
+  const uploaded: string[] = [];
+  const { adapter } = setup({
+    attachments: {
+      async readBytes() { throw new Error('message attachments must not use workspace paths'); },
+      async readMessage({ declaration }) {
+        if (declaration.kind === 'image') {
+          assert.equal(declaration.reference.attachmentId, imageRef);
+          return new Uint8Array([1, 2, 3]);
+        }
+        assert.equal(declaration.reference.attachmentId, fileRef);
+        return new Uint8Array([4, 5, 6, 7]);
+      },
+      async upload({ attachmentId }) { uploaded.push(attachmentId); },
+    },
+    controller: { async events() { return { records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+  assert.equal(result.messages.length, 1);
+  assert.equal(result.messages[0]?.text, '看图和文件');
+  assert.deepEqual(result.messages[0]?.attachments?.map((attachment) => ({
+    source: attachment.source, name: attachment.name, mime: attachment.mime, state: attachment.state,
+  })), [
+    { source: 'message', name: '拍摄.png', mime: 'image/png', state: 'known' },
+    { source: 'message', name: 'notes.pdf', mime: 'application/pdf', state: 'known' },
+  ]);
+  assert.equal(result.messages[0]?.attachments?.[0]?.width, 640);
+  assert.equal(JSON.stringify(result).includes('sha256:'), false);
+
+  const ids = result.messages[0]?.attachments?.map((attachment) => attachment.attachmentId) ?? [];
+  for (const attachmentId of ids) {
+    const fetched = await adapter['attachment.fetch'](
+      { sessionId: 's1', workspaceId: 'ws-a', attachmentId },
+      { signal: new AbortController().signal },
+    );
+    assert.equal(fetched.status, 'ready');
+  }
+  assert.deepEqual(uploaded, ids);
+});
+
+test('attachment-only user messages remain in the mobile transcript', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'user/message', seq: 8, time: 8_000, data: {
+      id: 'u-8', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'file', attachment: {
+        attachmentId: `sha256:${'c'.repeat(64)}`, name: 'only.zip', bytes: 4,
+      } }],
+    } } },
+  ];
+  const { adapter } = setup({
+    attachments: {
+      async readBytes() { throw new Error('not used'); },
+      async readMessage() { return new Uint8Array([1, 2, 3, 4]); },
+      async upload() {},
+    },
+    controller: { async events() { return { records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+  assert.equal(result.messages.length, 1);
+  assert.equal(result.messages[0]?.role, 'user');
+  assert.equal(result.messages[0]?.text, '');
+  assert.equal(result.messages[0]?.attachments?.[0]?.name, 'only.zip');
+});
+
+test('transcript applies one attachment budget across user and delivery sources', async () => {
+  const messageBlocks = Array.from({ length: 10 }, (_, index) => ({
+    type: 'file',
+    attachment: { attachmentId: `sha256:${String(index).repeat(64).slice(0, 64)}`, name: `user-${index}.txt`, bytes: 4 },
+  }));
+  const records = [
+    { type: 'event' as const, event: { type: 'user/message', seq: 1, time: 1_000, data: {
+      id: 'u-budget', role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: 'mixed sources' }, ...messageBlocks],
+    } } },
+    { type: 'event' as const, event: { type: 'turn/start', seq: 2, time: 2_000, data: { turn: 1 } } },
+    { type: 'event' as const, event: { type: 'deliverables/presented', seq: 3, time: 3_000, data: {
+      turn: 1, files: Array.from({ length: 4 }, (_, index) => ({ path: `/work/a/delivered-${index}.txt` })),
+    } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 4, time: 4_000, data: {
+      message: { id: 'a-budget', content: [{ type: 'text', text: 'done' }] },
+    } } },
+  ];
+  const { adapter } = setup({
+    attachments: unusedAttachmentWiring,
+    controller: { async events() { return { records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+  const count = result.messages.reduce((total, item) => total + (item.attachments?.length ?? 0), 0);
+  assert.equal(count, 12);
+  assert.equal(result.truncated, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 64 * 1024);
 });
