@@ -1,0 +1,18 @@
+.manual { max-width: 1080px; margin: auto; padding: 0 28px 64px; }
+.manual header { display: flex; justify-content: space-between; padding: 24px 0; border-bottom: 1px solid var(--line); font-weight: 700; }
+.manual-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; margin-top: 42px; }
+.manual nav { display: grid; align-self: start; gap: 12px; position: sticky; top: 24px; }
+.manual nav a { color: var(--muted); }
+.manual a:hover, .manual main a { text-decoration: underline; text-underline-offset: 3px; }
+.manual header a:first-child, .manual main a, .manual nav a:hover { color: var(--violet-deep); }
+.manual main { min-width: 0; line-height: 1.85; overflow-wrap: anywhere; }
+.manual h1 { font-size: clamp(28px, 4vw, 42px); margin: 0; line-height: 1.25; }
+.manual h2 { margin: 32px 0 8px; font-size: 22px; }
+.manual li + li { margin-top: 8px; }
+.manual pre { padding: 16px; background: var(--surface-soft); overflow-x: auto; border-radius: 10px; line-height: 1.6; }
+@media (max-width: 720px) {
+  .manual { padding-inline: 18px; }
+  .manual-body { display: block; margin-top: 20px; }
+  .manual nav { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 28px; font-size: 14px; }
+  .manual nav strong { grid-column: 1 / -1; }
+}

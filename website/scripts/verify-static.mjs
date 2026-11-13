@@ -51,12 +51,26 @@ const localAssets = [...html.matchAll(/(?:src|href)="(\/dsh-connect\/[^"]+)"/g)]
 assert(localAssets.length > 0, '发现带部署前缀的本地资源');
 for (const asset of localAssets) {
   const relative = asset.slice('/dsh-connect/'.length).split(/[?#]/, 1)[0];
-  await readFile(path.join(outDir, relative));
+  await readFile(path.join(outDir, relative, relative.endsWith('/') ? 'index.html' : ''));
 }
 assert(localAssets.every(asset => asset.startsWith('/dsh-connect/')), '所有本地静态资源使用 /dsh-connect/ 前缀');
 assert(!html.includes('src="/_next/') && !html.includes('href="/_next/'), '没有遗漏部署前缀的 Next.js 资源');
 
 const sitemap = await readFile(path.join(outDir, 'sitemap.xml'), 'utf8');
+const base = 'https://lxy.app/dsh-connect/';
+const guides = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)]
+  .map(match => match[1]).filter(url => url.startsWith(base + 'docs/'));
+assert(guides.length === 6, 'Sitemap 包含六篇用户指南');
+for (const url of guides) {
+  const page = await readFile(path.join(outDir, url.slice(base.length), 'index.html'), 'utf8');
+  assert(page.includes(`rel="canonical" href="${url}"`) && page.includes('<h1>'), `指南可直接访问：${url}`);
+  for (const [, href] of page.matchAll(/(?:href|src)="([^"]+)"/g)) {
+    const target = new URL(href, url);
+    if (target.origin !== new URL(base).origin) continue;
+    if (!target.href.startsWith(base)) throw new Error(`指南链接缺少部署前缀：${target.href}`);
+    await readFile(path.join(outDir, target.pathname.slice('/dsh-connect/'.length), target.pathname.endsWith('/') ? 'index.html' : ''));
+  }
+}
 const robots = await readFile(path.join(outDir, 'robots.txt'), 'utf8');
 const llms = await readFile(path.join(outDir, 'llms.txt'), 'utf8');
 assert(sitemap.includes('<loc>https://lxy.app/dsh-connect/</loc>'), 'Sitemap 使用正式 Canonical 地址');

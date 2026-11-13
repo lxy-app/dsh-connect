@@ -56,6 +56,8 @@ npm run preview        # 在 4174 端口预览生产产物
 
 ```text
 /dsh-connect/                  → index.html
+/dsh-connect/docs/             → docs/index.html
+/dsh-connect/docs/mobile/      → docs/mobile/index.html（其余章节同理）
 /dsh-connect/_next/...         → 静态 JS/CSS
 /dsh-connect/images/icon.png   → 品牌图标
 /dsh-connect/sitemap.xml       → Sitemap
@@ -63,7 +65,7 @@ npm run preview        # 在 4174 端口预览生产产物
 /dsh-connect/llms.txt          → AI 工具产品说明
 ```
 
-单页网站没有客户端路由，不需要 SPA 回退规则，也不需要部署 Next.js Server。若希望 `lxy.app/robots.txt` 指向该 Sitemap，还需在域名根路径单独配置；子路径内的 robots 不会替代域名根 robots。
+静态主机应按目录提供各自的 index.html，使章节链接可以直接访问和刷新，无需部署 Next.js Server。若希望 `lxy.app/robots.txt` 指向该 Sitemap，还需在域名根路径单独配置；子路径内的 robots 不会替代域名根 robots。
 
 ### Makefile 一键部署
 
@@ -112,6 +114,6 @@ scripts/verify-static.mjs 静态产物验证
 
 ## 内容与演示边界
 
-页面文案基于仓库已有产品和架构文档。设备、会话、审批与管理后台指标均为明确标注的模拟数据。正式 CTA 指向真实 GitHub 仓库，不包含虚构下载量、用户评价、价格或未确定的管理后台路由。
+页面文案基于仓库已有产品和架构文档。设备、会话、审批与管理后台指标均为明确标注的模拟数据。“开始使用”和导航中的“用户手册”进入静态导出的 `/dsh-connect/docs/`。六篇指南位于 `src/app/docs/`，目录和 Sitemap 共用 `src/components/manual.ts` 的章节列表。
 
 官网品牌色固定为浅色 violet `#6C5CE7` / 深色 violet `#9082FF`，首屏深色背景为 `#0B0C12`。如果官网紫色品牌图标更新，需要同步替换 `public/images/icon.png` 并重新构建；移动端银白＋炭黑图标不在此同步范围内。

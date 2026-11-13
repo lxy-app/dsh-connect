@@ -1,29 +1,156 @@
 # DSH Connect
 
-DSH Connect 面向个人开发者与小团队：用户通过移动端查看和推进桌面 DeepSeek Harness 会话，管理员治理用户、设备、工作区权限、远程审批与审计。
+DSH Connect 让你在手机上继续桌面的 DeepSeek Harness（DSH）会话。离开电脑后，可以查看 Agent 的进度、发送下一条指令，或在需要确认时处理审批和提问。Agent 在桌面执行，Connector 主动连接自托管的 Server，桌面无需开放入站端口。
 
-代码库已从产品设计进入 **P0 真实技术验证实现 + 管理后台 MVP + 移动端可用闭环**：已有 Go Server（PostgreSQL 18 / SQLite + ent）、版本化协议、实际 DSH Connector 与桌面授权面板、对接真实 API 的 Web 管理后台，以及可完成扫码配对、桌面访问授权、工作区浏览、会话查看、提示词发送与远程审批/回答提问的移动 App。移动端已接入会话事件 WSS，用于 assistant 文本的实时流式展示；远程审批同时覆盖 DSH 的 `approval/request` 与 `user-questions/request`，一次性、失败关闭，推送（APNs/FCM）仍属于后续阶段。
+管理员在 Web 后台配对设备、管理访问策略和查看审计。桌面用户决定每部手机可以访问哪些工作区，以及能否读取、发送指令、停止执行或处理审批。
 
-移动端采用「共享源码 + 双运行时壳」：iOS/Android 主线使用 Expo SDK 58，鸿蒙壳使用独立 SDK 55 + RNOH 0.84.1，公共逻辑位于 `apps/mobile-shared/`。鸿蒙已完成签名 HAP 与真机远程会话验证；具体支持边界见 [apps/mobile-harmony/README.md](apps/mobile-harmony/README.md)。
+## 使用指南
 
-## 当前实现状态
+| 你要做什么 | 从这里开始 |
+|---|---|
+| 团队已有服务，要从手机打开桌面上的会话 | [首次连接与日常使用](#首次连接与日常使用) |
+| 准备一台主机，供桌面和手机连接 | [使用 Docker Compose 部署](#使用-docker-compose-部署) |
+| 从源码把 App 装到自己的设备 | [编译并安装手机端](#编译并安装手机端) |
+| 了解各平台能做什么 | [当前功能与平台支持](#当前功能与平台支持) |
+| 在本地开发或运行测试 | [本地开发](#本地开发) · [验证](#验证) |
 
-| 组件 | 状态 | 说明 |
-|---|---|---|
-| Protocol v1 | 已实现 | OpenAPI、AsyncAPI、7 个 JSON Schema |
-| Go Server | 已实现 P0 | 配对、设备 Hub、REST/WSS、幂等、审计、PostgreSQL 18 / SQLite + ent |
-| 手机配对与访问授权 | 已实现 P1 | 一次性配对码、Token 轮换/吊销；手机按桌面工作区/动作申请，桌面 Connector 显式批准；会话/transcript/prompt/cancel 双重校验 |
-| DSH Connector | 已实现 P0 | Host 适配、出站 WSS、工作区授权、桌面面板 |
-| 调试客户端 | 已实现 | 配对码、设备、会话、历史、prompt、cancel、follow |
-| React Native App | 已实现 P1 读取与推进 | 扫码/手动配对、SecureStore、Token 轮换；工作区、会话列表、transcript 轮询兜底、Markdown 消息渲染、移动事件 WSS 流式回复、排队 prompt、cancel、授权撤销 |
-| Web Admin | 已实现 MVP | React 19 + antd 6 + Vite 8，登录/用户/设备/审计，以及桌面与手机配对二维码 |
-| 远程审批/提问 | 已实现首版 | 有 `approve` 手机在轮询时由手机优先接管（6 秒 grace），否则直接走桌面原生审批链；移交桌面会先撤回手机副本，不会双卡；超时/离线失败关闭 |
-| 附件 | M1 图片下行 | `present` 与允许名单工具声明的交付图片可随 transcript 展示、全屏预览；文件下载/保存/分享属 M2，消息附件与手机上行属 M3 |
-| 推送 | 未开始 | 移动实时事件已通过 grant 校验的 WSS 流式推送；APNs/FCM 属后续阶段 |
+完整步骤及按症状排障见[官网用户手册](https://lxy.app/dsh-connect/docs/)。
 
-> 当前 DSH 适配精确锁定 `0.2.2-rc.1`。可控 Host 仿真与跨语言 E2E 不能替代真实 DSH 安装、启停和 Agent 执行验收；实际验证状态见下方“验证”。
+### 首次连接与日常使用
 
-## 快速启动
+1. **管理员生成桌面配对码。** 在后台进入“设备管理” → “桌面 Connector” → “添加桌面”。 桌面用户在 DSH `0.2.2-rc.1` 的 Plugin Manager 中将 `@lxyapp/dsh-connect@0.1.5` 填入“包名或地址”，确认安装并启用。[npm 包主页](https://www.npmjs.com/package/@lxyapp/dsh-connect)。自行打包时，从仓库根目录进入 `connector/dsh-plugin`，依次运行 `npm ci`、`npm run build`、`npm pack`，选用输出的 `.tgz`。在 Plugins 页确认 active。[桌面安装说明](connector/dsh-plugin/README.md)
+2. **桌面用户开放工作区。** 在 DSH Connect 面板填写 Server 地址和桌面配对码，点“保存并配对”，在桌面核对设备指纹，选择已有会话的工作区和允许的动作，点“确认授权并上线”。管理后台应能看到该桌面在线。
+3. **管理员为手机生成另一个码。** 在后台“设备管理” → “手机设备”选择所属用户，生成一次性二维码。手机打开 App → “连接 Server” → “扫描配对二维码”，或手动填写同页显示的地址和手机配对码。
+4. **手机申请，桌面确认。** 在手机“设备”找到目标桌面，点“申请访问”，选工作区及所需动作，点“提交访问申请”。桌面用户在“手机访问授权”核对并批准后，手机下拉刷新。
+5. **打开第一个会话。** 在“会话”的工作区抽屉中打开已有会话，确认历史可读。如果桌面在线且手机同时获得读取与发送权限，也可以点工作区旁的“＋”新建会话。获准发送后，输入“请简要总结当前进度”，等待本轮回复结束。发送后网络中断时，先重连查看历史再决定下一步。
+6. **处理后续操作。** 停止执行需要取消权限；处理审批和提问需要远程审批权限。核对请求后再决定或作答，过期或撤回时查看会话最新状态。要收回某部手机的访问，在桌面面板撤销授权；手机遗失时由管理员在后台吊销设备。
+
+### 使用 Docker Compose 部署
+
+按镜像来源选择一种方式。两种方式都使用同一个 Compose 文件、配置项和持久卷。
+
+#### 方式一 · 从 Docker Hub 拉取镜像部署
+
+在安装了 Docker、Compose 和 curl 的主机上新建目录，下载部署文件：
+
+```sh
+mkdir dsh-connect-deploy
+cd dsh-connect-deploy
+curl -fLO https://raw.githubusercontent.com/lxy-app/dsh-connect/main/docker-compose.server.yml
+curl -fL https://raw.githubusercontent.com/lxy-app/dsh-connect/main/.env.example -o .env
+```
+
+填写下方[公共配置](#部署公共配置)，然后拉取并启动发布镜像 `lxyapp/dsh-connect:latest`。[Docker Hub 镜像仓库](https://hub.docker.com/r/lxyapp/dsh-connect)
+
+```sh
+docker compose -f docker-compose.server.yml pull server
+docker compose -f docker-compose.server.yml up -d --pull never
+```
+
+#### 方式二 · 从源码构建镜像部署
+
+在部署主机准备 Git、Docker、Buildx 和 Compose。从要部署的源码版本构建；首次获取仓库可执行：
+
+```sh
+git clone https://github.com/lxy-app/dsh-connect.git
+cd dsh-connect
+cp .env.example .env
+```
+
+已有仓库和配置时直接在仓库根目录操作。填写下方[公共配置](#部署公共配置)，然后构建与 Compose 文件同名的本地镜像并启动：
+
+```sh
+docker buildx build --load -t lxyapp/dsh-connect:latest .
+docker compose -f docker-compose.server.yml up -d --pull never
+```
+
+#### 部署公共配置
+
+编辑 `.env`，至少完成以下设置：
+
+| 配置项 | 填写内容 |
+|---|---|
+| `DSH_CONNECT_BOOTSTRAP_TOKEN` | 使用 `openssl rand -hex 32` 生成随机值，仅管理员保管 |
+| `DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL`、`DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD` | 首次登录邮箱和强密码（至少 8 位）。仅空用户表首次启动时创建 Owner |
+| `DSH_CONNECT_DATABASE_URL` | 默认连接预先准备的 PostgreSQL 18，例如 `postgres://USER:PASSWORD@DB_HOST:5432/dsh_connect?sslmode=verify-full`，替换占位符并配置相应证书。容器访问宿主机数据库可使用 `host.docker.internal`，数据库须允许该连接。单实例可直接填写 `sqlite:///data/sqlite/dsh-connect.db` |
+| `DSH_CONNECT_SERVER_URL` | 填写桌面和手机都能访问的外部地址，如 `https://connect.example.com`；它将出现在配对信息中 |
+| `DSH_CONNECT_ATTACHMENTS` | 需要手机上传图片或文件时填写 `readwrite`。缺省为 `read`。修改后用 Compose 重建 server 容器，在管理后台「设置」确认附件模式 |
+| `DSH_CONNECT_ADMIN_ORIGIN` | Admin 独立域名部署时填写其完整 origin，如 `https://admin.example.com`；同源部署可留空 |
+
+#### 部署验证
+
+完成所选方式的启动步骤后，在对应部署目录检查容器状态和日志：
+
+```sh
+docker compose -f docker-compose.server.yml ps
+docker compose -f docker-compose.server.yml logs --tail=50 server
+```
+
+Compose 默认发布宿主机 8787 端口，可用 `DSH_CONNECT_HTTP_PORT` 修改。对外使用 HTTPS 反向代理，并支持 WebSocket 的 Upgrade 转发；将后端端口限制在代理可达范围。Compose 持久化附件目录 `/data/attachments` 和 SQLite 目录 `/data/sqlite`。重建容器时保留命名卷；SQLite 使用单副本与本机卷，PostgreSQL 数据由数据库所在主机持久化。
+
+**部署验收**：浏览器访问外部地址，用 Owner 邮箱和密码登录；手机浏览器也应能打开同一地址。按上节配对桌面，确认后台显示在线，然后在手机查看已授权会话。若手机二维码中的地址仍为 `127.0.0.1`，修正外部地址，再次运行上面的 `up -d` 并生成新码。
+
+**附件上传排障。** 使用 Nginx 且遇到 HTTP 413 时，检查反向代理请求体上限。Server 默认允许单文件 20 MiB，可在 Nginx 对应的 `server` 块设置 `client_max_body_size 25m;` 后重载。若将附件命名卷改为宿主机目录，确保容器用户（UID/GID 10001）对该目录有写权限。
+
+### 编译并安装手机端
+
+三组命令均从仓库根目录开始，使用 Node.js 24。iOS/Android 开发包会加载 Metro 提供的代码，构建机与手机需网络互通。
+
+**iPhone** · 准备 macOS、Xcode、CocoaPods 和可用开发签名。连接并解锁 iPhone，信任电脑并开启开发者模式。在 Xcode 配置开发团队，然后运行：
+
+```sh
+cd apps/mobile
+npm ci
+npm run ios -- --device
+```
+
+选择目标 iPhone；命令编译、安装 Development Build 并启动 Metro。
+
+**Android** · 准备 Android Studio、Android SDK 与 adb。手机开启 USB 调试并允许这台电脑调试，然后运行：
+
+```sh
+cd apps/mobile
+npm ci
+adb devices
+npm run android -- --device
+```
+
+确认设备状态为 `device` 并选择目标手机。命令用调试签名安装开发包并启动 Metro。iOS/Android 后续开发可在同一目录运行 `npm start`；原生模块或权限配置变更后需重新编译。云构建与分发配置见[移动端 README](apps/mobile/README.md)。
+
+**HarmonyOS** · 准备 DevEco Studio 6.1+、HarmonyOS SDK、OHPM、Hvigor 和 hdc。真机开启开发者模式，用 DevEco 为目标设备生成调试签名，按[鸿蒙签名示例](apps/mobile-harmony/README.md#签名与-hap-构建)准备仓库外的 JSON5 文件，再替换下面的路径：
+
+```sh
+cd apps/mobile-harmony
+npm ci --legacy-peer-deps
+npm run doctor
+export EXPO_HARMONY_SIGNING_CONFIG_FILE=/absolute/path/to/signing.json5
+npm run setup:native
+npm run build:hap
+hdc list targets
+hdc install -r harmony/entry/build/default/outputs/default/entry-default-signed.hap
+npm start
+```
+
+打开已安装的 App，看到“连接 Server”后使用管理员生成的手机配对码。开发包连接 Metro 与 App 配对业务 Server 是两个步骤，各自使用对应服务的地址。
+
+## 当前功能与平台支持
+
+| 使用场景 | 当前支持 |
+|---|---|
+| 查看进度 | 按工作区浏览会话，查看历史、工具步骤摘要和 Markdown 回复。运行中的回复通过 WebSocket 实时显示，连接中断时回退到轮询。 |
+| 推进会话 | 在授权工作区新建会话、发送或排队指令。有发送权限时，可在当前会话切换模型与推理强度。有取消权限时，可停止当前轮次。 |
+| 审批与提问 | 有审批权限的手机在前台检查待处理项时，优先收到一次性请求。默认 6 秒内未作答，Connector 先撤回手机卡片，再转交桌面。系统通知（APNs/FCM）尚未接入。 |
+| 收发附件 | 手机可全屏查看桌面交付的图片。iOS/Android 可拍照、选图或选文件，上传后单独发送或附在指令中。上传需要 Server 开启 `DSH_CONNECT_ATTACHMENTS=readwrite` 且手机具有该工作区的发送权限。非图片交付文件目前仅展示信息。 |
+| 语音交互 | iOS/Android 支持按住说话转写、确认后发送，以及朗读回复。可使用系统语音，也可配置火山 Agent Plan 的 ASR/TTS。 |
+| 后台管理 | 管理用户、设备和访问策略，查看运行中的会话元数据、待处理审批与提问、服务配置和审计记录。管理员可配置远程审批开关和有效期。 |
+
+**平台与验收范围**
+
+- **iOS / Android** 使用 Expo SDK 58 Development Build。附件上传已有单元测试与可控 Host 跨端测试记录，拍照、选择附件和上传仍待真机验收。[移动端说明](apps/mobile/README.md) · [附件验证记录](docs/06-mobile-attachments-design.md)
+- **HarmonyOS** 使用 Expo SDK 55 + RNOH 0.84.1，与主线共享业务源码。已在 HUAWEI Mate 80 Pro（HarmonyOS 7 / API 26）验证签名 HAP 安装、配对与远程会话。当前不支持在手机上选择附件，扫码、语音和远程审批仍需逐项真机验收。[鸿蒙端说明](apps/mobile-harmony/README.md)
+- **桌面** 的 Host API 适配锁定 DSH `0.2.2-rc.1`。插件生命周期及真实 Agent 执行需按对应版本单独验收。[Connector 说明](connector/dsh-plugin/README.md)
+
+## 本地开发
 
 要求 Go 1.26+、Node 24+；默认 PostgreSQL 18 路径需要 Docker，SQLite 路径不需要独立数据库服务。
 
@@ -43,53 +170,9 @@ make admin-install
 make run-admin        # http://127.0.0.1:5173
 ```
 
-默认监听 `127.0.0.1:8787`，数据存在所选数据库（不再是 JSON 文件）。单实例 SQLite 可在 `.env` 中改为 `DSH_CONNECT_DATABASE_URL=sqlite://./data/dsh-connect.db`（父目录需已存在），无需执行 `make db-up`。跨不可信网络必须启用 HTTPS/WSS，并显式设置 `DSH_CONNECT_ADMIN_ORIGIN`；不要把令牌或 `.env` 提交到仓库。
+默认监听 `127.0.0.1:8787`，配对、授权与审计数据保存在所选数据库。单实例 SQLite 可在 `.env` 中改为 `DSH_CONNECT_DATABASE_URL=sqlite://./data/dsh-connect.db`（父目录需已存在），无需执行 `make db-up`。跨不可信网络必须启用 HTTPS/WSS，并显式设置 `DSH_CONNECT_ADMIN_ORIGIN`；不要把令牌或 `.env` 提交到仓库。
 
 详细配置、迁移和管理 API 见 [server/README.md](server/README.md)，管理后台见 [apps/admin/README.md](apps/admin/README.md)，移动工程见 [apps/mobile/README.md](apps/mobile/README.md)，Connector 见 [connector/dsh-plugin/README.md](connector/dsh-plugin/README.md)。
-
-### Docker 一体镜像
-
-`Dockerfile` 将 Go Server 与 Web Admin 构建到同一个镜像，Go Server 同源托管 Admin 静态文件、`/v1` API 和 WebSocket。默认连接外部 PostgreSQL 18；也可通过 `DSH_CONNECT_DATABASE_URL=sqlite:///data/sqlite/dsh-connect.db` 使用单实例 SQLite。
-
-```sh
-# 推荐使用 Buildx：x86_64 与 ARM 构建主机均可，ARM 主机会交叉编译。
-docker buildx build --platform linux/amd64 \
-  -t lxyapp/dsh-connect:latest --load .
-
-docker run -d --name dsh-connect --restart unless-stopped \
-  -p 8787:8787 \
-  -e DSH_CONNECT_BOOTSTRAP_TOKEN='replace-with-a-long-random-token' \
-  -e DSH_CONNECT_DATABASE_URL='postgres://dsh:password@postgres:5432/dsh_connect?sslmode=disable' \
-  -e DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL='owner@example.com' \
-  -e DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD='replace-with-a-strong-password' \
-  -e DSH_CONNECT_SERVER_URL='https://dsh-connect.example.com' \
-  -v dsh-connect-attachments:/data/attachments \
-  lxyapp/dsh-connect:latest
-```
-
-容器默认监听 `0.0.0.0:8787`，Admin 与 API 均通过该端口访问。附件字节默认写入 `/data/attachments`，镜像会为非 root 运行用户设置可写权限；生产部署必须像示例一样挂载持久卷，避免重建容器后丢失图片字节。使用 SQLite 时还需挂载 `-v dsh-connect-sqlite:/data/sqlite`，并保持单 Server 副本和本机 Docker 卷。使用 `--env-file .env` 时，若文件内仍是开发默认的 `DSH_CONNECT_LISTEN_ADDR=127.0.0.1:8787`，必须改为 `0.0.0.0:8787`。生产环境应在容器前配置 HTTPS 反向代理，并把 `DSH_CONNECT_SERVER_URL` 设置为手机可访问的公网地址。
-
-若将命名卷改为 `./data/attachments:/data/attachments` 绑定挂载，镜像内的目录属主设置不会覆盖宿主目录。启动前必须在宿主机创建目录并把它交给容器内的 `app` 用户（UID/GID `10001`），否则附件上传会在落盘时失败，手机端持续显示未就绪：
-
-```sh
-mkdir -p ./data/attachments
-sudo chown -R 10001:10001 ./data/attachments
-```
-
-Nginx 默认的 1 MiB 请求体上限会在附件到达 Go Server 前拦截较大的桌面图片上传，表现为手机持续等待且附件目录没有文件。请在对应 `server` 块中将上限提高到大于 `DSH_CONNECT_MAX_ATTACHMENT_BYTES`（默认 20 MiB），然后校验并重载 Nginx：
-
-```nginx
-server {
-    # 其他既有监听、TLS 与 proxy_pass 配置保持不变。
-    client_max_body_size 25m;
-}
-```
-
-也可以用 `docker-compose.server.yml` 部署：它直接读取 `.env`，把监听地址固定覆盖为 `0.0.0.0:8787`，通过 `host.docker.internal` 支持连接宿主机上的 PostgreSQL 18，并提供 `/data/sqlite` 持久卷供可选 SQLite 配置使用。宿主端口默认 8787，可用 `DSH_CONNECT_HTTP_PORT` 覆盖。
-
-```sh
-docker compose -f docker-compose.server.yml up -d
-```
 
 ### 调试示例
 
@@ -107,10 +190,11 @@ npm --prefix connector/dsh-plugin run debug -- list --device dev_xxx
 ```sh
 make test          # Go Server 双数据库测试 + Connector 单元/集成测试
 make test-e2e      # PostgreSQL / SQLite + 真实 Go Server + Connector + 可控 Host 仿真
-make test-admin    # 管理后台类型检查
-make test-mobile   # 主线移动端 ESLint + TypeScript + ASR/TTS 协议测试
-make test-mobile-harmony # 鸿蒙壳 ESLint + TypeScript
-make check         # go vet、全部测试、跨语言 E2E 与双移动端静态检查
+make test-admin    # 管理后台类型检查与组件测试
+make test-admin-e2e # 管理后台浏览器测试，需先安装 Chromium
+make test-mobile   # 主线移动端 ESLint、TypeScript 与单元测试
+make test-mobile-harmony # 鸿蒙壳 ESLint、TypeScript 与单元测试
+make check         # go vet、Server/Connector 测试与 E2E、Admin 和两套移动端检查与单测
 ```
 
 Server 测试由 `internal/dbtest` 选择数据库，同一套用例分别运行 PostgreSQL 与 SQLite。PostgreSQL 会自动拉起临时 18 容器（`internal/pgtest`），每个测试使用独立数据库；没有 Docker 时会跳过，设置 `DSH_CONNECT_REQUIRE_PG=1` 则改为失败。SQLite 每个测试使用独立临时文件，无需 Docker。`make test-e2e` 同样运行两种数据库；PostgreSQL E2E 应通过 `DSH_CONNECT_E2E_DATABASE_URL` 使用独立业务数据库，SQLite E2E 自动使用临时文件。
@@ -122,12 +206,11 @@ Server 测试由 `internal/dbtest` 选择数据库，同一套用例分别运行
 ## 核心架构
 
 ```text
-Expo Mobile App（授权/会话/对话） ── HTTPS ──> Go Server <── 持久出站 WSS ── DSH Connect Connector
-Web Admin（已实现）    ── HTTPS ──────>      │                                  │
-                                            │                                  └─ DeepSeek Harness Desktop
-                                            │                                     Session Log / Host API
-                                            ├─ PostgreSQL 18 / SQLite（ent）
-                                            └─ APNs / FCM（后续）
+手机 App ─── HTTPS / WSS ──┐
+                          ├── Go Server ─── PostgreSQL 18 或单实例 SQLite
+Web Admin ─── HTTPS ──────┘       ↑      └── 附件存储
+                                 │ 出站 WSS
+                        桌面 Connector ─── DSH Host API / Session Log
 ```
 
 - **DSH Session Log** 是会话唯一事实源；Server 不读取 DSH 内部文件。
@@ -150,6 +233,7 @@ dsh-connect/
 │   ├── cmd/server/               # Go Server 入口
 │   ├── ent/                      # ent schema 与生成的实体代码
 │   └── internal/                 # API、Hub、路由、协议、Store 与 dbtest/pgtest
+├── website/                      # 项目官网与用户手册
 ├── docs/                         # 产品、架构、原型与实施路线
 └── prototype/                    # 独立 HTML 交互原型（产品 + 官网）
 ```

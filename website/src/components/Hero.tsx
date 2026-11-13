@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { BrandLogo } from './BrandLogo';
-import { GITHUB_URL } from './content';
+import { manualRoot } from './manual';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 
@@ -91,8 +91,8 @@ export function Hero() {
             <strong>不必远程控制整块屏幕，也能让任务继续向前。</strong>
           </p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
-              在 GitHub 开始使用<Icon name="arrowUp" />
+            <a className="btn btn-primary" href={manualRoot}>
+              开始使用<Icon name="arrowUp" />
             </a>
             <a className="btn btn-ghost" href="#workflow">看看它如何工作<Icon name="arrow" /></a>
           </div>
