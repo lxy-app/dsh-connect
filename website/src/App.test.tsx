@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import HomePage from './app/page';
-import { GITHUB_URL } from './components/content';
+import { manualRoot } from './components/manual';
 
 function renderWebsite() {
   return render(<HomePage />);
@@ -17,7 +17,10 @@ describe('DSH Connect website', () => {
     expect(screen.getAllByRole('button', { name: /吗？|吗$|吗？$/ }).length).toBeGreaterThanOrEqual(3);
     expect(container.querySelectorAll('.faq-item')).toHaveLength(5);
     expect(container.querySelectorAll('img[src="/dsh-connect/images/icon.png"]')).toHaveLength(4);
-    expect(screen.getAllByRole('link', { name: /开始使用/ }).every(link => link.getAttribute('href') === GITHUB_URL)).toBe(true);
+    expect(screen.getAllByRole('link', { name: /开始使用/ }).every(link => link.getAttribute('href') === manualRoot)).toBe(true);
+
+    expect(screen.getByRole('link', { name: 'Docker 部署' })).toHaveAttribute('href', manualRoot + 'deploy/');
+    expect(screen.getByRole('link', { name: 'DSH 插件安装' })).toHaveAttribute('href', manualRoot + 'desktop/');
 
     const schema = container.querySelector('script[type="application/ld+json"]');
     expect(schema?.textContent).toContain('SoftwareApplication');
@@ -114,6 +117,7 @@ describe('DSH Connect website', () => {
     await user.click(menu);
     expect(menu).toHaveAttribute('aria-expanded', 'true');
     expect(document.body).toHaveClass('menu-open');
+    expect(document.querySelector('#mobileNav a[href="' + manualRoot + '"]')).toHaveTextContent('用户手册');
     await user.keyboard('{Escape}');
     await waitFor(() => expect(menu).toHaveAttribute('aria-expanded', 'false'));
     expect(document.body).not.toHaveClass('menu-open');

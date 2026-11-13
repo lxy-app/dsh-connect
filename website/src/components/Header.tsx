@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BrandLogo } from './BrandLogo';
 import { GITHUB_URL, navItems } from './content';
+import { manualRoot } from './manual';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 
@@ -79,6 +80,7 @@ export function Header() {
                 {item.label}
               </a>
             ))}
+            <a href={manualRoot}>用户手册</a>
           </nav>
           <div className="nav-actions">
             <a className="nav-github" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
@@ -93,7 +95,7 @@ export function Header() {
             >
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
             </button>
-            <a className="btn btn-light nav-cta" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+            <a className="btn btn-light nav-cta" href={manualRoot}>
               开始使用<Icon name="arrowUp" size={15} />
             </a>
             <button
@@ -115,8 +117,8 @@ export function Header() {
             {item.label}<Icon name="arrow" />
           </a>
         ))}
-        <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
-          在 GitHub 开始使用<Icon name="arrowUp" />
+        <a href={manualRoot} onClick={() => setMenuOpen(false)}>
+          用户手册<Icon name="arrow" />
         </a>
       </nav>
     </>

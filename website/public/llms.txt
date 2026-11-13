@@ -33,3 +33,4 @@ License: Apache License 2.0
 - 产品设计: https://github.com/lxy-app/dsh-connect/blob/main/docs/02-product-design.md
 - 协议说明: https://github.com/lxy-app/dsh-connect/blob/main/protocol/README.md
 - Server 部署: https://github.com/lxy-app/dsh-connect/blob/main/server/README.md
+- 用户手册: https://lxy.app/dsh-connect/docs/

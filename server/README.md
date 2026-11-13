@@ -191,7 +191,7 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 
 M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/翻页；非图片文件显示为信息行（下载/保存/打开属 M2）；手机上行为 M3。配置项见 `.env.example` 的 `DSH_CONNECT_ATTACHMENT*`（默认 `DSH_CONNECT_ATTACHMENTS=read`，单文件 20 MiB，blob 目录总量 2 GiB，blob TTL 168h）。
 
-已知未实现：blob TTL 的定时回收任务（当前仅记录 TTL 配置，不主动删除过期 blob）；消息 `image`/`file` 内容块（M3）；手机上行的 `readwrite` 写入路径。
+已知未实现：blob TTL 的定时回收任务（当前仅记录 TTL 配置，不主动删除过期 blob）。手机上行需启用 `DSH_CONNECT_ATTACHMENTS=readwrite`，并由桌面为当前工作区授予手机 `prompt` 权限。
 
 ## 数据模型（ent schema）
 
