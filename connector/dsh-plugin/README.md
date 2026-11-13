@@ -7,7 +7,7 @@
 ## 已实现
 
 - 持久化 npm bundle，Host 命名导出 `apply/inject`。
-- DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权；配对完成后仍可在“桌面授权范围”中随时增减工作区和动作（`pair.updateGrants`，无需重新配对），以及**手机访问授权**（批准/拒绝/撤销手机申请的工作区与动作）。面板品牌色使用石墨/银白令牌，按宿主实际背景亮度切换明暗主题和主按钮对比前景色，不继承宿主的高饱和品牌色。
+- DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权；配对完成后仍可在“桌面授权范围”中随时增减工作区和动作（`pair.updateGrants`，无需重新配对），以及**手机访问授权**（批准/拒绝/撤销手机申请的工作区与动作）。工作区授权支持三态全选、名称/路径搜索、“仅看已选”和固定高度列表内滚动；搜索与筛选不改变已有选择，全选始终作用于全部工作区，空工作区或空动作不能保存。面板品牌色使用石墨/银白令牌，按宿主实际背景亮度切换明暗主题和主按钮对比前景色，不继承宿主的高饱和品牌色。
 - `/dsh-connect` 自定义 unary RPC，仅 owner peer 可调用；会话流不经过该 RPC。
 - 单条主动出站 Connector WSS，心跳、指数退避、设备令牌重连和固定背压上限。
 - `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 保留 user/assistant 对话文本，并把 `tool/call` + `tool/result` 投影成单行步骤（`toolName`、脱敏摘要、状态、耗时、turn）；工具参数、命令输出、推理内容以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页先解析当前 Session 的 projection watermark 再传 `throughSeq`（DSH 对 `throughSeq=-1` 实际返回空页），超出体积预算时优先保留最新消息。
