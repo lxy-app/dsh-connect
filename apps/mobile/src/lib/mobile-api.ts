@@ -118,6 +118,9 @@ export function describeMobileApiError(error: unknown): string {
     case 'forbidden':
       return '没有执行此操作的权限，或桌面尚未授权这台手机。';
     case 'not_found':
+      if (error.message === 'attachment upload is disabled') {
+        return '服务端已关闭附件上传，请管理员将附件模式设为 readwrite。';
+      }
       return 'Server 上找不到该用户、设备或访问授权。';
     case 'device_offline':
       return '桌面离线，暂时无法执行此操作。请确认 DSH 和 Connector 在线。';

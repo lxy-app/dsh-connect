@@ -38,7 +38,6 @@ import { groupTurns, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib
 import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
 import {
   admitAttachment,
-  attachmentFailureSummary,
   attachmentIds,
   canSubmitPrompt,
   MAX_PROMPT_ATTACHMENTS,
@@ -645,7 +644,6 @@ function ChatScreenContent() {
   /** Opens one system picker and stages whatever the user chose. */
   const addAttachments = useCallback(
     async (source: AttachmentSource) => {
-      setMoreOptionsOpen(false);
       const picked = await pickAttachments(source, { remainingSlots: MAX_PROMPT_ATTACHMENTS - attachments.length });
       if (picked.kind === 'canceled') return;
       if (picked.kind === 'denied') {
@@ -1263,11 +1261,11 @@ function ChatScreenContent() {
               onRetry={retryAttachment}
             />
           )}
-          {attachmentFailureSummary(attachments) && !voiceActive ? (
-            <Text style={[styles.attachmentFailure, { color: theme.danger }]}>
-              {attachmentFailureSummary(attachments)}
+          {voiceActive ? null : attachments.filter((item) => item.state === 'failed').map((item) => (
+            <Text key={item.localId} style={[styles.attachmentFailure, { color: theme.danger }]}>
+              {item.name} 上传失败。{item.error}
             </Text>
-          ) : null}
+          ))}
           <View style={[styles.composeBox, { backgroundColor: theme.surfaceMuted }, voiceActive && styles.composeBoxHidden]}>
             <View style={styles.voiceComposerRow}>
               <Pressable
@@ -1408,12 +1406,13 @@ function ChatScreenContent() {
         catalog={modelCatalog}
         refreshing={modelRefreshing}
         attachmentSlots={MAX_PROMPT_ATTACHMENTS - attachments.length}
-        onPickAttachments={(source) => void addAttachments(source)}
-        onClose={() => setMoreOptionsOpen(false)}
-        onOpenModel={() => {
-          setMoreOptionsOpen(false);
-          openModelSheet();
+        onPickAttachments={(source) => {
+          void addAttachments(source).catch((cause: unknown) => {
+            Alert.alert('无法添加附件', cause instanceof Error && cause.message ? cause.message : '无法读取所选附件，请重试。');
+          });
         }}
+        onClose={() => setMoreOptionsOpen(false)}
+        onOpenModel={openModelSheet}
       />
       <ModelSheet
         visible={modelSheetOpen}

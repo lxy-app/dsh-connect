@@ -41,7 +41,7 @@ export function AttachmentDraftBar({
         const failed = draft.state === 'failed';
         const uploading = draft.state === 'uploading';
         return (
-          <View key={draft.localId} style={styles.tile}>
+          <View key={draft.localId} style={[styles.tile, draft.kind === 'file' && styles.fileTile]}>
             <View
               style={[
                 draft.kind === 'file' ? styles.fileCard : styles.imageCard,
@@ -73,7 +73,7 @@ export function AttachmentDraftBar({
                   accessibilityLabel={`重试 ${draft.name}`}
                   disabled={disabled}
                   onPress={() => onRetry(draft.localId)}
-                  style={({ pressed }) => [styles.retry, { borderColor: theme.danger }, pressed && styles.pressed]}
+                  style={({ pressed }) => [styles.retry, { borderColor: theme.danger, backgroundColor: theme.surface }, pressed && styles.pressed]}
                 >
                   <Text style={[styles.retryText, { color: theme.danger }]}>重试</Text>
                 </Pressable>
@@ -112,6 +112,7 @@ const styles = StyleSheet.create({
   scroll: { maxHeight: TILE_SIZE + 10 },
   content: { gap: 8, paddingHorizontal: 2, paddingTop: 2, paddingBottom: 8, alignItems: 'center' },
   tile: { width: TILE_SIZE, height: TILE_SIZE },
+  fileTile: { width: 188 },
   imageCard: { width: TILE_SIZE, height: TILE_SIZE, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   fileCard: { width: 188, height: TILE_SIZE, borderRadius: 14, borderWidth: 1, paddingHorizontal: 8, justifyContent: 'center' },
   image: { width: '100%', height: '100%' },
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
   fileText: { flex: 1, minWidth: 0, gap: 3 },
   fileName: { fontSize: Typography.caption, fontWeight: '600' },
   fileMeta: { fontSize: Typography.caption },
-  retry: { alignSelf: 'flex-start', marginTop: 6, borderWidth: 1, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
+  retry: { position: 'absolute', bottom: 3, right: 4, borderWidth: 1, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
   retryText: { fontSize: Typography.caption, fontWeight: '600' },
   remove: {
     position: 'absolute',

@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   createMobileSession,
+  describeMobileApiError,
   getMobileSessionModel,
   getMobileTranscript,
   MobileApiError,
@@ -257,6 +258,11 @@ test('mobile attachment upload sends the picked bytes and returns the staging id
   assert.equal(decodeURIComponent(requestHeaders.get('X-DSH-Attachment-Name') ?? ''), '拍照 1.jpg');
   assert.deepEqual(requestBytes, [0, 1, 2, 255]);
   assert.equal(staged.attachmentId, 'atu_camera');
+});
+
+test('disabled attachment uploads give an actionable error distinct from other missing resources', () => {
+  assert.match(describeMobileApiError(new MobileApiError('not_found', 'attachment upload is disabled', 404)), /readwrite/);
+  assert.doesNotMatch(describeMobileApiError(new MobileApiError('not_found', 'session not found', 404)), /readwrite/);
 });
 
 test('mobile prompt includes every freshly staged attachment id in composer order', async (t) => {
