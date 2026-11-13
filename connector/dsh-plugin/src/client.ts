@@ -104,6 +104,14 @@ window.__ModuleLoader__.load({
         grantDirty: '有未保存的授权变更',
         accessDenied: '已拒绝这次手机访问请求', accessAllowed: '已授权此手机访问所选工作区', accessRevoked: '已撤销此手机的访问',
         noAccessWorkspace: '请至少选择一个工作区', noAccessScope: '请至少选择一个动作',
+        grantSaved: '已保存', selectAllWorkspaces: '全选', clearAllWorkspaces: '取消全选',
+        selectAllWorkspacesHint: '始终选择全部工作区；搜索和筛选不会缩小全选范围。',
+        searchWorkspaces: '搜索工作区名称或路径', selectedOnly: '仅看已选', selected: '已选',
+        noWorkspaceMatches: '没有匹配的工作区', clearWorkspaceFilter: '查看全部工作区',
+        workspaceListSummary: '显示 {visible} / {total} 个', workspaceListScroll: '列表内滚动',
+        selectedWorkspaceSummary: '已选 {count} 个', filterKeepsSelection: '筛选不影响其他已选项',
+        grantsInvalid: '至少保留 1 个工作区和 1 个动作后才能保存。',
+        grantSaveDirty: '变更尚未生效，保存后无需重新配对。', grantSaveClean: '当前授权已保存；调整后先进入未保存状态。',
       },
       en: {
         appName: 'DSH Connect', title: 'Desktop Connector', subtitle: 'Securely connect this DSH desktop for remote control',
@@ -132,6 +140,14 @@ window.__ModuleLoader__.load({
         grantDirty: 'Unsaved grant changes',
         accessDenied: 'Phone access request denied', accessAllowed: 'Phone access granted for the selected workspaces', accessRevoked: 'Phone access revoked',
         noAccessWorkspace: 'Select at least one workspace', noAccessScope: 'Select at least one action',
+        grantSaved: 'Saved', selectAllWorkspaces: 'Select all', clearAllWorkspaces: 'Clear all',
+        selectAllWorkspacesHint: 'Always selects every workspace; search and filters never narrow the select-all scope.',
+        searchWorkspaces: 'Search workspace names or paths', selectedOnly: 'Selected only', selected: 'Selected',
+        noWorkspaceMatches: 'No matching workspaces', clearWorkspaceFilter: 'Show all workspaces',
+        workspaceListSummary: 'Showing {visible} / {total}', workspaceListScroll: 'Scroll within the list',
+        selectedWorkspaceSummary: '{count} selected', filterKeepsSelection: 'Filters do not change other selections',
+        grantsInvalid: 'Keep at least one workspace and one action selected before saving.',
+        grantSaveDirty: 'Changes are not active yet. Save to apply them without re-pairing.', grantSaveClean: 'Grants are saved. Edits enter an unsaved draft first.',
       },
     };
 
@@ -152,6 +168,20 @@ window.__ModuleLoader__.load({
       .dsc-value{font-family:"SFMono-Regular",Consolas,monospace;font-size:11px;text-align:right;overflow-wrap:anywhere}.dsc-section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--dsw-alias-label-secondary);margin:20px 0 9px}
       .dsc-check{display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--dsw-alias-border-l1);cursor:pointer}.dsc-check:last-child{border-bottom:0}.dsc-check input{margin-top:3px;accent-color:var(--dsc-brand)}
       .dsc-check-title{font-weight:620}.dsc-check-copy{font-size:11px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}.dsc-scopes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.dsc-scopes .dsc-check{border:1px solid var(--dsw-alias-border-l1);border-radius:10px;padding:10px}
+      .dsc-grant-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 9px}.dsc-grant-section-head .dsc-section{display:flex;align-items:center;gap:8px;margin:0}
+      .dsc-grant-count{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:7px;background:var(--dsc-brand-soft);color:var(--dsc-brand);font-size:10px;font-weight:700;letter-spacing:0;text-transform:none}
+      .dsc-select-all{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:4px 8px;border-radius:8px;color:var(--dsc-brand);font-size:11px;font-weight:650;cursor:pointer}.dsc-select-all:hover{background:var(--dsc-brand-soft)}.dsc-select-all input{margin:0;accent-color:var(--dsc-brand)}
+      .dsc-grant-tools{display:flex;align-items:center;gap:9px;margin-bottom:9px}.dsc-grant-search{flex:1;min-width:0;height:38px;font-size:12px}
+      .dsc-selected-only{flex:0 0 auto;min-height:38px;padding:8px 11px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:11px;font-weight:620;white-space:nowrap}.dsc-selected-only:hover{border-color:var(--dsc-brand);color:var(--dsc-brand)}.dsc-selected-only.dsc-on{border-color:var(--dsc-brand);background:var(--dsc-brand-soft);color:var(--dsc-brand)}
+      .dsc-grant-workspace-list{max-height:326px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-base)}
+      .dsc-grant-workspace{min-height:64px;padding:11px 12px;background:transparent}.dsc-grant-workspace:hover{background:var(--dsw-alias-bg-layer-2)}.dsc-grant-workspace.dsc-on{background:var(--dsc-brand-soft)}.dsc-grant-workspace>div{flex:1;min-width:0}.dsc-grant-workspace .dsc-check-copy{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dsc-grant-selected{flex:0 0 auto;margin-left:auto;color:var(--dsc-brand);font-size:10px;font-weight:650}
+      .dsc-grant-list-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 2px 0;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:1.5}.dsc-grant-list-foot>span:last-child{text-align:right}
+      .dsc-grant-empty{padding:28px 16px;text-align:center;color:var(--dsw-alias-label-secondary);font-size:11px}.dsc-grant-empty .dsc-button{margin-top:10px;min-height:32px;padding:5px 11px;font-size:11px}
+      .dsc-grant-validation{margin:12px 0 0}
+      .dsc-grant-scopes{grid-template-columns:repeat(4,minmax(0,1fr))}.dsc-grant-scopes .dsc-check.dsc-on{border-color:var(--dsc-brand);background:var(--dsc-brand-soft);color:var(--dsc-brand)}
+      .dsc-grant-save-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid var(--dsw-alias-border-l1)}.dsc-grant-save-copy{color:var(--dsw-alias-label-secondary);font-size:10px;line-height:1.55}.dsc-grant-save-actions{flex:0 0 auto;display:flex;gap:8px}.dsc-grant-save-actions .dsc-button{min-height:36px;padding:7px 12px;font-size:11px}
+      @media(max-width:700px){.dsc-grant-scopes{grid-template-columns:repeat(2,minmax(0,1fr))}.dsc-grant-save-bar{align-items:flex-start;flex-direction:column}.dsc-grant-save-actions{align-self:flex-end}}
+      @media(max-width:480px){.dsc-grant-tools{align-items:stretch;flex-direction:column}.dsc-selected-only{align-self:flex-end}.dsc-grant-selected{display:none}.dsc-grant-list-foot{align-items:flex-start;flex-direction:column;gap:3px}.dsc-grant-list-foot>span:last-child{text-align:left}}
       .dsc-warning{padding:12px 14px;border-radius:11px;background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 10%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:11px;margin-top:16px}
       .dsc-error{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent);color:var(--dsw-alias-state-error-primary);margin-bottom:14px;white-space:pre-wrap}
       .dsc-notice{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent);color:var(--dsw-alias-state-success-primary);margin-bottom:14px}
@@ -207,6 +237,9 @@ window.__ModuleLoader__.load({
       const [scopes, setScopes] = useState<Record<ConnectorScope, boolean>>({ read: true, prompt: false, approve: false, cancel: false });
       // null means "no pending edit": the card then mirrors the persisted grant.
       const [grantDraft, setGrantDraft] = useState<{ workspaces: string[]; scopes: ConnectorScope[] } | null>(null);
+      const [grantWorkspaceQuery, setGrantWorkspaceQuery] = useState('');
+      const [grantOnlySelected, setGrantOnlySelected] = useState(false);
+      const grantWorkspaceListRef = useRef<HTMLDivElement | null>(null);
       const [busy, setBusy] = useState('');
       const [error, setError] = useState('');
       const [notice, setNotice] = useState('');
@@ -268,6 +301,10 @@ window.__ModuleLoader__.load({
         const timer = setInterval(load, 2_000);
         return () => { active = false; refreshGeneration.current += 1; clearInterval(timer); };
       }, [refresh]);
+
+      useEffect(() => {
+        if (grantWorkspaceListRef.current) grantWorkspaceListRef.current.scrollTop = 0;
+      }, [grantWorkspaceQuery, grantOnlySelected]);
 
       const run = async (name: string, action: () => unknown | Promise<unknown>, successMessage?: string): Promise<void> => {
         setBusy(name); setError(''); setNotice('');
@@ -333,6 +370,15 @@ window.__ModuleLoader__.load({
               ? base.workspaces.filter((item) => item !== id)
               : [...base.workspaces, id],
           };
+        });
+      };
+      const toggleAllGrantWorkspaces = (): void => {
+        setGrantDraft((current) => {
+          const base = current ?? baseGrant();
+          const allSelected = workspaces.length > 0 && workspaces.every((workspace) => base.workspaces.includes(workspace.id));
+          // Search and filters only change visibility. Bulk selection always
+          // operates on the complete workspace list, never just visible rows.
+          return { ...base, workspaces: allSelected ? [] : workspaces.map((workspace) => workspace.id) };
         });
       };
       const toggleGrantScope = (scope: ConnectorScope): void => {
@@ -409,6 +455,20 @@ window.__ModuleLoader__.load({
       };
       const accessGrants = mobileAccess?.grants ?? [];
       const currentGrant = grantDraft ?? baseGrant();
+      const selectedWorkspaceSet = new Set(currentGrant.workspaces);
+      const selectedWorkspaceCount = workspaces.filter((workspace) => selectedWorkspaceSet.has(workspace.id)).length;
+      const allGrantWorkspacesSelected = workspaces.length > 0 && selectedWorkspaceCount === workspaces.length;
+      const normalizedGrantWorkspaceQuery = grantWorkspaceQuery.trim().toLowerCase();
+      const visibleGrantWorkspaces = workspaces.filter((workspace) => {
+        if (grantOnlySelected && !selectedWorkspaceSet.has(workspace.id)) return false;
+        return !normalizedGrantWorkspaceQuery
+          || `${workspace.title} ${workspace.path}`.toLowerCase().includes(normalizedGrantWorkspaceQuery);
+      });
+      const grantSelectionValid = selectedWorkspaceCount > 0 && currentGrant.scopes.length > 0;
+      const workspaceListSummary = t('workspaceListSummary')
+        .replace('{visible}', String(visibleGrantWorkspaces.length))
+        .replace('{total}', String(workspaces.length));
+      const selectedWorkspaceSummary = t('selectedWorkspaceSummary').replace('{count}', String(selectedWorkspaceCount));
       const grantDirty = Boolean(status && grantDraft
         && (!sameSet(grantDraft.workspaces, status.workspaces.map((workspace) => workspace.id))
           || !sameSet(grantDraft.scopes, status.scopes)));
@@ -483,41 +543,84 @@ window.__ModuleLoader__.load({
                 ? h(Button, { disabled: Boolean(busy), onClick: () => void run('disconnect', () => call(ctx, 'connection.disconnect'), t('disconnected')) }, t('disconnect'))
                 : h(Button, { primary: true, disabled: Boolean(busy), onClick: () => void run('connect', () => call(ctx, 'connection.connect')) }, t('retry')))),
           settingsCard,
-          h('section', { className: 'dsc-card' },
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
+          h('section', { className: 'dsc-card dsc-grant-card' },
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 } },
               h('h2', { className: 'dsc-heading', style: { margin: 0 } }, t('grantTitle')),
-              grantDirty && h('span', { className: 'dsc-badge dsc-offline' }, t('grantDirty'))),
+              h('span', { className: `dsc-badge ${grantDirty ? 'dsc-offline' : 'dsc-online'}` }, grantDirty ? t('grantDirty') : t('grantSaved'))),
             h('p', { className: 'dsc-copy' }, t('grantCopy')),
-            h('div', { className: 'dsc-section', style: { marginTop: 0 } }, t('grantedWorkspaces')),
-            workspaces.length
-              ? workspaces.map((workspace) => h('label', { className: 'dsc-check', key: workspace.id },
+            h('div', { className: 'dsc-grant-section-head' },
+              h('div', { className: 'dsc-section' }, t('grantedWorkspaces'),
+                h('span', { className: 'dsc-grant-count' }, `${selectedWorkspaceCount} / ${workspaces.length}`)),
+              h('label', { className: 'dsc-select-all', title: t('selectAllWorkspacesHint') },
                 h('input', {
-                  type: 'checkbox',
-                  checked: currentGrant.workspaces.includes(workspace.id),
-                  disabled: Boolean(busy),
-                  onChange: () => toggleGrantWorkspace(workspace.id),
+                  type: 'checkbox', checked: allGrantWorkspacesSelected,
+                  disabled: Boolean(busy) || workspaces.length === 0,
+                  'aria-checked': allGrantWorkspacesSelected ? 'true' : selectedWorkspaceCount > 0 ? 'mixed' : 'false',
+                  'aria-label': t(allGrantWorkspacesSelected ? 'clearAllWorkspaces' : 'selectAllWorkspaces'),
+                  ref: (input: HTMLInputElement | null) => {
+                    if (input) input.indeterminate = selectedWorkspaceCount > 0 && !allGrantWorkspacesSelected;
+                  },
+                  onChange: toggleAllGrantWorkspaces,
                 }),
-                h('div', null, h('div', { className: 'dsc-check-title' }, workspace.title), h('div', { className: 'dsc-check-copy' }, workspace.path))))
-              : h('div', { className: 'dsc-empty' }, '—'),
-            h('div', { className: 'dsc-section' }, t('grantedScopes')),
-            h('div', { className: 'dsc-scopes' }, SCOPE_OPTIONS.map(([scope]) =>
-              h('label', { className: 'dsc-check', key: scope },
+                h('span', null, t(allGrantWorkspacesSelected ? 'clearAllWorkspaces' : 'selectAllWorkspaces')))),
+            h('div', { className: 'dsc-grant-tools' },
+              h('input', {
+                className: 'dsc-input dsc-grant-search', type: 'search', value: grantWorkspaceQuery,
+                disabled: Boolean(busy) || workspaces.length === 0,
+                onChange: (event) => setGrantWorkspaceQuery(event.target.value),
+                placeholder: t('searchWorkspaces'), 'aria-label': t('searchWorkspaces'), autoComplete: 'off',
+              }),
+              h('button', {
+                type: 'button', className: `dsc-selected-only ${grantOnlySelected ? 'dsc-on' : ''}`,
+                disabled: Boolean(busy) || workspaces.length === 0,
+                onClick: () => setGrantOnlySelected((current) => !current), 'aria-pressed': grantOnlySelected,
+              }, t('selectedOnly'))),
+            h('div', { className: 'dsc-grant-workspace-list', role: 'group', 'aria-label': t('grantedWorkspaces'), ref: grantWorkspaceListRef },
+              workspaces.length === 0
+                ? h('div', { className: 'dsc-empty' }, '—')
+                : visibleGrantWorkspaces.length
+                  ? visibleGrantWorkspaces.map((workspace) => {
+                    const on = selectedWorkspaceSet.has(workspace.id);
+                    return h('label', { className: `dsc-check dsc-grant-workspace ${on ? 'dsc-on' : ''}`, key: workspace.id },
+                      h('input', {
+                        type: 'checkbox', checked: on, disabled: Boolean(busy),
+                        onChange: () => toggleGrantWorkspace(workspace.id),
+                      }),
+                      h('div', null,
+                        h('div', { className: 'dsc-check-title' }, workspace.title),
+                        h('div', { className: 'dsc-check-copy', title: workspace.path }, workspace.path)),
+                      on && h('span', { className: 'dsc-grant-selected' }, t('selected')));
+                  })
+                  : h('div', { className: 'dsc-grant-empty' },
+                    h('div', null, t('noWorkspaceMatches')),
+                    h(Button, {
+                      onClick: () => { setGrantWorkspaceQuery(''); setGrantOnlySelected(false); },
+                    }, t('clearWorkspaceFilter')))),
+            workspaces.length > 0 && h('div', { className: 'dsc-grant-list-foot' },
+              h('span', null, workspaceListSummary + (workspaces.length > 5 ? ` · ${t('workspaceListScroll')}` : '')),
+              h('span', null, `${grantWorkspaceQuery || grantOnlySelected ? `${t('filterKeepsSelection')} · ` : ''}${selectedWorkspaceSummary}`)),
+            h('div', { className: 'dsc-grant-section-head' },
+              h('div', { className: 'dsc-section' }, t('grantedScopes'),
+                h('span', { className: 'dsc-grant-count' }, `${currentGrant.scopes.length} / ${SCOPE_OPTIONS.length}`))),
+            h('div', { className: 'dsc-scopes dsc-grant-scopes' }, SCOPE_OPTIONS.map(([scope]) =>
+              h('label', { className: `dsc-check ${currentGrant.scopes.includes(scope) ? 'dsc-on' : ''}`, key: scope },
                 h('input', {
-                  type: 'checkbox',
-                  checked: currentGrant.scopes.includes(scope),
-                  disabled: Boolean(busy),
+                  type: 'checkbox', checked: currentGrant.scopes.includes(scope), disabled: Boolean(busy),
                   onChange: () => toggleGrantScope(scope),
                 }),
                 h('span', { className: 'dsc-check-title' }, scopeLabel(t, scope))))),
+            !grantSelectionValid && h('div', { className: 'dsc-error dsc-grant-validation', role: 'alert' }, t('grantsInvalid')),
             !status.connected && h('div', { className: 'dsc-empty' }, t('grantsOffline')),
             h('div', { className: 'dsc-warning' }, t('grantWarning')),
-            h('div', { className: 'dsc-actions' },
-              grantDirty && h(Button, { disabled: Boolean(busy), onClick: () => setGrantDraft(null) }, t('resetGrants')),
-              h(Button, {
-                primary: true,
-                disabled: Boolean(busy) || !status.connected || !grantDirty,
-                onClick: saveGrants,
-              }, busy === 'grants' ? t('saving') : t('saveGrants')))),
+            h('div', { className: 'dsc-grant-save-bar' },
+              h('div', { className: 'dsc-grant-save-copy' }, t(grantDirty ? 'grantSaveDirty' : 'grantSaveClean')),
+              h('div', { className: 'dsc-grant-save-actions' },
+                grantDirty && h(Button, { disabled: Boolean(busy), onClick: () => setGrantDraft(null) }, t('resetGrants')),
+                h(Button, {
+                  primary: true,
+                  disabled: Boolean(busy) || !status.connected || !grantDirty || !grantSelectionValid,
+                  onClick: saveGrants,
+                }, busy === 'grants' ? t('saving') : t('saveGrants'))))),
           accessSection);
       } else if (status.challenge) {
         const challenge: PublicChallenge = status.challenge;
