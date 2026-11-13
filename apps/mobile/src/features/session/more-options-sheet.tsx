@@ -1,8 +1,10 @@
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { SheetAction } from '@/lib/sheet-action';
 import type { AttachmentSource } from '@/lib/attachment-picker';
 import { modelLabel, sameModelSelection } from '@shared/lib/session-model';
 import type { MobileSessionModelCatalog } from '@shared/types/mobile';
@@ -25,17 +27,19 @@ export function MoreOptionsSheet({
   onClose: () => void;
   onOpenModel: () => void;
 }) {
+  const [sheetAction] = useState(() => new SheetAction());
+  const select = (action: () => void) => sheetAction.select(onClose, action, Platform.OS === 'ios');
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const diverged = catalog !== null && !sameModelSelection(catalog.effective, catalog.default);
   const pickersDisabled = attachmentSlots <= 0;
   const tiles: readonly { source: AttachmentSource; label: string; glyph: string }[] = [
     { source: 'camera', label: '拍照', glyph: '◎' },
-    { source: 'library', label: '照片 / 视频', glyph: '▣' },
+    { source: 'library', label: '选择照片', glyph: '▣' },
     { source: 'document', label: '添加文件', glyph: '⎘' },
   ];
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={() => sheetAction.dismissed()}>
       <View style={styles.overlay}>
         <Pressable accessibilityLabel="关闭更多输入选项" style={styles.backdrop} onPress={onClose} />
         <View style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -49,7 +53,7 @@ export function MoreOptionsSheet({
                 accessibilityLabel={tile.label}
                 accessibilityState={{ disabled: pickersDisabled }}
                 disabled={pickersDisabled}
-                onPress={() => onPickAttachments(tile.source)}
+                onPress={() => select(() => onPickAttachments(tile.source))}
                 style={({ pressed }) => [
                   styles.attachmentTile,
                   { backgroundColor: theme.surfaceMuted, borderColor: theme.border, opacity: pickersDisabled ? 0.45 : 1 },
@@ -69,7 +73,7 @@ export function MoreOptionsSheet({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="选择会话模型"
-            onPress={onOpenModel}
+            onPress={() => select(onOpenModel)}
             style={({ pressed }) => [styles.modelAction, { backgroundColor: pressed ? theme.surfaceMuted : 'transparent' }]}
           >
             <View style={styles.actionCopy}>
