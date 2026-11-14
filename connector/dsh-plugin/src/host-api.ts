@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Logger, UnknownRecord } from './types.js';
 
-/** The DSH 0.2.2-rc.1 Host surface consumed by this connector. */
+/** The DSH 0.2.2-rc.3 Host surface consumed by this connector. */
 export interface SessionAddress {
   readonly kind: 'session';
   readonly sessionId: string;
