@@ -583,7 +583,7 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
             assert.deepEqual(scope, { sessionId: existingSessionId, workspaceRoot });
             assert.equal(path, await realpath(attachmentPath));
             assert.equal(signal.aborted, false);
-            // Match DSH 0.2.2-rc.1: one ranged window is 2 MiB, while a complete file
+            // Match DSH 0.2.2-rc.3: one ranged window is 2 MiB, while a complete file
             // may be 32 MiB. This catches an invalid 20 MiB window request.
             if (options.range && (options.range.length ?? 2_097_152) > 2_097_152) {
               throw Object.assign(new Error('window too large'), { code: 'workspace-file/too-large' });

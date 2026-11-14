@@ -21,7 +21,7 @@ import { normalizeServerUrl, normalizeSettings } from './lib/settings.js';
 export const name = 'dsh-connect-connector';
 export const inject = ['sessionController', 'llm', 'workspaceRegistry', 'connection', 'webServer', 'workspaceFiles', 'attachments', 'fileUploads'];
 
-const VERSION = '0.1.4';
+const VERSION = '0.1.6';
 
 export interface StartPairingRequest extends StartPairingInput {
   readonly serverUrl: string;
