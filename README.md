@@ -18,7 +18,7 @@ DSH Connect 让你在手机上继续桌面的 DeepSeek Harness（DSH）会话。
 
 ### 首次连接与日常使用
 
-1. **管理员生成桌面配对码。** 在后台进入“设备管理” → “桌面 Connector” → “添加桌面”。 桌面用户在 DSH `0.2.2-rc.1` 的 Plugin Manager 中将 `@lxyapp/dsh-connect@0.1.5` 填入“包名或地址”，确认安装并启用。[npm 包主页](https://www.npmjs.com/package/@lxyapp/dsh-connect)。自行打包时，从仓库根目录进入 `connector/dsh-plugin`，依次运行 `npm ci`、`npm run build`、`npm pack`，选用输出的 `.tgz`。在 Plugins 页确认 active。[桌面安装说明](connector/dsh-plugin/README.md)
+1. **管理员生成桌面配对码。** 在后台进入“设备管理” → “桌面 Connector” → “添加桌面”。 桌面用户在 DSH `0.2.2-rc.3` 的 Plugin Manager 中将 `@lxyapp/dsh-connect@0.1.6` 填入“包名或地址”，确认安装并启用。[npm 包主页](https://www.npmjs.com/package/@lxyapp/dsh-connect)。自行打包时，从仓库根目录进入 `connector/dsh-plugin`，依次运行 `npm ci`、`npm run build`、`npm pack`，选用输出的 `.tgz`。在 Plugins 页确认 active。[桌面安装说明](connector/dsh-plugin/README.md)
 2. **桌面用户开放工作区。** 在 DSH Connect 面板填写 Server 地址和桌面配对码，点“保存并配对”，在桌面核对设备指纹，选择已有会话的工作区和允许的动作，点“确认授权并上线”。管理后台应能看到该桌面在线。
 3. **管理员为手机生成另一个码。** 在后台“设备管理” → “手机设备”选择所属用户，生成一次性二维码。手机打开 App → “连接 Server” → “扫描配对二维码”，或手动填写同页显示的地址和手机配对码。
 4. **手机申请，桌面确认。** 在手机“设备”找到目标桌面，点“申请访问”，选工作区及所需动作，点“提交访问申请”。桌面用户在“手机访问授权”核对并批准后，手机下拉刷新。
@@ -148,7 +148,7 @@ npm start
 
 - **iOS / Android** 使用 Expo SDK 58 Development Build。附件上传已有单元测试与可控 Host 跨端测试记录，拍照、选择附件和上传仍待真机验收。[移动端说明](apps/mobile/README.md) · [附件验证记录](docs/06-mobile-attachments-design.md)
 - **HarmonyOS** 使用 Expo SDK 55 + RNOH 0.84.1，与主线共享业务源码。已在 HUAWEI Mate 80 Pro（HarmonyOS 7 / API 26）验证签名 HAP 安装、配对与远程会话。当前不支持在手机上选择附件，扫码、语音和远程审批仍需逐项真机验收。[鸿蒙端说明](apps/mobile-harmony/README.md)
-- **桌面** 的 Host API 适配锁定 DSH `0.2.2-rc.1`。插件生命周期及真实 Agent 执行需按对应版本单独验收。[Connector 说明](connector/dsh-plugin/README.md)
+- **桌面** 的 Host API 适配锁定 DSH `0.2.2-rc.3`。插件生命周期及真实 Agent 执行需按对应版本单独验收。[Connector 说明](connector/dsh-plugin/README.md)
 
 ## 本地开发
 
