@@ -4,6 +4,53 @@ DSH Connect 让你在手机上继续桌面的 DeepSeek Harness（DSH）会话。
 
 管理员在 Web 后台配对设备、管理访问策略和查看审计。桌面用户决定每部手机可以访问哪些工作区，以及能否读取、发送指令、停止执行或处理审批。
 
+## 产品界面
+
+一套自托管链路，把桌面 DSH 会话安全延伸到手机：桌面保留最终授权，手机随时接手，后台统一治理。
+
+<table>
+<thead>
+<tr>
+<th width="33%"><strong>移动端</strong></th>
+<th width="33%"><strong>桌面 Connector</strong></th>
+<th width="33%"><strong>管理后台</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td width="33%"><img src="docs/images/redacted/mobile-chat.png" width="100%" alt="移动端会话页：实时进度、Markdown 回复与内联审批卡片"></td>
+<td width="33%"><img src="docs/images/redacted/desktop-connector.png" width="100%" alt="桌面 Connector 面板：按工作区和动作授权手机访问"></td>
+<td width="33%"><img src="docs/images/redacted/admin-overview.png" width="100%" alt="管理后台概览：在线设备、活跃会话、指令趋势与待处理审批"></td>
+</tr>
+<tr>
+<td width="33%" align="center">继续会话，就地审批</td>
+<td width="33%" align="center">按工作区与动作逐项放权</td>
+<td width="33%" align="center">设备、策略与审计一处掌握</td>
+</tr>
+</tbody>
+</table>
+
+**移动端 · 把桌面 Agent 装进口袋。** 实时查看进度、继续对话，离开电脑也能推进任务。
+
+- **会话**：按工作区浏览，运行中的回复实时更新，连接中断时自动回退轮询。
+- **推进**：发送或排队指令，切换模型与推理强度，按权限停止当前轮次。
+- **审批**：一次性审批与提问就地处理；默认 6 秒未响应时先撤回手机卡片，再交回桌面。
+- **语音**：按住说话转写，回复可朗读，支持系统语音或云厂商 ASR/TTS。
+
+**桌面 Connector · 权限留在桌面。** 手机配对只证明设备身份，能访问什么由桌面逐项决定。
+
+- **范围授权**：按工作区勾选 `read`、`prompt`、`cancel`、`approve`，保存后立即生效。
+- **手机访问**：手机单独申请，桌面核对后批准；撤销即时收紧权限，不删除 DSH 本地会话。
+- **安全边界**：桌面只发起出站 WSS，无需公网入站端口；Host API 适配锁定 DSH `0.2.2-rc.3`。
+
+**管理后台 · 设备、策略与审计一处掌握。** 面向团队的自托管控制台。
+
+- **设备**：桌面与手机分别配对、吊销和重命名，一次性配对码带有效期。
+- **策略**：按成员、桌面和工作区组合访问范围，并支持用户视角预览。
+- **审批**：远程审批开关与 TTL；只读会话元数据、待处理请求和完整审计记录。
+
+> 截图使用本地演示数据，来源与边界见[截图说明](docs/images/README.md)。可打开[交互原型](prototype/dsh-connect-prototype.html)体验完整流程，或访问[官网](https://lxy.app/dsh-connect/)。
+
 ## 使用指南
 
 | 你要做什么 | 从这里开始 |
