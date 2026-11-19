@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Logger, UnknownRecord } from './types.js';
 
-/** The DSH 0.2.2-rc.3 Host surface consumed by this connector. */
+/** The DSH 0.2.2-rc.5 Host surface consumed by this connector. */
 export interface SessionAddress {
   readonly kind: 'session';
   readonly sessionId: string;
@@ -87,13 +87,16 @@ export interface SessionCreateValue {
 
 export interface SessionPageRequest {
   readonly address: SessionAddress;
-  readonly throughSeq: number;
+  /** Inclusive log cut; omission selects the observed log end. */
+  readonly throughSeq?: number;
   readonly beforeSeq?: number;
   readonly maxMessages?: number;
   readonly turnWindow?: TurnWindow;
 }
 
 export interface SessionPage {
+  /** Exact inclusive cut used by the Host for this page. */
+  readonly cursor: number;
   readonly records: readonly SessionEventEntry[];
   readonly hasMore: boolean;
 }

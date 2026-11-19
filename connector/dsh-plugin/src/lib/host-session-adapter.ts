@@ -213,7 +213,6 @@ export class HostSessionAdapter {
   readonly #attachmentFetcher: AttachmentFetcher | undefined;
   readonly #promptAttachments: PromptAttachmentAdmitter | undefined;
   #sessions = new Map<string, string>();
-  readonly #watermarks = new Map<string, number>();
   readonly #follows = new Map<string, FollowSubscription>();
   readonly #sessionOperations = new Map<string, Promise<void>>();
 
@@ -285,11 +284,7 @@ export class HostSessionAdapter {
   async page(params: SessionPageParams, { signal }: { readonly signal: AbortSignal }): Promise<TransportEnvelope> {
     const sessionId = sessionAddress(params.sessionId).sessionId;
     await this.#authorizeSession(sessionId, 'read', params.workspaceId);
-    const context = await this.#latestPageContext(sessionId, signal);
-    const result = await this.#controller.events({
-      ...pageInput(params),
-      throughSeq: context.throughSeq,
-    }, signal);
+    const result = await this.#controller.events(pageInput(params), signal);
     const items = result.records.map((record) => ({
       type: record.type,
       event: this.#externalEvent(record.event, sessionId),
@@ -312,11 +307,8 @@ export class HostSessionAdapter {
   ): Promise<TranscriptResult> {
     const sessionId = sessionAddress(params.sessionId).sessionId;
     const workspaceId = await this.#authorizeSession(sessionId, 'read', params.workspaceId);
-    const context = await this.#latestPageContext(sessionId, signal);
-    const result = await this.#controller.events({
-      ...pageInput(params),
-      throughSeq: context.throughSeq,
-    }, signal);
+    const running = await this.#sessionRunning(sessionId, signal);
+    const result = await this.#controller.events(pageInput(params), signal);
     const messages: TranscriptMessage[] = [];
     const messageTurns = new WeakMap<TranscriptMessage, number>();
     const workspaceRoot = this.#workspaceRoot(workspaceId);
@@ -454,7 +446,7 @@ export class HostSessionAdapter {
       messages: visible,
       hasMore,
       ...(hasMore && cursorSeq !== undefined && cursorSeq > 0 ? { nextCursor: String(cursorSeq) } : {}),
-      active: context.running ?? active,
+      active: running ?? active,
       ...(turnEndSeq > 0 ? { turnEndSeq } : {}),
       ...(truncated ? { truncated: true } : {}),
     };
@@ -790,38 +782,19 @@ export class HostSessionAdapter {
   }
 
   /**
-   * DSH only treats `throughSeq: -1` as "no upper bound" for legacy callers;
-   * its history pagination actually slices to `throughSeq + 1`, so passing -1
-   * yields an empty page on a real desktop. Resolve the current history
-   * watermark first. Listing never activates an Agent, and its projection
-   * watermark is the durable cut that `page` accepts.
+   * Listing is only a passive running-state hint. Its projection may be
+   * cached and stale, so it must never supply the history cut; `events()`
+   * resolves and returns the exact cursor when `throughSeq` is omitted.
    */
-  async #latestPageContext(
-    sessionId: string,
-    signal: AbortSignal,
-  ): Promise<{ readonly throughSeq: number; readonly running?: boolean }> {
-    this.#refreshWorkspaces();
-    let listed: { readonly items: readonly SessionSummary[] } | undefined;
+  async #sessionRunning(sessionId: string, signal: AbortSignal): Promise<boolean | undefined> {
     try {
-      listed = await this.#controller.list({}, signal);
+      const listed = await this.#controller.list({}, signal);
+      return listed.items.find((item) => item.sessionId === sessionId)?.running;
     } catch (error) {
-      // A failed discovery must not break a transcript that can still use the
-      // last watermark this adapter saw.
+      // A failed discovery must not break an otherwise readable transcript.
       if (signal.aborted) throw error;
+      return undefined;
     }
-    let summary: SessionSummary | undefined;
-    for (const item of listed?.items ?? []) {
-      this.#remember(item);
-      if (item.sessionId === sessionId) summary = item;
-      const watermark = item.projections?.asOfSeq;
-      if (typeof watermark === 'number' && Number.isSafeInteger(watermark) && watermark >= 0) {
-        this.#watermarks.set(item.sessionId, watermark);
-      }
-    }
-    return {
-      throughSeq: this.#watermarks.get(sessionId) ?? 0,
-      ...(summary === undefined ? {} : { running: summary.running }),
-    };
   }
 
   /** Serves `session.attachment.fetch`; the index decides what may be read. */

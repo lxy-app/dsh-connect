@@ -64,7 +64,7 @@ function setup(options: SetupOptions = {}) {
       };
     },
     async create() { return { sessionId: 'unused' }; },
-    async events() { return { records: [], hasMore: false }; },
+    async events() { return { cursor: 0, records: [], hasMore: false }; },
     async prompt(request, signal) {
       calls.push('prompt');
       if (options.prompt) return options.prompt(request, signal);
