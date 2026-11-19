@@ -1,0 +1,429 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: '1'
+  EXPO_NO_TELEMETRY: '1'
+  GOPROXY: https://proxy.golang.org,direct
+
+jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      full: ${{ steps.manual.outputs.full || steps.filter.outputs.full }}
+      server: ${{ steps.filter.outputs.server }}
+      connector: ${{ steps.filter.outputs.connector }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+      admin: ${{ steps.filter.outputs.admin }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      harmony: ${{ steps.filter.outputs.harmony }}
+      website: ${{ steps.filter.outputs.website }}
+      docker: ${{ steps.filter.outputs.docker }}
+      ent: ${{ steps.filter.outputs.ent }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Run every check for a manual dispatch
+        id: manual
+        if: github.event_name == 'workflow_dispatch'
+        run: echo 'full=true' >> "$GITHUB_OUTPUT"
+
+      - name: Detect affected components
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            full:
+              - 'Makefile'
+              - '.github/workflows/**'
+              - '.github/dependabot.yml'
+              - 'scripts/ci/**'
+            server:
+              - 'server/**'
+              - 'protocol/**'
+            connector:
+              - 'connector/dsh-plugin/**'
+              - 'protocol/**'
+            e2e:
+              - 'server/**'
+              - 'connector/dsh-plugin/**'
+              - 'protocol/**'
+            admin:
+              - 'apps/admin/**'
+              - 'protocol/**'
+            mobile:
+              - 'apps/mobile/**'
+              - 'apps/mobile-shared/**'
+              - 'protocol/**'
+            harmony:
+              - 'apps/mobile-harmony/**'
+              - 'apps/mobile-shared/**'
+              - 'protocol/**'
+            website:
+              - 'website/**'
+            docker:
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'docker-compose.server.yml'
+              - 'server/**'
+              - 'apps/admin/**'
+              - 'protocol/**'
+            ent:
+              - 'server/ent/schema/**'
+              - 'server/go.mod'
+              - 'server/go.sum'
+
+  workflow_lint:
+    name: Workflow Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' }}
+    env:
+      GOCACHE: /home/runner/.cache/go-build
+      GOMODCACHE: /home/runner/go/pkg/mod
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache-dependency-path: server/go.sum
+
+      - name: Lint all GitHub Actions workflows
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          /home/runner/bin/actionlint .github/workflows/*.yml
+        env:
+          GOBIN: /home/runner/bin
+
+  server:
+    name: Server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.server == 'true' }}
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: dsh
+          POSTGRES_PASSWORD: dsh
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dsh -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DSH_CONNECT_REQUIRE_PG: '1'
+      DSH_CONNECT_TEST_DATABASE_URL: postgres://dsh:dsh@127.0.0.1:5432/postgres?sslmode=disable
+      GOCACHE: /home/runner/.cache/go-build
+      GOMODCACHE: /home/runner/go/pkg/mod
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache-dependency-path: server/go.sum
+
+      - name: Check Go formatting
+        run: |
+          unformatted="$(gofmt -l server)"
+          if [[ -n "$unformatted" ]]; then
+            printf 'The following Go files need gofmt:\n%s\n' "$unformatted"
+            exit 1
+          fi
+
+      - name: Check ent generated code
+        if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.ent == 'true' }}
+        run: |
+          make ent-gen
+          git diff --exit-code -- server/ent server/go.mod server/go.sum
+          untracked="$(git ls-files --others --exclude-standard -- server/ent server/go.mod server/go.sum)"
+          if [[ -n "$untracked" ]]; then
+            printf 'ent generation produced untracked files:\n%s\n' "$untracked"
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: make vet
+
+      - name: Test PostgreSQL and SQLite stores
+        run: make test-server
+
+  connector:
+    name: Connector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.connector == 'true' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: connector/dsh-plugin/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix connector/dsh-plugin ci --no-audit --no-fund
+
+      - name: Test Connector
+        run: make test-connector
+
+      - name: Verify npm package contents
+        working-directory: connector/dsh-plugin
+        run: npm pack --dry-run
+
+  e2e:
+    name: Cross-component E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.e2e == 'true' }}
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: dsh
+          POSTGRES_PASSWORD: dsh
+          POSTGRES_DB: dsh_connect_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dsh -d dsh_connect_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DSH_CONNECT_E2E_DATABASE_URL: postgres://dsh:dsh@127.0.0.1:5432/dsh_connect_e2e?sslmode=disable
+      GOCACHE: /home/runner/.cache/go-build
+      GOMODCACHE: /home/runner/go/pkg/mod
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache-dependency-path: server/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: connector/dsh-plugin/package-lock.json
+
+      - name: Install Connector dependencies
+        run: npm --prefix connector/dsh-plugin ci --no-audit --no-fund
+
+      - name: Test both database dialects
+        run: make test-e2e
+
+  admin:
+    name: Admin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.admin == 'true' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix apps/admin ci --no-audit --no-fund
+
+      - name: Run component checks
+        run: make test-admin
+
+      - name: Build production assets
+        run: npm --prefix apps/admin run build
+
+      - name: Install Chromium
+        working-directory: apps/admin
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: make test-admin-e2e
+
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: admin-playwright
+          path: |
+            apps/admin/playwright-report/
+            apps/admin/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  mobile:
+    name: Mobile JS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.mobile == 'true' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix apps/mobile ci --no-audit --no-fund
+
+      - name: Run mobile checks and unit tests
+        run: make test-mobile
+
+      - name: Export iOS and Android JS bundles
+        run: npm --prefix apps/mobile run build:bundles
+
+  harmony:
+    name: HarmonyOS Static Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.harmony == 'true' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/mobile-harmony/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix apps/mobile-harmony ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Run HarmonyOS checks and unit tests
+        run: make test-mobile-harmony
+
+  website:
+    name: Website
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.website == 'true' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix website ci --no-audit --no-fund
+
+      - name: Run Website checks
+        run: npm --prefix website run check
+
+      - name: Build and verify static output
+        run: npm --prefix website run build
+
+  docker:
+    name: Docker Smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.docker == 'true' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Build image and run container smoke tests
+        run: bash scripts/ci/docker-smoke.sh
+        env:
+          PLATFORM: linux/amd64
+          BUILDPLATFORM: linux/amd64
+
+  gate:
+    name: CI Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always()
+    needs: [changes, workflow_lint, server, connector, e2e, admin, mobile, harmony, website, docker]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Require every selected check to pass
+        run: |
+          bash scripts/ci/check-gate.sh \
+            "changes=$CHANGES_RESULT" \
+            "workflow_lint=$WORKFLOW_LINT_RESULT" \
+            "server=$SERVER_RESULT" \
+            "connector=$CONNECTOR_RESULT" \
+            "e2e=$E2E_RESULT" \
+            "admin=$ADMIN_RESULT" \
+            "mobile=$MOBILE_RESULT" \
+            "harmony=$HARMONY_RESULT" \
+            "website=$WEBSITE_RESULT" \
+            "docker=$DOCKER_RESULT"
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WORKFLOW_LINT_RESULT: ${{ needs.workflow_lint.result }}
+          SERVER_RESULT: ${{ needs.server.result }}
+          CONNECTOR_RESULT: ${{ needs.connector.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          ADMIN_RESULT: ${{ needs.admin.result }}
+          MOBILE_RESULT: ${{ needs.mobile.result }}
+          HARMONY_RESULT: ${{ needs.harmony.result }}
+          WEBSITE_RESULT: ${{ needs.website.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
