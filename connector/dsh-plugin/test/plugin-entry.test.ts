@@ -19,7 +19,7 @@ function fakeSessionController(): SessionController {
   return {
     async list() { return { items: [] }; },
     async create() { return { sessionId: 'unused' }; },
-    async events() { return { records: [], hasMore: false }; },
+    async events() { return { cursor: 0, records: [], hasMore: false }; },
     async prompt() { return { accepted: true }; },
     async modelCatalog() {
       return { default: { provider: 'test', model: 'test' }, routableProviders: [], groups: [], failures: [] };

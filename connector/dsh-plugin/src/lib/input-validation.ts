@@ -108,18 +108,19 @@ export function promptInput(params: PromptInputParams, requestId: string): Promp
 }
 
 export function pageInput(params: PageInputParams): SessionPageRequest {
-  const throughSeq = nonNegativeInteger(params.throughSeq ?? -1, 'throughSeq', -1);
   const input: {
     address: SessionAddress;
-    throughSeq: number;
+    throughSeq?: number;
     maxMessages: number;
     beforeSeq?: number;
     turnWindow?: TurnWindow;
   } = {
     address: sessionAddress(params.sessionId),
-    throughSeq,
     maxMessages: Math.min(200, Math.max(1, Number(params.maxMessages ?? params.limit ?? 50))),
   };
+  if (params.throughSeq !== undefined) {
+    input.throughSeq = nonNegativeInteger(params.throughSeq, 'throughSeq', -1);
+  }
   if (!Number.isSafeInteger(input.maxMessages)) {
     throw protocolError('invalid_request', 'maxMessages must be an integer');
   }

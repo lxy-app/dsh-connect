@@ -59,10 +59,10 @@ test('attachment-only prompts retain Server-verified names and MIME types', () =
 test('history input is bounded and uses the DSH SessionAddress shape', () => {
   assert.deepEqual(pageInput({ sessionId: 'session-1', cursor: 20, limit: 500 }), {
     address: { kind: 'session', sessionId: 'session-1' },
-    throughSeq: -1,
     beforeSeq: 20,
     maxMessages: 200,
   });
   assert.throws(() => pageInput({ sessionId: 'session-1', throughSeq: -2 }), { code: 'invalid_request' });
-  assert.equal(pageInput({ sessionId: 'session-1' }).throughSeq, -1);
+  assert.equal(pageInput({ sessionId: 'session-1' }).throughSeq, undefined);
+  assert.equal(pageInput({ sessionId: 'session-1', throughSeq: -1 }).throughSeq, -1);
 });

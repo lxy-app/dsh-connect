@@ -69,7 +69,7 @@ function setup(overrides: SetupOverrides = {}) {
     async create(request) { calls.push(['create', request]); return { sessionId: 's3' }; },
     async events(request, signal) {
       calls.push(['events', request, signal]);
-      return { records: [{ type: 'event', event: { type: 'turn/end', seq: 1, time: 1_000, data: {} } }], hasMore: false };
+      return { cursor: 1, records: [{ type: 'event', event: { type: 'turn/end', seq: 1, time: 1_000, data: {} } }], hasMore: false };
     },
     async prompt(request, signal) { calls.push(['prompt', request, signal]); return { accepted: true }; },
     async modelCatalog() {
@@ -342,7 +342,7 @@ test('transcript keeps conversation text and folds tool calls into steps', async
     { type: 'event' as const, event: { type: 'tool/result', seq: 5, time: 4_000, data: { message: { toolCallId: 'c1', content: [{ type: 'text', text: 'file.txt' }], isError: false } } } },
     { type: 'event' as const, event: { type: 'turn/end', seq: 6, time: 5_000, data: { reason: 'completed' } } },
   ];
-  const throughSeqs: number[] = [];
+  const throughSeqs: (number | undefined)[] = [];
   const { adapter } = setup({
     controller: {
       async list() {
@@ -359,7 +359,7 @@ test('transcript keeps conversation text and folds tool calls into steps', async
       },
       async events(request) {
         throughSeqs.push(request.throughSeq);
-        return { records, hasMore: true };
+        return { cursor: 6, records, hasMore: true };
       },
     },
   });
@@ -367,7 +367,7 @@ test('transcript keeps conversation text and folds tool calls into steps', async
     { sessionId: 's1', workspaceId: 'ws-a', limit: 20 },
     { signal: new AbortController().signal },
   );
-  assert.deepEqual(throughSeqs, [99]);
+  assert.deepEqual(throughSeqs, [undefined]);
   assert.equal(result.messages.length, 3);
   assert.equal(result.messages[0]?.role, 'user');
   assert.equal(result.messages[0]?.text, 'hello');
@@ -412,7 +412,7 @@ test('tool steps expose a display-safe summary, status and duration', async () =
         };
       },
       async events() {
-        return { records, hasMore: false };
+        return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false };
       },
     },
   });
@@ -460,7 +460,7 @@ test('a user message does not inherit the previous turn ordinal', async () => {
         };
       },
       async events() {
-        return { records, hasMore: false };
+        return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false };
       },
     },
   });
@@ -512,7 +512,7 @@ test('transcript omits injected time, runtime and skill context', async () => {
   ];
   const { adapter } = setup({
     controller: {
-      async events() { return { records, hasMore: false }; },
+      async events() { return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false }; },
     },
   });
   const result = await adapter.transcript(
@@ -522,13 +522,13 @@ test('transcript omits injected time, runtime and skill context', async () => {
   assert.deepEqual(result.messages.map((message) => message.text), ['real question']);
 });
 
-test('transcript pages at the current DSH watermark instead of the legacy -1 sentinel', async () => {
-  const throughSeqs: number[] = [];
+test('transcript lets Host events resolve the current cut instead of using a cached list watermark', async () => {
+  const throughSeqs: (number | undefined)[] = [];
   const { adapter } = setup({
     controller: {
       async events(request) {
         throughSeqs.push(request.throughSeq);
-        return { records: [], hasMore: false };
+        return { cursor: 0, records: [], hasMore: false };
       },
     },
   });
@@ -536,16 +536,16 @@ test('transcript pages at the current DSH watermark instead of the legacy -1 sen
     { sessionId: 's1', workspaceId: 'ws-a' },
     { signal: new AbortController().signal },
   );
-  assert.deepEqual(throughSeqs, [99]);
+  assert.deepEqual(throughSeqs, [undefined]);
 });
 
-test('page resolves the latest DSH watermark before applying the exclusive cursor', async () => {
+test('page leaves the Host cut unresolved and applies the exclusive cursor', async () => {
   const requests: SessionPageRequest[] = [];
   const { adapter } = setup({
     controller: {
       async events(request) {
         requests.push(request);
-        return { records: [], hasMore: true };
+        return { cursor: 99, records: [], hasMore: true };
       },
     },
   });
@@ -554,9 +554,28 @@ test('page resolves the latest DSH watermark before applying the exclusive curso
     { signal: new AbortController().signal },
   );
   assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.throughSeq, 99);
+  assert.equal(requests[0]?.throughSeq, undefined);
   assert.equal(requests[0]?.beforeSeq, 42);
   assert.equal(requests[0]?.maxMessages, 10);
+});
+
+test('page preserves explicit positive and legacy -1 cuts without replacing them from list projections', async () => {
+  const throughSeqs: (number | undefined)[] = [];
+  const { adapter } = setup({
+    controller: {
+      async events(request) {
+        throughSeqs.push(request.throughSeq);
+        return { cursor: request.throughSeq ?? 0, records: [], hasMore: false };
+      },
+    },
+  });
+  for (const throughSeq of [77, -1]) {
+    await adapter.page(
+      { sessionId: 's1', workspaceId: 'ws-a', throughSeq },
+      { signal: new AbortController().signal },
+    );
+  }
+  assert.deepEqual(throughSeqs, [77, -1]);
 });
 
 test('transcript reports running state from the session list when the page has no turn marker', async () => {
@@ -564,6 +583,7 @@ test('transcript reports running state from the session list when the page has n
     controller: {
       async events() {
         return {
+          cursor: 98,
           records: [{
             type: 'event' as const,
             event: { type: 'user/message', seq: 98, time: 1_000, data: { content: [{ type: 'text', text: 'run' }] } },
@@ -597,7 +617,7 @@ test('transcript mounts a present delivery on the final assistant message of the
   ];
   const { adapter } = setup({
     attachments: unusedAttachmentWiring,
-    controller: { async events() { return { records, hasMore: false }; } },
+    controller: { async events() { return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false }; } },
   });
 
   const result = await adapter.transcript(
@@ -625,7 +645,7 @@ test('transcript never mounts an empty turn delivery on the previous turn', asyn
   ];
   const { adapter } = setup({
     attachments: unusedAttachmentWiring,
-    controller: { async events() { return { records, hasMore: false }; } },
+    controller: { async events() { return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false }; } },
   });
 
   const result = await adapter.transcript(
@@ -669,7 +689,7 @@ test('transcript projects user attachments and fetches their durable Host bytes'
       },
       async upload({ attachmentId }) { uploaded.push(attachmentId); },
     },
-    controller: { async events() { return { records, hasMore: false }; } },
+    controller: { async events() { return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false }; } },
   });
 
   const result = await adapter.transcript(
@@ -713,7 +733,7 @@ test('attachment-only user messages remain in the mobile transcript', async () =
       async readMessage() { return new Uint8Array([1, 2, 3, 4]); },
       async upload() {},
     },
-    controller: { async events() { return { records, hasMore: false }; } },
+    controller: { async events() { return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false }; } },
   });
 
   const result = await adapter.transcript(
@@ -746,7 +766,7 @@ test('transcript applies one attachment budget across user and delivery sources'
   ];
   const { adapter } = setup({
     attachments: unusedAttachmentWiring,
-    controller: { async events() { return { records, hasMore: false }; } },
+    controller: { async events() { return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false }; } },
   });
 
   const result = await adapter.transcript(

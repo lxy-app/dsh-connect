@@ -2,7 +2,7 @@
 
 这是实际的 DeepSeek Harness 桌面 Connector，不是根目录的交互原型。
 
-当前版本锁定 **DSH `0.2.2-rc.3`**（对应插件 `0.1.6`）。`engines.dsh` 是精确版本：插件版本与 DSH 版本不匹配时，DSH 的兼容性预检会在启动时直接禁用该 bundle，侧边栏不会出现 Connector 面板，必须先安装匹配的插件版本。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。0.2.2-rc.1 适配建立的基础保持不变：历史读取使用 `SessionController.events()`，按 `approval/request` / `user-questions/request` 的 `agent.id` 解析会话，审批的本地化 `displayReason` 在 Connector 内投影为协议 v1 的有界文本；模型选择使用公开的 `resolveAgent + llm + agent.model.select` 会话级路径，不依赖上游尚未提供的 `persistDefault` 参数。0.2.2-rc.3 复核时 Host 侧这些签名与 DTO 均未变化，`selectModel` 仍会无条件写回桌面默认模型，因此不切换到该接口。
+当前版本锁定 **DSH `0.2.2-rc.5`**（对应插件 `0.1.7`）。`engines.dsh` 是精确版本：插件版本与 DSH 版本不匹配时，DSH 的兼容性预检会在启动时直接禁用该 bundle，侧边栏不会出现 Connector 面板，必须先安装匹配的插件版本。Host API 属于版本敏感接口，升级 DSH 后必须重新核对方法签名和事件 DTO。0.2.2-rc.1 适配建立的基础保持不变：历史读取使用 `SessionController.events()`，按 `approval/request` / `user-questions/request` 的 `agent.id` 解析会话，审批的本地化 `displayReason` 在 Connector 内投影为协议 v1 的有界文本；模型选择使用公开的 `resolveAgent + llm + agent.model.select` 会话级路径，不依赖上游尚未提供的 `persistDefault` 参数。0.2.2-rc.5 的 `events()` 支持省略 `throughSeq` 并在响应中返回精确 `cursor`；交互与模型选择仍沿用上述路径，`selectModel` 仍会无条件写回桌面默认模型，因此不切换到该接口。该历史契约在 rc.3 发布包中已经存在，本次同步修正 Connector 本地 DTO 与水位逻辑；rc.3→rc.5 升级指南不要求其他 Host 调用迁移。
 
 ## 已实现
 
@@ -10,7 +10,7 @@
 - DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权；配对完成后仍可在“桌面授权范围”中随时增减工作区和动作（`pair.updateGrants`，无需重新配对），以及**手机访问授权**（批准/拒绝/撤销手机申请的工作区与动作）。工作区授权支持三态全选、名称/路径搜索、“仅看已选”和固定高度列表内滚动；搜索与筛选不改变已有选择，全选始终作用于全部工作区，空工作区或空动作不能保存。面板品牌色使用石墨/银白令牌，按宿主实际背景亮度切换明暗主题和主按钮对比前景色，不继承宿主的高饱和品牌色。
 - `/dsh-connect` 自定义 unary RPC，仅 owner peer 可调用；会话流不经过该 RPC。
 - 单条主动出站 Connector WSS，心跳、指数退避、设备令牌重连和固定背压上限。
-- `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 保留 user/assistant 对话文本，并把 `tool/call` + `tool/result` 投影成单行步骤（`toolName`、脱敏摘要、状态、耗时、turn）；工具参数、命令输出、推理内容以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页先解析当前 Session 的 projection watermark 再传 `throughSeq`（DSH 对 `throughSeq=-1` 实际返回空页），超出体积预算时优先保留最新消息。
+- `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 保留 user/assistant 对话文本，并把 `tool/call` + `tool/result` 投影成单行步骤（`toolName`、脱敏摘要、状态、耗时、turn）；工具参数、命令输出、推理内容以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页未显式指定 cut 时省略 `throughSeq`，由 Host `events()` 在观察到的日志末尾读取并返回精确 `cursor`；list 的 cached/sequenced projection 只用于列表投影和运行状态，不再作为历史水位，超出体积预算时优先保留最新消息。
 - 使用 `workspaceRegistry.sessionIds` 校验真实 session → workspace 归属，默认拒绝；归属变化会撤销旧权限和 active follow。
 - prompt 与模型选择全链路 `requestId` 去重，超时后不盲目重新提交。
 - `session.model.catalog` 组合 `modelCatalog + projections`，只读目录不唤醒冷 Agent；`session.model.select` 重新校验 provider/model/reasoningEffort 后直接调用公开 `agent.model.select`，prompt 与切换按 sessionId 串行，迁移未完成时失败关闭。
@@ -71,7 +71,7 @@ APP='/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness'
 CLI='/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'
 
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop add \
-  '/absolute/path/to/lxyapp-dsh-connect-0.1.6.tgz'
+  '/absolute/path/to/lxyapp-dsh-connect-0.1.7.tgz'
 ELECTRON_RUN_AS_NODE=1 "$APP" "$CLI" plugin --profile desktop why \
   '@lxyapp/dsh-connect'
 ```
@@ -122,7 +122,7 @@ npm --prefix connector/dsh-plugin run debug -- cancel --device dev_xxx --session
 
 `accepted` 仅表示 DSH 准入，完成必须等待对应 turn 的持久 `turn/end`。重复逻辑请求应复用相同 `--request-id`。
 
-DSH `0.2.2-rc.3` 的 Host follow 不接受 resume cursor。外部 cursor 只记录客户端已确认水位，Connector 始终获取最新 opening snapshot（`recovery:'latest_snapshot'`），再按 `(sessionId,seq)` 去重或用 page 修复空洞；不会伪称 Host 从旧 cursor 回放。
+DSH `0.2.2-rc.5` 的 Host follow 不接受 resume cursor。外部 cursor 只记录客户端已确认水位，Connector 始终获取最新 opening snapshot（`recovery:'latest_snapshot'`），再按 `(sessionId,seq)` 去重或用 page 修复空洞；不会伪称 Host 从旧 cursor 回放。
 
 ## 测试
 
