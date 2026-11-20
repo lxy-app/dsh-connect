@@ -5,11 +5,11 @@ info:
   description: |
     Version 1 DTOs for the single-instance P0 relay. Debug/admin endpoints
     default to `Authorization: Bearer $DSH_CONNECT_BOOTSTRAP_TOKEN`; Web Admin
-    login sessions are also accepted by `/v1/admin` handlers. Mobile pairing and
+    login sessions are also accepted by `/v1/admin` handlers. Mobile user login and
     refresh use their own credential flow, and `/v1/mobile/*` access tokens are
-    never bootstrap or Web Admin tokens. Mobile session access requires an active
-    grant that the desktop Connector approved for this phone, workspace and
-    action; pairing alone grants nothing. JSON request bodies reject unknown
+    never bootstrap or Web Admin tokens. Mobile session access requires an enabled
+    user access policy for the desktop, workspace and action, intersected with the
+    Connector's current grants; login alone grants nothing. JSON request bodies reject unknown
     fields. The Connector pairing/device channel is defined
     in asyncapi.yaml. Session facts are returned by Connector; Server never reads
     DSH files.
@@ -32,9 +32,9 @@ tags:
   - name: admin
     description: Role-enforced Web Admin management APIs.
   - name: mobile
-    description: Mobile pairing, identity, token rotation and administrative revocation.
+    description: Mobile user login, device identity, token rotation and administrative revocation.
   - name: mobileAccess
-    description: Desktop-approved phone access to workspaces, sessions and prompts.
+    description: User-policy access to workspaces, sessions and prompts.
 paths:
   /v1/pairing/desktop-codes:
     post:
@@ -619,7 +619,7 @@ paths:
       tags: [admin]
       operationId: deleteAdminDevice
       summary: Delete a desktop device record
-      description: Available to owner and admin roles. The Connector is disconnected, its mobile access grants are revoked, and the device record is deleted.
+      description: Available to owner and admin roles. The Connector is disconnected and the device record is deleted.
       security:
         - bootstrapBearer: []
         - adminBearer: []
@@ -636,7 +636,7 @@ paths:
       tags: [admin]
       operationId: revokeAdminDevice
       summary: Revoke a desktop device credential
-      description: Available to owner and admin roles. The device row is retained as revoked, its Connector is disconnected, and dependent mobile access grants are revoked. No request body is used.
+      description: Available to owner and admin roles. The device row is retained as revoked, its Connector is disconnected, and dependent mobile event streams are closed. No request body is used.
       parameters:
         - {$ref: "#/components/parameters/AdminDeviceId"}
       security:
@@ -878,37 +878,11 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "500": {$ref: "#/components/responses/InternalError"}
-  /v1/admin/mobile/pairing-codes:
-    post:
-      tags: [mobile]
-      operationId: createMobilePairingCode
-      summary: Create a one-time mobile pairing code and QR deep link
-      description: |
-        Bootstrap callers must provide `userId`. Web Admin login sessions may
-        omit it to pair their own phone; issuing for another user requires the
-        owner or admin role. The plaintext code and pairing URL are returned
-        exactly once and are never recoverable from storage.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobilePairingCodeRequest}
-      responses:
-        "201":
-          description: Mobile pairing code created.
-          content:
-            application/json:
-              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobilePairingCodeResponse}
-        "400": {$ref: "#/components/responses/InvalidRequest"}
-        "401": {$ref: "#/components/responses/Unauthorized"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "500": {$ref: "#/components/responses/InternalError"}
   /v1/admin/mobile-devices:
     get:
       tags: [mobile]
       operationId: listMobileDevices
-      summary: List paired phones without credential material
+      summary: List mobile login devices without credential material
       responses:
         "200":
           description: Newest mobile devices first.
@@ -921,7 +895,7 @@ paths:
     post:
       tags: [mobile]
       operationId: revokeMobileDevice
-      summary: Revoke a paired phone and all of its mobile credentials
+      summary: Revoke a mobile login device and all of its credentials
       parameters:
         - {$ref: "#/components/parameters/MobileDeviceId"}
       responses:
@@ -939,34 +913,34 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
-  /v1/mobile/pair:
+  /v1/mobile/auth/login:
     post:
       tags: [mobile]
-      operationId: pairMobileDevice
-      summary: Redeem a one-time mobile pairing code
+      operationId: loginMobileDevice
+      summary: Authenticate a user and create mobile session credentials
       description: |
-        Unauthenticated by design: possession of the one-time, short-lived code
-        is the pairing credential. The target user is taken from the stored code,
-        never from request fields. On success this creates an independent mobile
-        device identity and returns a short-lived access token plus a rotating
-        refresh token.
+        Verifies the active user's email and password, then creates a mobile login
+        device and returns short-lived access and rotating refresh tokens. The
+        password is never persisted. Desktop permissions come only from the user's
+        enabled access policies intersected with current Connector grants.
+        Repeated failed attempts are rate limited by source IP and normalized email.
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobilePairRequest}
+            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileLoginRequest}
       responses:
         "200":
-          description: Mobile device paired. Plaintext tokens are returned once.
+          description: Mobile login succeeded. Plaintext tokens are returned once.
           content:
             application/json:
               schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileSessionResponse}
         "400": {$ref: "#/components/responses/InvalidRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
-        "409":
-          description: Pairing code was already used or has expired.
+        "429":
+          description: Too many failed login attempts.
           content:
             application/json:
               schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
@@ -1011,7 +985,7 @@ paths:
     get:
       tags: [mobile]
       operationId: getMobileIdentity
-      summary: Read the paired mobile device and owning user
+      summary: Read the current mobile login device and owning user
       security:
         - mobileBearer: []
       responses:
@@ -1025,11 +999,11 @@ paths:
     get:
       tags: [mobileAccess]
       operationId: getMobileAccessOverview
-      summary: List desktops and this phone's access grant state
+      summary: List the current user's effective desktop permissions
       description: |
-        Returns every available desktop with the workspaces and scopes its
-        Connector authorized, plus this phone's pending/active/denied grant.
-        Desktop filesystem paths are never included.
+        Returns enabled user-policy permissions intersected with each Connector's
+        current workspaces and scopes. Mobile device identity does not alter the
+        result. Desktop filesystem paths are never included.
       security:
         - mobileBearer: []
       responses:
@@ -1040,54 +1014,11 @@ paths:
               schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileAccessOverviewResponse}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "500": {$ref: "#/components/responses/InternalError"}
-  /v1/mobile/access/requests:
-    post:
-      tags: [mobileAccess]
-      operationId: requestMobileAccess
-      summary: Ask the desktop user to approve a workspace/action subset
-      description: |
-        The requested workspaces and scopes must be a subset of the desktop's own
-        Connector authorization. The grant is created as `pending`; only the
-        desktop Connector can activate or deny it.
-      security:
-        - mobileBearer: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileAccessRequest}
-      responses:
-        "201":
-          description: Access request stored. `status` is usually `pending`; an already active grant is never downgraded.
-          content:
-            application/json:
-              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileAccessGrant}
-        "400": {$ref: "#/components/responses/InvalidRequest"}
-        "401": {$ref: "#/components/responses/Unauthorized"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "500": {$ref: "#/components/responses/InternalError"}
-  /v1/mobile/access/{grantId}:
-    delete:
-      tags: [mobileAccess]
-      operationId: revokeMobileAccess
-      summary: Withdraw this phone's own pending request or active grant
-      security:
-        - mobileBearer: []
-      parameters:
-        - {$ref: "#/components/parameters/GrantId"}
-      responses:
-        "204":
-          description: Grant revoked.
-        "400": {$ref: "#/components/responses/InvalidRequest"}
-        "401": {$ref: "#/components/responses/Unauthorized"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "500": {$ref: "#/components/responses/InternalError"}
   /v1/mobile/workspaces:
     get:
       tags: [mobileAccess]
       operationId: listMobileWorkspaces
-      summary: List workspaces from this phone's active grants
+      summary: List workspaces from the current user's effective policies
       security:
         - mobileBearer: []
       responses:
@@ -1102,10 +1033,10 @@ paths:
     get:
       tags: [mobileAccess]
       operationId: listMobileSessions
-      summary: List sessions in the phone's granted workspaces
+      summary: List sessions in the user's authorized workspaces
       description: |
-        Session metadata is aggregated per desktop with an active `read` grant and
-        filtered to the phone's granted workspace ids. Offline desktops are
+        Session metadata is aggregated per desktop with an effective user-policy `read`
+        scope and filtered to authorized workspace ids. Offline desktops are
         reported in `warnings` instead of failing the whole request.
       security:
         - mobileBearer: []
@@ -1133,7 +1064,7 @@ paths:
       operationId: createMobileSession
       summary: Create a session from the phone
       description: |
-        Requires an active `prompt` grant for the desktop and workspace. The
+        Requires an effective user-policy `prompt` scope for the desktop and workspace. The
         create requestId is durable and idempotent; send the first prompt with
         a separate requestId through the existing prompt endpoint.
       security:
@@ -1165,7 +1096,7 @@ paths:
       tags: [mobileAccess]
       operationId: getMobileTranscript
       summary: Read a normalized conversation transcript
-      description: Requires an active `read` grant for the device and workspace. The Connector maps DSH events into stable role/text/tool messages.
+      description: Requires an effective user-policy `read` scope for the device and workspace. The Connector maps DSH events into stable role/text/tool messages.
       security:
         - mobileBearer: []
       parameters:
@@ -1198,7 +1129,7 @@ paths:
       operationId: getMobileSessionModel
       summary: Read the current session model and available model catalog
       description: |
-        Requires an active `read` grant. The Connector combines the Host model
+        Requires an effective user-policy `read` scope. The Connector combines the Host model
         catalog with the Session's `modelSelection` projection without activating
         a cold Agent. `effective` is the recorded `next` selection or the deployment
         default. `projectionKind=migration-required` marks cached, potentially stale
@@ -1226,7 +1157,7 @@ paths:
       operationId: selectMobileSessionModel
       summary: Select a Session-local model without changing the desktop default
       description: |
-        Requires an active `prompt` grant. The Connector validates the exact
+        Requires an effective user-policy `prompt` scope. The Connector validates the exact
         provider/model and reasoning effort, then calls the public Host
         `agent.model.select` API directly. It never calls the default-persisting
         `sessionController.selectModel` wrapper and never restores the default
@@ -1263,7 +1194,7 @@ paths:
       tags: [mobileAccess]
       operationId: promptMobileSession
       summary: Send a queued prompt from the phone
-      description: Requires an active `prompt` grant. Server keeps prompt idempotency by requestId.
+      description: Requires an effective user-policy `prompt` scope. Server keeps prompt idempotency by requestId.
       security:
         - mobileBearer: []
       parameters:
@@ -1295,7 +1226,7 @@ paths:
       tags: [mobileAccess]
       operationId: cancelMobileSession
       summary: Cancel the current turn from the phone
-      description: Requires an active `cancel` grant.
+      description: Requires an effective user-policy `cancel` scope.
       security:
         - mobileBearer: []
       parameters:
@@ -1323,8 +1254,8 @@ paths:
       operationId: listMobileInteractions
       summary: List pending approvals and questions
       description: |
-        Returns the one-shot approvals and user questions a granted desktop is
-        currently waiting on. Requires an active `approve` grant for the desktop
+        Returns the one-shot approvals and user questions an authorized desktop is
+        currently waiting on. Requires an effective user-policy `approve` scope for the desktop
         and workspace. Expired and already-decided requests are never returned;
         settled requests simply disappear from the next poll.
       security:
@@ -1387,7 +1318,7 @@ paths:
       operationId: uploadMobileAttachment
       summary: Stage one attachment the phone will reference from a prompt
       description: |
-        Requires an active `prompt` grant; a read-only grant cannot stage bytes.
+        Requires an effective user-policy `prompt` scope; a read-only policy cannot stage bytes.
         The body is the raw file, the display name travels in
         `X-DSH-Attachment-Name` (percent-encoded when
         `X-DSH-Attachment-Name-Encoding: url` is set), and the identity is
@@ -1460,7 +1391,7 @@ paths:
         The phone only ever names an opaque `attachmentId` learned from a
         transcript; it never supplies a path. The Server authorizes against the
         owner recorded on its own row (device + workspace + session), so an id
-        from one session cannot be read through another session's grant.
+        from one session cannot be read through another session's authorized workspace.
 
         `202` means the Connector was asked to read and upload the file; retry
         after `Retry-After`. `409` reports a desktop-side failure (file changed,
@@ -1583,7 +1514,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: opaque
-      description: Short-lived mobile access token returned by /v1/mobile/pair or refresh.
+      description: Short-lived mobile access token returned by /v1/mobile/auth/login or refresh.
     connectorDevice:
       type: http
       scheme: bearer
@@ -1622,11 +1553,6 @@ components:
       schema: {type: string, minLength: 1, maxLength: 128}
     MobileDeviceId:
       name: mobileDeviceId
-      in: path
-      required: true
-      schema: {type: string, minLength: 1}
-    GrantId:
-      name: grantId
       in: path
       required: true
       schema: {type: string, minLength: 1}

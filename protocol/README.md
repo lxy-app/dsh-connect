@@ -4,7 +4,7 @@
 - `asyncapi.yaml`：Connector 配对/命令/事件和 App 事件帧。
 - `schemas/v1/`：JSON Schema 2020-12 版本化 DTO 与 P0 错误码。
 - `schemas/v1/admin.schema.json`：Web Admin 登录、用户、设备、访问策略、运行会话、概览指标、审计与桌面配对生命周期 DTO；Admin 配对通过稳定 `pairingId` 跟踪，明文 code 仅在创建响应出现。
-- `schemas/v1/mobile.schema.json`：手机配对码、设备身份、移动会话与令牌轮换 DTO。
+- `schemas/v1/mobile.schema.json`：手机用户登录、设备身份、有效用户权限、移动会话与令牌轮换 DTO。
 - `schemas/v1/interaction.schema.json`：远程审批/提问事件、一次性决定与手机投影 DTO。
 
 所有 WebSocket 信封的 `v` 均为 `1`。REST 错误响应为 `{v:1,error:{code,message,retryable,details?}}`。Connector 可按 `requestId` 返回扩展错误码，Server 原样中继。
@@ -25,9 +25,9 @@ App REST         GET  /v1/mobile/interactions
 App REST         POST /v1/mobile/interactions/{interactionId}/decision
 ```
 
-- 转发前 Connector 通过 `interaction.audience`（桌面 Connector 的 request 信封）确认是否有 `approve` 手机在轮询；没有时直接走桌面原生链，不下发手机副本。
+- 转发前 Connector 通过 `interaction.audience`（桌面 Connector 的 request 信封）确认是否有具备用户级 `approve` 权限的手机在轮询；没有时直接走桌面原生链，不下发手机副本。
 - `interaction.request` 仍使用标准 `event` 信封与真实 `sessionId`；Server 只存内存待处理表，不落 DSH 文件，Connector 断连或 Server 重启即清空。
-- 手机 grant 与桌面设备授权都必须含 `approve`；Server 在决定时再次校验设备 + 工作区 + scope。
+- 用户访问策略与桌面设备授权都必须含 `approve`；Server 在决定时再次校验用户、设备、工作区与 scope。
 - 决定一次有效：Server 先 CAS 预留 `interactionId`，再转发命令；转发失败会释放预留，让桌面或其他手机仍可回答。
 - 审批只接受 `allow-once`/`reject`；提问答案必须匹配题目 id、选项集合与单选/多选约束。
 - 手机在场时拥有 grace 窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 6 秒）；窗口结束先下发 `interaction.resolved(desktop)` 撤回手机副本，再由 Connector 调用原桌面审批链。
@@ -54,58 +54,59 @@ REST 请求 DTO 与 command params 均禁止未定义字段，Server 对未知 J
 会话声明的文件走两条独立通道，元数据与字节严格分离：
 
 - `session.attachment.fetch`（v1 `command`，要求 `read` scope）：params 为 `sessionId/workspaceId/attachmentId`，30s 默认超时上限内由 Server 用 60s 触发。Connector 在**命令返回前**把字节上传到 `POST /v1/connector/attachments/{attachmentId}`（`application/octet-stream`，device token 认证，`X-DSH-Attachment-{Session,Bytes,Sha256}`），随后返回 `{status:"ready",bytes,sha256,mime}`。
-- `GET /v1/mobile/attachments/{attachmentId}`：手机只用不可猜测的 `attachmentId`，从不提交路径。`200` 字节（`ETag` 支持 `If-None-Match` → `304`）、`202` 拉取中（`Retry-After`）、`409` 桌面侧判定（`changed`/`denied`/`too_large` 等）、`404` 未知或已过期、`413` 超限、`403` grant 失效。
+- `GET /v1/mobile/attachments/{attachmentId}`：手机只用不可猜测的 `attachmentId`，从不提交路径。`200` 字节（`ETag` 支持 `If-None-Match` → `304`）、`202` 拉取中（`Retry-After`）、`409` 桌面侧判定（`changed`/`denied`/`too_large` 等）、`404` 未知或已过期、`413` 超限、`403` 用户权限失效。
 
 `MobileMessage.attachments[]` 为可选字段，旧客户端忽略即可；`state` 由 Server 覆盖（Connector 只报初始判定），因此同一附件在不同手机上状态一致。字节就绪后 Server 向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅 `attachmentId/bytes/sha256`）。
 
 `MobileMessage.delivery` 标记 Server/Connector 合成的"本轮交付"N 个文件"消息：当某个 turn 有交付但没有任何 assistant 文本时使用，避免图片无处挂载。附件 id 形如 `att_` + base64url(sha256(sessionId\0source\0seq\0index))[:24]，确定性且不含路径。
 
-## 手机配对 v1
+## 手机用户登录 v1
 
-手机配对与桌面配对完全独立，流程为：
+手机登录与桌面 Connector 配对完全独立，流程为：
 
 ```text
-POST /v1/admin/mobile/pairing-codes
-→ 返回一次性 code、expiresAt、serverUrl、pairingUrl
-→ App 扫描 dshconnect://pair?... 二维码
-→ POST /v1/mobile/pair {code,deviceName,platform,appVersion}
+POST /v1/mobile/auth/login {email,password,deviceName,platform,appVersion}
+→ Server 校验 active 用户的邮箱与 bcrypt 密码
 → 返回 mobileDeviceId、user、accessToken、refreshToken
 → POST /v1/mobile/auth/refresh 轮换两枚令牌
 → GET /v1/mobile/me / POST /v1/mobile/auth/logout
 ```
 
-- 配对码短时有效、只能消费一次；数据库只保存 SHA-256 hash。
-- 配对目标用户由服务端存储的配对码决定，不信任手机请求中的 `userId`。
+- 密码只用于当次认证，不写数据库、SecureStore、日志或审计；App 只保存移动 Token。
+- 未知邮箱与错误密码统一返回 `unauthorized`；连续失败按来源 IP + 规范化邮箱限流。
 - Access Token 与 Refresh Token 均只保存 hash；刷新时两者同时轮换，旧凭证立即失效。
-- 手机身份独立于桌面 Connector；管理员可列出并吊销手机，但不会删除 DSH 会话。
-- `pairingUrl` 当前形如 `dshconnect://pair?code=...&server=...&v=1`，二维码内容必须按 URI 解析，不应依赖参数顺序。
+- 手机设备身份只负责凭据生命周期、单设备吊销、事件流和审计；不再产生或限制桌面权限差异。
+- 管理员可列出并吊销登录设备，但不会删除 DSH 会话。
 
 ## 手机访问授权 v1
 
-手机配对只证明设备身份，不产生任何桌面权限。访问授权链路为：
+手机登录本身不产生桌面权限。有效权限只来自：
 
 ```text
-GET  /v1/mobile/access             → 桌面列表、可用工作区/动作、当前 grant
-POST /v1/mobile/access/requests    → {deviceId, workspaces, scopes}，创建 pending grant
-（桌面 Connector 通过已认证 WSS 发送 request：mobile.access.list / mobile.access.decide / pair.updateGrants / interaction.audience）
-→ 桌面用户 allow / deny / revoke
-GET  /v1/mobile/workspaces         → 仅 active grant 中的工作区
-GET  /v1/mobile/sessions           → 仅 active grant 工作区内的会话
+该用户所有 enabled 访问策略的并集
+∩ 桌面 Connector 当前开放的 Workspaces
+∩ 桌面 Connector 当前开放的 Scopes
+```
+
+同一用户的所有手机得到相同权限；无策略默认拒绝。主要接口为：
+
+```text
+GET  /v1/mobile/access             → 用户有效桌面、工作区和动作
+GET  /v1/mobile/workspaces         → 用户有效工作区目录
+GET  /v1/mobile/sessions           → 仅有效 read 工作区内的会话
 POST /v1/mobile/sessions           → 需要 prompt scope，持久 requestId 幂等创建
 GET  /v1/mobile/sessions/{id}/messages → 稳定 transcript
 GET  /v1/mobile/sessions/{id}/model    → 需要 read scope，目录 + 当前会话模型
 POST /v1/mobile/sessions/{id}/model    → 需要 prompt scope，只改会话模型
 POST /v1/mobile/sessions/{id}/prompt   → 需要 prompt scope
 POST /v1/mobile/sessions/{id}/cancel   → 需要 cancel scope
-DELETE /v1/mobile/access/{grantId}     → 手机自行撤销
 ```
 
 约束：
 
-- 申请的工作区与动作必须是桌面 Connector 已授权集合的子集；Server 拒绝越权申请。
-- grant 默认 `pending`，只有桌面 Connector 的 `allow` 能将其置为 `active`；`deny`/`revoke` 分别终止或回收访问。
-- 手机吊销、logout、桌面吊销会同步撤销相关 grant。
-- 每次创建/历史/模型读取/模型选择/prompt/cancel 都由 Server 校验 grant，再由 Connector 校验工作区授权或会话真实归属，双重 fail-closed。
-- 单个手机可访问多个桌面；会话列表按桌面聚合，离线桌面只产生 warning，不阻塞其他桌面。
+- 不再存在手机申请、桌面逐手机 allow/deny 或 `mobileDeviceId` grant。
+- 用户策略变更会关闭该用户所有手机的事件流；Connector 收窄桌面范围会关闭该桌面事件流。
+- 每次创建、历史、模型、prompt、cancel、审批和附件操作都由 Server 校验用户有效权限，再由 Connector 校验桌面授权及会话真实归属，双重 fail-closed。
+- 单个手机可访问策略内的多个桌面；会话列表按桌面聚合，离线桌面只产生 warning，不阻塞其他桌面。
 
-**边界：** `/v1/devices`、`/v1/sessions`、`/v1/events/ws` 等调试 API 仍只接受 bootstrap token。移动 Access Token 只能访问上述 `/v1/mobile/*` 接口，且受 grant 约束；移动端通过 `/v1/mobile/events/ws` 订阅 `assistant.stream` 增量（Connector 已归一化为 `start/delta/end`），HTTP transcript 仍作为断线恢复和最终消息的兜底。原生 App 使用 `Authorization` 头；浏览器不能在 WebSocket 握手中设置自定义头，因此该路径额外接受短时 `accessToken` 查询参数，生产必须使用 WSS 并避免记录完整 URL。
+**边界：** `/v1/devices`、`/v1/sessions`、`/v1/events/ws` 等调试 API 仍只接受 bootstrap token。移动 Access Token 只能访问上述 `/v1/mobile/*` 接口，且受用户策略约束；移动端通过 `/v1/mobile/events/ws` 订阅 `assistant.stream` 增量（Connector 已归一化为 `start/delta/end`），HTTP transcript 仍作为断线恢复和最终消息的兜底。原生 App 使用 `Authorization` 头；浏览器不能在 WebSocket 握手中设置自定义头，因此该路径额外接受短时 `accessToken` 查询参数，生产必须使用 WSS 并避免记录完整 URL。
