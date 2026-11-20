@@ -40,7 +40,7 @@ export function DevicesPage() {
         <Title level={4} style={{ marginBottom: 2 }}>
           设备管理
         </Title>
-        <Text type="secondary">桌面 Connector 与手机设备分别授权、独立配对和吊销</Text>
+        <Text type="secondary">管理桌面 Connector 配对与手机登录设备；访问权限由用户策略与桌面开放范围共同决定</Text>
       </div>
       <Tabs
         activeKey={activeTab}

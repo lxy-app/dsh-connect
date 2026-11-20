@@ -1,9 +1,5 @@
 import type * as ReactTypes from 'react';
 import type {
-  ConnectorAccessAction,
-  ConnectorDecisionInput,
-  ConnectorMobileAccessGrant,
-  ConnectorMobileAccessList,
   ConnectorScope,
   ConnectorStatus,
   PublicChallenge,
@@ -94,16 +90,10 @@ window.__ModuleLoader__.load({
         pairHelp: '在 Server 管理端生成一次性配对码。配对码短时有效且只能使用一次。',
         noWorkspace: '请至少选择一个工作区', noScope: '请至少选择一个动作', paired: '桌面已授权并上线',
         cancelled: '已取消本次配对', disconnected: 'Connector 已断开', loading: '正在读取 Connector 状态…',
-        mobileAccess: '手机访问授权', mobileAccessCopy: '手机配对只证明设备身份。下面的工作区和动作必须由此桌面显式批准，手机才能查看或推进会话。',
-        mobileAccessEmpty: '没有手机请求访问此桌面。', mobileAccessOffline: '桌面离线，暂时无法同步手机访问请求。', mobileAccessUnavailable: '无法读取手机访问请求。请确认桌面 Connector 已加载最新版本并重新连接。',
-        pendingAccess: '等待你的决定', activeAccess: '已授权', requestedAt: '请求时间', mobileUser: '手机用户',
-        allowAccess: '允许这些范围', denyAccess: '拒绝', revokeAccess: '撤销访问', accessBusy: '正在提交…',
-        grantTitle: '桌面授权范围', grantCopy: '可随时增减授权工作区与动作，保存后立即生效，无需重新配对。手机仍需单独申请下面的范围，并由你在此确认。',
+        grantTitle: '桌面授权范围', grantCopy: '可随时增减此桌面开放的工作区与动作，保存后立即生效，无需重新配对。手机有效权限由 Server 用户访问策略与这里的开放范围共同决定。',
         saveGrants: '保存授权', resetGrants: '撤销更改', grantsSaved: '桌面授权已更新', grantsOffline: '桌面当前离线，无法提交授权变更；恢复连接后重试。',
-        grantWarning: '移除工作区或动作会立即收紧此桌面的远程能力：手机对这些范围的既有授权随之失效，需要重新申请并由你再次确认。不会删除 DSH 本地会话。',
+        grantWarning: '移除工作区或动作会立即收紧此桌面的远程能力，手机权限始终取用户访问策略与当前开放范围的交集。不会删除 DSH 本地会话。',
         grantDirty: '有未保存的授权变更',
-        accessDenied: '已拒绝这次手机访问请求', accessAllowed: '已授权此手机访问所选工作区', accessRevoked: '已撤销此手机的访问',
-        noAccessWorkspace: '请至少选择一个工作区', noAccessScope: '请至少选择一个动作',
         grantSaved: '已保存', selectAllWorkspaces: '全选', clearAllWorkspaces: '取消全选',
         selectAllWorkspacesHint: '始终选择全部工作区；搜索和筛选不会缩小全选范围。',
         searchWorkspaces: '搜索工作区名称或路径', selectedOnly: '仅看已选', selected: '已选',
@@ -130,16 +120,10 @@ window.__ModuleLoader__.load({
         pairHelp: 'Generate a one-time code in the Server admin console. It expires shortly and can be used only once.',
         noWorkspace: 'Select at least one workspace', noScope: 'Select at least one action', paired: 'Desktop authorized and online',
         cancelled: 'Pairing cancelled', disconnected: 'Connector disconnected', loading: 'Loading Connector status…',
-        mobileAccess: 'Phone access', mobileAccessCopy: 'Pairing only proves the phone identity. This desktop must explicitly approve the workspaces and actions below.',
-        mobileAccessEmpty: 'No phone is requesting access to this desktop.', mobileAccessOffline: 'Desktop is offline; phone access requests cannot be reviewed right now.', mobileAccessUnavailable: 'Phone access requests could not be loaded. Make sure the latest Connector build is loaded and reconnected.',
-        pendingAccess: 'Waiting for your decision', activeAccess: 'Authorized', requestedAt: 'Requested', mobileUser: 'Phone user',
-        allowAccess: 'Allow these scopes', denyAccess: 'Deny', revokeAccess: 'Revoke access', accessBusy: 'Submitting…',
-        grantTitle: 'Desktop grants', grantCopy: 'Add or remove granted workspaces and actions at any time. Changes apply immediately without re-pairing. Phones still request their own access, which you confirm here.',
+        grantTitle: 'Desktop grants', grantCopy: 'Add or remove the workspaces and actions exposed by this desktop at any time. Changes apply immediately without re-pairing. Effective phone access combines Server user policies with these grants.',
         saveGrants: 'Save grants', resetGrants: 'Discard changes', grantsSaved: 'Desktop grants updated', grantsOffline: 'The desktop is offline; grant changes cannot be saved until it reconnects.',
-        grantWarning: 'Removing a workspace or action immediately narrows what this desktop offers. Existing phone access for those scopes stops working and must be requested and confirmed again. DSH local sessions are not deleted.',
+        grantWarning: 'Removing a workspace or action immediately narrows what this desktop offers. Phone access is always the intersection of user policies and these current grants. DSH local sessions are not deleted.',
         grantDirty: 'Unsaved grant changes',
-        accessDenied: 'Phone access request denied', accessAllowed: 'Phone access granted for the selected workspaces', accessRevoked: 'Phone access revoked',
-        noAccessWorkspace: 'Select at least one workspace', noAccessScope: 'Select at least one action',
         grantSaved: 'Saved', selectAllWorkspaces: 'Select all', clearAllWorkspaces: 'Clear all',
         selectAllWorkspacesHint: 'Always selects every workspace; search and filters never narrow the select-all scope.',
         searchWorkspaces: 'Search workspace names or paths', selectedOnly: 'Selected only', selected: 'Selected',
@@ -186,10 +170,6 @@ window.__ModuleLoader__.load({
       .dsc-error{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent);color:var(--dsw-alias-state-error-primary);margin-bottom:14px;white-space:pre-wrap}
       .dsc-notice{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent);color:var(--dsw-alias-state-success-primary);margin-bottom:14px}
       .dsc-foot{text-align:center;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:18px}.dsc-empty{color:var(--dsw-alias-label-secondary);padding:14px 0}
-      .dsc-access{border:1px solid var(--dsw-alias-border-l1);border-radius:12px;padding:14px;margin-top:10px;background:var(--dsw-alias-bg-base)}
-      .dsc-access-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.dsc-access-name{font-weight:680;font-size:13px}.dsc-access-meta{font-size:11px;color:var(--dsw-alias-label-secondary);margin-top:2px}
-      .dsc-access .dsc-check{padding:5px 0;border-bottom:0}.dsc-access .dsc-scopes{grid-template-columns:repeat(3,1fr);margin-top:6px}.dsc-access-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-      .dsc-access-scopes{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.dsc-access-workspace{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
       @media(max-width:600px){.dsc-wrap{padding:22px 14px}.dsc-card{padding:17px}.dsc-scopes{grid-template-columns:1fr}.dsc-row{flex-direction:column;gap:3px}.dsc-value{text-align:left}}
     `;
 
@@ -244,9 +224,6 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState('');
       const [notice, setNotice] = useState('');
       const [showPairing, setShowPairing] = useState(false);
-      const [mobileAccess, setMobileAccess] = useState<ConnectorMobileAccessList | null>(null);
-      const [mobileAccessUnavailable, setMobileAccessUnavailable] = useState(false);
-      const [accessSelection, setAccessSelection] = useState<Record<string, { workspaces: string[]; scopes: ConnectorScope[] }>>({});
       const initialized = useRef(false);
       const refreshGeneration = useRef(0);
 
@@ -255,36 +232,9 @@ window.__ModuleLoader__.load({
         const [nextStatus, nextWorkspaces] = await Promise.all([
           call<ConnectorStatus>(ctx, 'status.get'), call<WorkspaceInfo[]>(ctx, 'workspace.list'),
         ]);
-        let nextAccess: ConnectorMobileAccessList | null = null;
-        let accessFailed = false;
-        // An open pairing transport is not authenticated yet. Loading phone
-        // access now would be rejected; older Servers also drop the pending
-        // desktop challenge.
-        if (nextStatus.connected && nextStatus.deviceId) {
-          try {
-            nextAccess = await call<ConnectorMobileAccessList>(ctx, 'mobile.access.list');
-          } catch {
-            // Access review is an additional capability; keep the base status usable.
-            nextAccess = null;
-            accessFailed = true;
-          }
-        }
         if (generation !== refreshGeneration.current) return;
         setStatus(nextStatus);
         setWorkspaces(nextWorkspaces);
-        setMobileAccess(nextAccess);
-        setMobileAccessUnavailable(accessFailed);
-        setAccessSelection((current) => {
-          const next = { ...current };
-          for (const grant of nextAccess?.grants ?? []) {
-            if (grant.status !== 'pending' || next[grant.grantId]) continue;
-            next[grant.grantId] = {
-              workspaces: grant.workspaces.map((workspace) => workspace.id),
-              scopes: [...grant.scopes],
-            };
-          }
-          return next;
-        });
         if (!initialized.current) {
           setServerUrl(nextStatus.serverUrl ?? 'http://127.0.0.1:8787');
           setDeviceName(nextStatus.deviceName ?? 'DSH Desktop');
@@ -408,52 +358,6 @@ window.__ModuleLoader__.load({
         }, t('grantsSaved'));
       };
 
-      const toggleAccessWorkspace = (grant: ConnectorMobileAccessGrant, workspaceId: string): void => {
-        setAccessSelection((current) => {
-          const selection = current[grant.grantId] ?? { workspaces: grant.workspaces.map((item) => item.id), scopes: [...grant.scopes] };
-          return {
-            ...current,
-            [grant.grantId]: {
-              ...selection,
-              workspaces: selection.workspaces.includes(workspaceId)
-                ? selection.workspaces.filter((item) => item !== workspaceId)
-                : [...selection.workspaces, workspaceId],
-            },
-          };
-        });
-      };
-      const toggleAccessScope = (grant: ConnectorMobileAccessGrant, scope: ConnectorScope): void => {
-        setAccessSelection((current) => {
-          const selection = current[grant.grantId] ?? { workspaces: grant.workspaces.map((item) => item.id), scopes: [...grant.scopes] };
-          return {
-            ...current,
-            [grant.grantId]: {
-              ...selection,
-              scopes: selection.scopes.includes(scope)
-                ? selection.scopes.filter((item) => item !== scope)
-                : [...selection.scopes, scope],
-            },
-          };
-        });
-      };
-      const decideAccess = (grant: ConnectorMobileAccessGrant, action: ConnectorAccessAction): void => {
-        const selection = accessSelection[grant.grantId] ?? { workspaces: grant.workspaces.map((item) => item.id), scopes: [...grant.scopes] };
-        if (action === 'allow' && selection.workspaces.length === 0) { setError(t('noAccessWorkspace')); return; }
-        if (action === 'allow' && selection.scopes.length === 0) { setError(t('noAccessScope')); return; }
-        const requestedWorkspaces = new Set(grant.workspaces.map((workspace) => workspace.id));
-        const requestedScopes = new Set<string>(grant.scopes);
-        const input: ConnectorDecisionInput = {
-          mobileDeviceId: grant.mobileDeviceId,
-          action,
-          ...(action === 'revoke' ? {} : {
-            workspaces: selection.workspaces.filter((id) => requestedWorkspaces.has(id)),
-            scopes: selection.scopes.filter((scope) => requestedScopes.has(scope)),
-          }),
-        };
-        const message = action === 'allow' ? t('accessAllowed') : action === 'deny' ? t('accessDenied') : t('accessRevoked');
-        void run(`access-${grant.grantId}-${action}`, () => call(ctx, 'mobile.access.decide', input), message);
-      };
-      const accessGrants = mobileAccess?.grants ?? [];
       const currentGrant = grantDraft ?? baseGrant();
       const selectedWorkspaceSet = new Set(currentGrant.workspaces);
       const selectedWorkspaceCount = workspaces.filter((workspace) => selectedWorkspaceSet.has(workspace.id)).length;
@@ -472,44 +376,6 @@ window.__ModuleLoader__.load({
       const grantDirty = Boolean(status && grantDraft
         && (!sameSet(grantDraft.workspaces, status.workspaces.map((workspace) => workspace.id))
           || !sameSet(grantDraft.scopes, status.scopes)));
-      const accessSection = h('section', { className: 'dsc-card' },
-        h('h2', { className: 'dsc-heading' }, t('mobileAccess')),
-        h('p', { className: 'dsc-copy' }, t('mobileAccessCopy')),
-        !status?.connected
-          ? h('div', { className: 'dsc-empty' }, t('mobileAccessOffline'))
-          : mobileAccessUnavailable
-            ? h('div', { className: 'dsc-empty' }, t('mobileAccessUnavailable'))
-            : accessGrants.length === 0
-            ? h('div', { className: 'dsc-empty' }, t('mobileAccessEmpty'))
-            : accessGrants.map((grant) => {
-              const pending = grant.status === 'pending';
-              const selection = accessSelection[grant.grantId] ?? { workspaces: grant.workspaces.map((item) => item.id), scopes: [...grant.scopes] };
-              return h('div', { className: 'dsc-access', key: grant.grantId },
-                h('div', { className: 'dsc-access-head' },
-                  h('div', null,
-                    h('div', { className: 'dsc-access-name' }, grant.mobileDeviceName ?? grant.mobileDeviceId),
-                    h('div', { className: 'dsc-access-meta' }, `${grant.mobileUserName ?? ''}${grant.mobileUserName ? ' · ' : ''}${grant.mobilePlatform ?? ''}`)),
-                  h('span', { className: `dsc-badge ${pending ? 'dsc-offline' : 'dsc-online'}` }, pending ? t('pendingAccess') : t('activeAccess'))),
-                h('div', { className: 'dsc-access-workspace' }, grant.workspaces.map((workspace) =>
-                  pending
-                    ? h('label', { className: 'dsc-check', key: workspace.id },
-                      h('input', { type: 'checkbox', checked: selection.workspaces.includes(workspace.id), onChange: () => toggleAccessWorkspace(grant, workspace.id) }),
-                      h('span', { className: 'dsc-check-title' }, workspace.name))
-                    : h('span', { className: 'dsc-badge', key: workspace.id }, workspace.name))),
-                pending
-                  ? h('div', { className: 'dsc-scopes' }, grant.scopes.map((scope) =>
-                    h('label', { className: 'dsc-check', key: scope },
-                      h('input', { type: 'checkbox', checked: selection.scopes.includes(scope), onChange: () => toggleAccessScope(grant, scope) }),
-                      h('span', { className: 'dsc-check-title' }, scopeLabel(t, scope)))))
-                  : h('div', { className: 'dsc-access-scopes' }, grant.scopes.map((scope) => h('span', { className: 'dsc-badge', key: scope }, scopeLabel(t, scope)))),
-                h('div', { className: 'dsc-access-actions' },
-                  pending
-                    ? h(React.Fragment, null,
-                      h(Button, { disabled: Boolean(busy), onClick: () => decideAccess(grant, 'deny') }, t('denyAccess')),
-                      h(Button, { primary: true, disabled: Boolean(busy), onClick: () => decideAccess(grant, 'allow') }, busy === `access-${grant.grantId}-allow` ? t('accessBusy') : t('allowAccess')))
-                    : h(Button, { disabled: Boolean(busy), onClick: () => decideAccess(grant, 'revoke') }, t('revokeAccess'))));
-            }));
-
       const settingsCard = h('section', { className: 'dsc-card' },
         h('h2', { className: 'dsc-heading' }, t('settings')),
         h('p', { className: 'dsc-copy' }, t('settingsCopy')),
@@ -621,7 +487,7 @@ window.__ModuleLoader__.load({
                   disabled: Boolean(busy) || !status.connected || !grantDirty || !grantSelectionValid,
                   onClick: saveGrants,
                 }, busy === 'grants' ? t('saving') : t('saveGrants'))))),
-          accessSection);
+        );
       } else if (status.challenge) {
         const challenge: PublicChallenge = status.challenge;
         content = h('section', { className: 'dsc-card' },

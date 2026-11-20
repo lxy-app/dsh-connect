@@ -115,9 +115,9 @@ async function main(): Promise<void> {
 
     const challenge = await runtime.pairing.startPairing({ pairingCode: pairing.code, deviceName: 'E2E Desktop' });
     assert.equal(challenge.deviceId.startsWith('dev_'), true);
-    // Polling authenticated-only capabilities must not send a pre-pairing
-    // control request that disconnects the pending challenge.
-    await assert.rejects(runtime.mobileAccessList(), { code: 'not_paired' });
+    // Authenticated-only control methods must not send a pre-pairing request
+    // that disconnects the pending challenge.
+    await assert.rejects(runtime.interactionAudience('ws-1'), { code: 'not_paired' });
     assert.equal(runtime.transport.connected, true);
     assert.equal(runtime.pairing.state, 'waiting_desktop_authorization');
     assert.equal(runtime.pairing.publicChallenge()?.deviceId, challenge.deviceId);
@@ -193,47 +193,50 @@ async function main(): Promise<void> {
     const relisted = await request<SessionListResponse>(`/v1/sessions?deviceId=${deviceId}`);
     assert.equal(relisted.sessions.length, 2);
 
-    // Mobile access: pairing alone grants nothing; the desktop Connector must
-    // approve the phone's workspace request before session data is readable.
-    const users = await request<{ readonly users: readonly { readonly id: string; readonly role: string }[] }>('/v1/admin/users');
-    const owner = users.users.find((user) => user.role === 'owner');
-    assert.ok(owner, 'e2e owner account');
+    // Mobile access comes only from the owner's user policy intersected with
+    // the desktop's current grants; logging in a phone adds no permission.
+    const mobileEmail = `e2e-mobile-${Date.now()}-${process.pid}@example.com`;
+    const mobilePassword = 'e2e-mobile-password-not-for-production';
+    const mobileUser = await request<{ readonly id: string }>('/v1/admin/users', {
+      method: 'POST',
+      body: {
+        email: mobileEmail,
+        displayName: 'E2E Mobile User',
+        password: mobilePassword,
+        role: 'member',
+      },
+    });
     await request('/v1/admin/policies', {
       method: 'POST',
       body: {
         name: `E2E mobile policy ${Date.now()}-${process.pid}`,
-        memberIds: [owner.id],
+        memberIds: [mobileUser.id],
         rules: [{ deviceId, workspaceIds: ['ws-1'], scopes: ['read', 'prompt', 'cancel'] }],
       },
     });
-    const mobileCode = await request<{ readonly code: string }>('/v1/admin/mobile/pairing-codes', {
-      method: 'POST', body: { userId: owner.id },
-    });
-    const phone = await mobileRequest<{
-      readonly mobileDeviceId: string;
-      readonly accessToken: string;
-      readonly refreshToken: string;
-    }>('/v1/mobile/pair', '', {
+    const phone = await mobileRequest<{ readonly accessToken: string }>('/v1/mobile/auth/login', '', {
       method: 'POST',
-      body: { code: mobileCode.code, deviceName: 'E2E iPhone', platform: 'ios', appVersion: '0.1.0' },
+      body: {
+        email: mobileEmail,
+        password: mobilePassword,
+        deviceName: 'E2E iPhone',
+        platform: 'ios',
+        appVersion: '0.1.0',
+      },
     });
-    const accessBefore = await mobileRequest<{ readonly desktops: readonly { readonly grant?: unknown }[] }>('/v1/mobile/access', phone.accessToken);
-    assert.equal(accessBefore.desktops[0]?.grant, undefined);
-    const accessRequest = await mobileRequest<{ readonly status: string; readonly grantId: string }>(
-      '/v1/mobile/access/requests', phone.accessToken,
-      { method: 'POST', body: { deviceId, workspaces: ['ws-1'], scopes: ['read', 'prompt'] } },
-    );
-    assert.equal(accessRequest.status, 'pending');
-    const pendingAccess = await runtime.mobileAccessList();
-    assert.equal(pendingAccess.grants[0]?.status, 'pending');
-    assert.equal(pendingAccess.grants[0]?.mobileDeviceName, 'E2E iPhone');
-    const decision = await runtime.mobileAccessDecide({
-      mobileDeviceId: phone.mobileDeviceId,
-      action: 'allow',
-      workspaces: ['ws-1'],
-      scopes: ['read', 'prompt'],
-    }) as { readonly status: string };
-    assert.equal(decision.status, 'active');
+    const access = await mobileRequest<{
+      readonly desktops: readonly {
+        readonly deviceId: string;
+        readonly availableWorkspaces: readonly { readonly id: string; readonly scopes?: readonly string[] }[];
+        readonly availableScopes: readonly string[];
+      }[];
+    }>('/v1/mobile/access', phone.accessToken);
+    const desktopAccess = access.desktops.find((desktop) => desktop.deviceId === deviceId);
+    assert.ok(desktopAccess, 'user policy exposes the paired desktop');
+    assert.ok(desktopAccess.availableWorkspaces.some((workspace) => workspace.id === 'ws-1'));
+    assert.ok(desktopAccess.availableWorkspaces.find((workspace) => workspace.id === 'ws-1')?.scopes?.includes('prompt'));
+    assert.ok(desktopAccess.availableScopes.includes('read'));
+    assert.ok(desktopAccess.availableScopes.includes('prompt'));
     const mobileCreateBody = { requestId: mobileCreateRequestId, deviceId, workspaceId: 'ws-1' };
     const mobileCreated = await mobileRequest<{ readonly sessionId: string; readonly workspaceId: string }>(
       '/v1/mobile/sessions', phone.accessToken, { method: 'POST', body: mobileCreateBody },
@@ -402,7 +405,7 @@ async function main(): Promise<void> {
         'create + prompt + model selection idempotency',
         'mobile model catalog + Session-only selection + model/selection event',
         'device token reconnect',
-        'mobile access request + desktop approval',
+        'mobile email/password login + user-policy/desktop-grant intersection',
         'mobile workspaces/sessions/create/transcript/prompt',
         'phone image/file upload → Connector download → Host receipts → attachment-only prompt',
         'present attachment → Host bytes → upload → mobile download + attachment.ready',
