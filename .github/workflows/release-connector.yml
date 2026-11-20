@@ -39,7 +39,7 @@ jobs:
 
       - name: Match package.json version
         working-directory: connector/dsh-plugin
-        run: node -e "const pkg = require('./package.json'); if (pkg.version !== process.env.EXPECTED_VERSION) { throw new Error(`package.json version ${pkg.version} does not match ${process.env.EXPECTED_VERSION}`); }"
+        run: node -e 'const pkg = require("./package.json"); if (pkg.version !== process.env.EXPECTED_VERSION) { throw new Error("package.json version " + pkg.version + " does not match " + process.env.EXPECTED_VERSION); }'
         env:
           EXPECTED_VERSION: ${{ steps.version.outputs.version }}
 
