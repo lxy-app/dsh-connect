@@ -262,6 +262,9 @@
 .turn-foot{display:flex;align-items:center;gap:4px;margin-top:8px;color:var(--muted)}
 .turn-foot .message-tts{margin:0;padding:2px 6px}
 .turn-time{margin-left:auto;font-variant-numeric:tabular-nums}
+.message-time-divider{margin:2px 0 8px;color:var(--muted);font-size:12px;line-height:17px;text-align:center;font-variant-numeric:tabular-nums}
+.chat-turn-group{display:block}
+.turn-elapsed{padding:2px 12px 8px;color:var(--muted);font-size:12px;line-height:18px}
 .turn-running{color:var(--muted);display:flex;align-items:center;gap:7px;padding:10px 12px}
 /* Mobile typography readability: scoped to the 390 pt App prototype only. */
 .phone{
@@ -819,7 +822,7 @@ function chat(){
   ensureAttachmentDraftOwner();
   const s=selectedSession||sessions[0];
   const voiceActive=voiceStatus!=='idle';
-  return `<div class="chat-head"><button class="icon-btn" data-action="open-session-drawer" title="设备、工作区与会话" aria-label="打开会话侧边栏">${icon('menu')}</button><div class="chat-title"><div class="chat-name">${esc(s.title)}</div><div class="chat-state">● ${esc(s.device)} · ${esc(s.workspace)}</div></div><button class="icon-btn" data-action="new" title="新建会话" aria-label="新建会话">${icon('plus',18)}</button></div><div class="chat-messages" id="chatMessages"><div class="date">今天 21:58</div>${messages.map(messageHtml).join('')}</div><div class="composer ${voiceActive?'voice-active':''}">${attachmentDraftHtml()}<div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="compose-box voice-compose ${voiceMode?'voice-mode':'text-mode'} ${chatDraft.trim()||draftAttachments.length?'has-draft':''} ${draftAttachments.length?'has-attachments':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="按住说话，松手发送，上移取消" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'?'disabled':''}><span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span></button><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button>`:`<textarea id="draft" rows="1" aria-label="输入消息" placeholder="发消息或按住说话…">${esc(chatDraft)}</textarea><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button><button class="send" data-action="send" title="发送" aria-label="发送">${icon('send',16)}</button>`}</div></div>`
+  return `<div class="chat-head"><button class="icon-btn" data-action="open-session-drawer" title="设备、工作区与会话" aria-label="打开会话侧边栏">${icon('menu')}</button><div class="chat-title"><div class="chat-name">${esc(s.title)}</div><div class="chat-state">● ${esc(s.device)} · ${esc(s.workspace)}</div></div><button class="icon-btn" data-action="new" title="新建会话" aria-label="新建会话">${icon('plus',18)}</button></div><div class="chat-messages" id="chatMessages">${chatMessagesHtml(messages)}</div><div class="composer ${voiceActive?'voice-active':''}">${attachmentDraftHtml()}<div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="compose-box voice-compose ${voiceMode?'voice-mode':'text-mode'} ${chatDraft.trim()||draftAttachments.length?'has-draft':''} ${draftAttachments.length?'has-attachments':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="按住说话，松手发送，上移取消" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'?'disabled':''}><span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span></button><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button>`:`<textarea id="draft" rows="1" aria-label="输入消息" placeholder="发消息或按住说话…">${esc(chatDraft)}</textarea><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button><button class="send" data-action="send" title="发送" aria-label="发送">${icon('send',16)}</button>`}</div></div>`
 }
 function voiceHoldText(){return voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?(mobilePage==='new'?'松手转写':'松手发送'):'按住说话'}
 function voiceFeedbackHtml(){if(voiceStatus==='idle')return '';const processing=voiceStatus==='processing';const releaseCopy=mobilePage==='new'?'松手转写，上移取消':'松手发送，上移取消';return `<div class="voice-release-copy">${processing?(mobilePage==='new'?'正在识别并转写…':'正在识别并发送…'):voiceCancelArmed?'松开取消':releaseCopy}</div><div class="voice-wave" aria-hidden="true">${Array.from({length:25},(_,i)=>`<i style="--i:${i}"></i>`).join('')}</div>`}
@@ -846,19 +849,45 @@ function stepHtml(step,turnIndex,stepIndex){
     <span class="step-chevron">${icon('chevron',12)}</span>
   </button>${detail}`;
 }
+/* Keep in sync with apps/mobile-shared/lib/turn-grouping.ts and lib/format.ts. */
+const PROTOTYPE_TIME_DIVIDER_GAP_MS=5*60*1000;
+function prototypeMessageAt(message){
+  if(Number.isFinite(message.at))return message.at;
+  const value=message.time||message.final?.time||'';
+  const clock=/^(\d{1,2}):(\d{2})$/.exec(value);
+  if(clock){const date=new Date();date.setHours(Number(clock[1]),Number(clock[2]),0,0);return date.getTime()}
+  if(value==='刚刚')return Date.now();
+  const minutes=/^(\d+) 分钟前$/.exec(value);if(minutes)return Date.now()-Number(minutes[1])*60*1000;
+  return 0;
+}
+function groupPrototypeTurns(list){
+  const groups=[];
+  list.forEach((message,index)=>{if(message.role==='user'||!groups.length)groups.push({entries:[]});groups[groups.length-1].entries.push({message,index})});
+  return groups.map(group=>{const times=group.entries.map(({message})=>prototypeMessageAt(message)).filter(time=>time>0);return {...group,startedAt:times.length?Math.min(...times):0,endedAt:times.length?Math.max(...times):0}});
+}
+function shouldShowPrototypeTimeDivider(previous,current,gapMs=PROTOTYPE_TIME_DIVIDER_GAP_MS){
+  if(current.startedAt<=0)return false;
+  if(!previous||previous.endedAt<=0)return true;
+  return current.startedAt-previous.endedAt>=gapMs;
+}
+function formatPrototypeTime(timestamp){const date=new Date(timestamp);return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`}
+function chatMessagesHtml(list){
+  const groups=groupPrototypeTurns(list);
+  return groups.map((group,index)=>{const previous=groups[index-1];const divider=shouldShowPrototypeTimeDivider(previous,group)?`<div class="message-time-divider">${formatPrototypeTime(group.startedAt)}</div>`:'';return `<section class="chat-turn-group">${divider}${group.entries.map(({message,index:messageIndex})=>messageHtml(message,messageIndex)).join('')}</section>`}).join('');
+}
 function turnHtml(turn,index){
   const steps=turn.steps||[];
   const running=turn.state==='running';
-  const meta=running
-    ? `<span class="turn-meta">· 用时 <span data-turn-started="${turn.startedAt||0}">${elapsedLabel(turn.startedAt?Date.now()-turn.startedAt:0)}</span></span>`
-    : `<span class="turn-meta">· 用时 ${esc(turn.elapsed||'')}</span>`;
+  const elapsed=running
+    ? `用时 <span data-turn-started="${turn.startedAt||0}">${elapsedLabel(turn.startedAt?Date.now()-turn.startedAt:0)}</span>`
+    : `用时 ${esc(turn.elapsed||'')}`;
   const head=`<button class="turn-head ${running?'running':'done'}" data-action="toggle-turn" data-turn-index="${index}" aria-expanded="${turn.open?'true':'false'}" aria-label="${running?'收起执行步骤':'展开执行步骤'}">
     <span class="turn-state">${running?'<span class="turn-spinner"></span>':icon('check',13)}</span>
-    <span class="turn-title">${running?'深度求索中':'已完成'}</span>${meta}
+    <span class="turn-title">${running?'深度求索中':'已完成'}</span>
     <span class="turn-chevron">${icon('chevron',13)}</span>
   </button>`;
-  const body=turn.open?`<div class="turn-steps">${steps.map((step,stepIndex)=>stepHtml(step,index,stepIndex)).join('')}</div>`:'';
-  const final=turn.final?`<div class="turn-final"><div class="final-text">${esc(turn.final.text)}</div><div class="turn-foot"><button class="message-tts" data-action="play-turn" data-turn-index="${index}" title="使用 TTS 朗读这条回复">${icon('volume',13)}朗读</button><span class="turn-time">${esc(turn.final.time)}</span></div></div>`:'';
+  const body=turn.open?`<div class="turn-steps">${steps.map((step,stepIndex)=>stepHtml(step,index,stepIndex)).join('')}<div class="turn-elapsed">${elapsed}</div></div>`:'';
+  const final=turn.final?`<div class="turn-final"><div class="final-text">${esc(turn.final.text)}</div><div class="turn-foot"><button class="message-tts" data-action="play-turn" data-turn-index="${index}" title="使用 TTS 朗读这条回复">${icon('volume',13)}朗读</button></div></div>`:'';
   return `<div class="turn-wrap"><div class="turn-card">${head}${body}${final}</div></div>`;
 }
 function messageHtml(m,index){
@@ -866,7 +895,7 @@ function messageHtml(m,index){
   if(m.role==='tool')return `<div class="tool-card"><div class="tool-head"><div class="tool-icon">${icon('command',15)}</div>${m.name}<span style="margin-left:auto">${badge('成功','success')}</span></div><div class="code">${m.command}</div><div class="message-time">${m.result}</div></div>`;
   const uploadSummary=m.uploadState==='uploading'?'<div class="message-upload-summary">附件上传完成后才会发送指令</div>':m.uploadState==='failed'?'<div class="message-upload-summary">部分附件上传失败，指令尚未发送；可只重试失败项。</div>':'';
   const messageIdentity=m.id?` data-upload-message="${attr(m.id)}"`:'';
-  return `<div class="message ${m.role==='user'?'user':m.role==='assistant'?'assistant':''}"${messageIdentity}><div class="bubble">${m.text?`<div class="message-text">${esc(m.text)}</div>`:''}${messageAttachmentsHtml(m)}${uploadSummary}<div class="message-time">${m.time}</div></div>${m.role==='assistant'?`<button class="message-tts" data-action="play-message" data-message-index="${index}" title="使用 TTS 朗读此回复">${icon('volume',13)}朗读</button>`:''}</div>`;
+  return `<div class="message ${m.role==='user'?'user':m.role==='assistant'?'assistant':''}"${messageIdentity}><div class="bubble">${m.text?`<div class="message-text">${esc(m.text)}</div>`:''}${messageAttachmentsHtml(m)}${uploadSummary}</div>${m.role==='assistant'?`<button class="message-tts" data-action="play-message" data-message-index="${index}" title="使用 TTS 朗读此回复">${icon('volume',13)}朗读</button>`:''}</div>`;
 }
 function tasks(){return `<div class="phone-scroll"><div class="mobile-head"><div><div class="mobile-title">待办</div><div class="mobile-sub">${approvalState==='pending'?'1 项需要你的处理':'待办已清空'}</div></div><button class="icon-btn" data-action="notify">${icon('refresh',16)}</button></div><div class="section-label">需要处理</div>${approvalState==='pending'?`<button class="approval-card clickable" data-page="approval"><div class="approval-top"><div class="risk">${icon('shield')}</div><div><div class="approval-title">运行集成测试</div><div class="approval-sub">高风险操作 · 剩余 04:38</div></div><span style="margin-left:auto">${icon('chevron',16)}</span></div><div class="approval-body">修复 WebSocket 断线重连 · server</div><div class="code">pnpm test:integration</div>${badge('等待你的决定','warn')}</button>`:`<div class="info-card" style="text-align:center;padding:28px;color:var(--muted)">${icon('check',26)}<div style="margin-top:9px">待办已清空</div></div>`}<div class="section-label">稍后关注</div><div class="approval-card"><div class="approval-top"><div class="risk" style="color:var(--red)">${icon('activity')}</div><div><div class="approval-title">推送证书即将到期</div><div class="approval-sub">系统提醒 · 7 天后到期</div></div></div><div class="approval-body">更新 APNs 证书后，后台通知才能正常送达。</div><button class="btn" data-action="notify">查看设置</button></div></div>`}
 function approval(){return `<div class="phone-scroll"><div class="detail-head"><button class="icon-btn" data-page="tasks">${icon('back',17)}</button><div class="detail-title">操作审批</div>${badge('高风险','warn')}</div><div class="info-card"><div style="display:flex;gap:12px;align-items:center"><div class="risk">${icon('command',19)}</div><div><div class="approval-title">运行集成测试</div><div class="approval-sub">bash · 22:04:18</div></div></div><div class="code">pnpm test:integration\n--workspace server</div><div class="approval-body" style="margin-bottom:0">Agent 需要运行完整集成测试，验证断线恢复期间不会重复提交指令。</div></div><div class="section-label">影响范围</div><div class="info-card">${[['桌面设备','MacBook Pro'],['工作区','server'],['会话','修复 WebSocket 断线重连'],['发起者','DeepSeek Agent'],['有效期','04:38']].map(([k,v])=>`<div class="info-row"><span>${k}</span><span>${v}</span></div>`).join('')}</div><div class="warning">此操作会在桌面工作区执行命令。请确认命令、路径和会话上下文。批准仅对本次请求有效。</div><div class="button-row"><button class="btn danger" data-action="reject">拒绝</button><button class="btn primary" data-action="allow">${icon('shield',15)}允许一次</button></div><button class="btn ghost" style="width:100%;margin-top:8px" data-action="view-session">查看会话</button></div>`}
@@ -1194,7 +1223,7 @@ function finishAttachmentMessage(message,targetMessages){
   if(messages.includes(message)&&mobilePage==='chat')renderMobile();
   toast('附件已就绪，指令已发送（模拟）');
   setTimeout(()=>{
-    targetMessages.push({role:'assistant',text:`已收到 ${message.attachments.length} 个附件${message.text?'和补充指令':''}。附件会作为当前会话的消息内容交给 DSH（模拟）。`,time:'刚刚'});
+    targetMessages.push({role:'assistant',text:`已收到 ${message.attachments.length} 个附件${message.text?'和补充指令':''}。附件会作为当前会话的消息内容交给 DSH（模拟）。`,at:Date.now(),time:'刚刚'});
     if(messages===targetMessages&&mobilePage==='chat')renderMobile();
   },700);
 }
@@ -1203,10 +1232,10 @@ function sendChatMessage(text){
   const outgoing=draftAttachments.map(item=>({...item,status:'uploading',progress:8}));
   if(!value&&!outgoing.length){toast('请输入补充指令或添加附件');return false}
   if(!outgoing.length){
-    messages.push({role:'user',text:value,time:'刚刚'});renderMobile();toast('DSH 已接受指令（模拟）');setTimeout(()=>{messages.push({role:'assistant',text:'收到。我会沿用当前工作区与权限策略继续执行，并在需要审批时通知你。',time:'刚刚'});if(mobilePage==='chat')renderMobile()},700);return true;
+    messages.push({role:'user',text:value,at:Date.now(),time:'刚刚'});renderMobile();toast('DSH 已接受指令（模拟）');setTimeout(()=>{messages.push({role:'assistant',text:'收到。我会沿用当前工作区与权限策略继续执行，并在需要审批时通知你。',at:Date.now(),time:'刚刚'});if(mobilePage==='chat')renderMobile()},700);return true;
   }
   const targetMessages=messages;
-  const message={id:'msg_attachment_'+Date.now()+'_'+(++attachmentSerial),role:'user',text:value,time:'刚刚',attachments:outgoing,uploadState:'uploading'};
+  const message={id:'msg_attachment_'+Date.now()+'_'+(++attachmentSerial),role:'user',text:value,at:Date.now(),time:'刚刚',attachments:outgoing,uploadState:'uploading'};
   targetMessages.push(message);draftAttachments=[];chatDraft='';renderMobile();toast(`正在上传 ${outgoing.length} 个附件（模拟）`);
   setTimeout(()=>{if(message.uploadState!=='uploading')return;outgoing.forEach(item=>{if(item.status==='uploading')item.progress=46});if(messages.includes(message)&&mobilePage==='chat')renderMobile()},350);
   setTimeout(()=>{
