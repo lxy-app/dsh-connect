@@ -131,13 +131,6 @@ func (h *EventHub) CloseMobile(mobileDeviceID string) {
 	}, "mobile device access was revoked")
 }
 
-// CloseMobileForDevice closes only streams backed by one revoked desktop grant.
-func (h *EventHub) CloseMobileForDevice(mobileDeviceID, deviceID string) {
-	h.closeMatching(func(sub *subscription) bool {
-		return sub.mobileDeviceID != "" && sub.mobileDeviceID == mobileDeviceID && sub.deviceID == deviceID
-	}, "mobile grant was revoked")
-}
-
 // CloseDevice closes mobile streams for a desktop whose grants were narrowed.
 func (h *EventHub) CloseDevice(deviceID string) {
 	h.closeMatching(func(sub *subscription) bool {

@@ -2,7 +2,7 @@
 
 单实例 Go 中继 Server。它只通过 Connector 调用 `session.*` 方法并中继事件，**不读取 DSH 文件、不直接调用 DSH Service，也不保存会话正文**。
 
-持久层为 **PostgreSQL 18（默认）或 SQLite + ent ORM**：配对码、设备凭据 hash、create/prompt/model.select 幂等结果、审计、管理账号与浏览器会话、手机设备与移动令牌、手机访问授权。所有密钥只以 SHA-256 存储。两种数据库共用同一套 ent schema 和 Store 业务代码，由 `DSH_CONNECT_DATABASE_URL` 的 scheme 选择。
+持久层为 **PostgreSQL 18（默认）或 SQLite + ent ORM**：配对码、设备凭据 hash、create/prompt/model.select 幂等结果、审计、管理账号与浏览器会话、手机登录设备与移动令牌、用户访问策略。所有密钥只以 SHA-256 存储。两种数据库共用同一套 ent schema 和 Store 业务代码，由 `DSH_CONNECT_DATABASE_URL` 的 scheme 选择。
 
 ## 运行
 
@@ -40,7 +40,6 @@ DSH_CONNECT_DATABASE_URL=sqlite://./data/dsh-connect.db
 | `DSH_CONNECT_BOOTSTRAP_OWNER_NAME` | `Owner` | Owner 显示名 |
 | `DSH_CONNECT_ADMIN_ORIGIN` | 空（仅 loopback） | 管理后台允许的 CORS origin，逗号分隔；同源部署无需设置 |
 | `DSH_CONNECT_ADMIN_DIR` | 空 | 可选的 Admin 构建产物目录；设置后同源托管静态文件与 SPA 路由 |
-| `DSH_CONNECT_MOBILE_PAIRING_TTL` | `5m` | 手机一次性配对码有效期，Go duration |
 | `DSH_CONNECT_MOBILE_ACCESS_TTL` | `15m` | 手机 Access Token 有效期，Go duration |
 | `DSH_CONNECT_MOBILE_REFRESH_TTL` | `720h` | 手机 Refresh Token 有效期，Go duration |
 | `DSH_CONNECT_LISTEN_ADDR` | `127.0.0.1:8787` | HTTP 监听地址 |
@@ -84,7 +83,6 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 | GET | `/v1/admin/audit` | owner/admin/auditor | 审计查询：`action/actor/deviceId/result/from/to/limit/offset` |
 | POST | `/v1/admin/pairing-codes` | owner/admin | 生成一次性桌面配对码，返回稳定 `pairingId`；明文仅返回一次 |
 | GET | `/v1/admin/pairing-codes` | owner/admin/auditor | 最近 20 个配对码的 `pairingId` 与生命周期状态 |
-| POST | `/v1/admin/mobile/pairing-codes` | 已登录 | 为用户生成手机配对码；bootstrap 必须显式传 `userId`，成员只能为自己生成 |
 | GET | `/v1/admin/mobile-devices` | owner/admin/auditor | 手机设备列表，永不返回令牌 |
 | POST | `/v1/admin/mobile-devices/{id}/revoke` | owner/admin | 吊销手机及其访问/刷新令牌 |
 | GET/POST | `/v1/admin/policies` | 读含 auditor；写 owner/admin | 访问策略列表/创建 |
@@ -99,7 +97,7 @@ Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不�
 - 最后一位 **active** Owner 不能被降级、禁用或删除（返回 `conflict`）。Store 在事务内锁定 active Owner 集合并完成检查与写入，避免并发请求同时移除不同 Owner；删除用户及其依赖清理也在同一事务内完成。
 - Admin 只能维护非 Owner 账号；Owner 的显示名、角色、状态和密码只能由 Owner 修改，防止通过重置 Owner 密码提权。
 - Member 不能通过概览或设备列表读取全局账号、审计、工作区路径或设备指纹。
-- 手机有效权限为“用户所有启用策略按工作区求并集 ∩ 手机 active grant ∩ 桌面当前工作区/scopes”。无策略默认拒绝，已有 grant 不绕过策略；策略、桌面授权或 grant 收窄会关闭相关移动事件流并要求重新鉴权。
+- 手机有效权限为“用户所有启用策略按工作区求并集 ∩ 桌面当前工作区/scopes”。无策略默认拒绝，mobileDeviceId 不影响权限；策略或桌面授权收窄会关闭相关移动事件流并要求重新鉴权。
 - 策略更新和删除使用 revision 乐观锁；策略创建、更新、删除审计的 `details` 记录 before/after 策略内容，不包含密码、Token 或会话正文。
 - 登录失败对“邮箱不存在”和“密码错误”返回同一响应，且都会写审计，便于发现暴力破解。
 - 已吊销设备不会被断线回调改写回 `offline`（`revoked` 是终态）。
@@ -128,48 +126,43 @@ Connector 配对链路会向 stderr 输出 `connector connected`、`pair.start r
 
 Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无错误且已完成准入的唯一记录；同一 requestId 重试不重复计数，未提交的离线请求不落记录。该指标表示 Connector 成功响应的唯一 prompt 准入数，不表示 Turn 已完成。
 
-## 手机配对 API
+## 手机用户登录与访问 API
 
-手机使用独立的设备身份和令牌，不共享桌面 Connector 凭据。Web 管理后台的 **手机配对** 页面（`/mobile`）负责选择用户、生成二维码并吊销手机：
+手机通过用户邮箱和密码登录，设备身份只管理移动凭据，不共享桌面 Connector 凭据。Web 管理后台的 **手机设备** 页面（`/mobile`）负责查看登录设备和吊销凭据：
 
 | 方法/通道 | 路径 | 行为 |
 |---|---|---|
-| POST | `/v1/admin/mobile/pairing-codes` | 生成短时一次性配对码与 `dshconnect://` 二维码链接 |
-| POST | `/v1/mobile/pair` | 无 Bearer 鉴权；用一次性码兑换手机身份与令牌 |
+| POST | `/v1/mobile/auth/login` | 无 Bearer；校验用户邮箱/密码并创建设备移动令牌，连续失败限流 |
 | POST | `/v1/mobile/auth/refresh` | 原子轮换 Access/Refresh Token，旧 refresh 立即失效 |
-| POST | `/v1/mobile/auth/logout` | 使用手机 Access Token 吊销当前手机 |
-| GET | `/v1/mobile/me` | 返回当前手机与所属用户 |
-| GET | `/v1/mobile/access` | 桌面、桌面已开放的工作区/动作，以及本机 grant 状态 |
-| POST | `/v1/mobile/access/requests` | 申请工作区/动作子集，默认 `pending` |
-| DELETE | `/v1/mobile/access/{grantId}` | 手机撤销自己的申请或授权 |
-| GET | `/v1/mobile/workspaces` | 仅 active grant 中的工作区 |
+| POST | `/v1/mobile/auth/logout` | 使用手机 Access Token 吊销当前登录设备 |
+| GET | `/v1/mobile/me` | 返回当前登录设备与所属用户 |
+| GET | `/v1/mobile/access` | 返回用户策略与 Connector 当前授权交集后的桌面、工作区和动作 |
+| GET | `/v1/mobile/workspaces` | 用户有效工作区目录 |
 | GET | `/v1/mobile/sessions` | 聚合授权桌面会话；离线桌面返回 warning |
 | POST | `/v1/mobile/sessions` | 创建会话，需 `prompt`，沿用独立 requestId 幂等 |
 | GET | `/v1/mobile/sessions/{id}/messages` | 稳定 transcript，需 `read`；WSS 断开时的兜底 |
 | GET | `/v1/mobile/sessions/{id}/model` | 当前会话模型与可用目录，需 `read`；不激活冷 Agent |
-| POST | `/v1/mobile/sessions/{id}/model` | 只切换当前会话模型，需 `prompt`，沿用独立 requestId 持久幂等 |
-| GET | `/v1/mobile/events/ws` | 需 `read` grant；compact follow 并只推送 assistant 增量/对话/模型选择事件 |
+| POST | `/v1/mobile/sessions/{id}/model` | 只切换当前会话模型，需 `prompt`，持久幂等 |
+| GET | `/v1/mobile/events/ws` | 需用户有效 `read`；compact follow 并过滤原始工具 payload |
 | POST | `/v1/mobile/sessions/{id}/prompt` | 发送提示词，需 `prompt`，沿用 requestId 幂等 |
 | POST | `/v1/mobile/sessions/{id}/cancel` | 取消当前 Turn，需 `cancel` |
-| GET | `/v1/mobile/interactions` | 本机可回答的待处理审批/提问，需 `approve`；按设备/会话过滤 |
-| POST | `/v1/mobile/interactions/{id}/decision` | 一次性提交 `allow-once`/`reject` 或 question answers，转发给 Connector |
-| GET | `/v1/admin/mobile-devices` | 手机设备管理列表 |
-| POST | `/v1/admin/mobile-devices/{id}/revoke` | 管理员吊销手机 |
+| GET | `/v1/mobile/interactions` | 用户可回答的待处理审批/提问，需 `approve` |
+| POST | `/v1/mobile/interactions/{id}/decision` | 一次性提交审批或提问答案，转发给 Connector |
+| GET | `/v1/admin/mobile-devices` | 登录设备管理列表 |
+| POST | `/v1/admin/mobile-devices/{id}/revoke` | 管理员吊销单台登录设备 |
 
 安全约束：
 
-- 配对码、Access Token、Refresh Token 的明文都只返回一次，数据库只保存 SHA-256 hash。
-- 配对目标用户从配对码记录读取，手机请求不能指定 `userId`。
+- 密码只用于当次登录，不持久化；Access/Refresh Token 明文只返回一次，数据库只保存 SHA-256 hash。
+- 未知邮箱和错误密码统一返回 `unauthorized`；限流键只包含来源 IP 与规范化邮箱，不包含密码。
 - 手机被禁用、吊销或 refresh 已过期时，`/v1/mobile/me` 与 refresh 都失败关闭。
-- 手机配对不代表获得桌面权限。`GET /v1/mobile/access` 先展示桌面已开放范围；手机只能申请其子集，grant 默认 `pending`。
-- 只有桌面 Connector 通过已认证 WSS 的 `mobile.access.list` / `mobile.access.decide` 才能批准、拒绝或撤销 grant。Server 不代替桌面做授权决定。
-- `pair.updateGrants` 允许桌面 Connector 在面板显式确认后更新自己的 workspace/scope（例如追加 `approve`），无需重新配对；Server 校验动作词汇并写审计 `pair.grants.update`，手机 grant 仍需单独申请和桌面确认。
-- 会话列表、create、transcript、模型读取/选择、prompt、cancel、interactions 每次都校验 grant（设备 + 工作区 + scope）；Connector 再校验工作区授权、会话真实归属或审批答案，形成双重 fail-closed。
-- 待处理审批只存在内存中，Server 重启或 Connector 断连即清空；同一 interaction 在 Server 内用 CAS 预留，避免两台手机重复消费。
-- 远程审批策略持久化在 `approval_policies`。关闭远程审批会停止新副本、清空待处理手机副本和在线状态，决定失败关闭；桌面原生审批链不受影响。TTL 变更立即收窄现有项，更新使用 revision 防止并发覆盖。
-- 手机 logout、管理员吊销手机、桌面吊销都会撤销相关 grant。
-- 手机 logout、管理员吊销手机、手机或桌面撤销 grant、用户被禁用或删除时，Server 会关闭该手机/用户已建立的 `/v1/mobile/events/ws`。事件订阅登记后会重新读取当前手机、用户和 grant 状态，避免旧握手身份在吊销竞态中继续建立连接。
-- **移动 Access Token 不能访问 `/v1/devices`、`/v1/sessions` 或 `/v1/events/ws` 等调试接口。** 移动端仅使用受 grant 约束的 `/v1/mobile/*` API；`/v1/mobile/events/ws` 先校验 grant，再以 compact follow 推送 assistant 增量，原始工具 payload 由 Server 过滤。
+- 登录不代表获得桌面权限。有效权限仅为用户所有 enabled 策略的并集与桌面当前 Workspaces/Scopes 的交集，同一用户所有手机结果相同。
+- 不再存在手机配对码、逐手机访问申请或 `mobile.access.list` / `mobile.access.decide` RPC。
+- `pair.updateGrants` 仍允许桌面 Connector 显式更新自己的 workspace/scope；Server 校验动作词汇并写审计，移动权限随交集立即收窄。
+- 会话列表、create、transcript、模型、prompt、cancel、interactions 和附件每次都校验用户有效权限；Connector 再校验桌面授权、会话真实归属或审批答案，形成双重 fail-closed。
+- 待处理审批只存在内存中，Server 重启或 Connector 断连即清空；同一 interaction 在 Server 内用 CAS 预留，避免重复消费。
+- 手机 logout、管理员吊销手机、用户被禁用或删除时，Server 关闭对应移动事件流。策略和桌面授权收窄同样立即断流并重新鉴权。
+- **移动 Access Token 不能访问调试接口。** 移动端仅使用受用户策略约束的 `/v1/mobile/*` API。
 
 ## 移动端附件
 
@@ -177,13 +170,13 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 
 | 端点 | 调用方 | 说明 |
 |---|---|---|
-| `GET /v1/mobile/attachments/{attachmentId}` | App | `200` 字节（带 `ETag`，支持 `If-None-Match` → `304`）；`202` 正在拉取（`Retry-After`）；`409` 桌面侧失败（带 `errorCode`）；`403` grant 失效；`404` 未知/过期；`413` 超限 |
+| `GET /v1/mobile/attachments/{attachmentId}` | App | `200` 字节（带 `ETag`，支持 `If-None-Match` → `304`）；`202` 正在拉取（`Retry-After`）；`409` 桌面侧失败（带 `errorCode`）；`403` 用户权限失效；`404` 未知/过期；`413` 超限 |
 | `POST /v1/connector/attachments/{attachmentId}` | Connector | `application/octet-stream`，device token 认证；`X-DSH-Attachment-{Session,Bytes,Sha256}` 必须与行内归属和 body 一致 |
 
 实现要点：
 
 - **学习式索引**：Server 在处理 `GET /v1/mobile/sessions/{id}/messages` 时把 Connector 返回的 `attachments` upsert 进 `session_attachments`；未被学习过的 id 一律 `404`，从源头阻断枚举。
-- **反向授权**：下载端点只按行内记录的 device/workspace/session 校验 grant，不信任手机提交的任何归属参数。
+- **反向授权**：下载端点只按行内记录的 device/workspace/session 校验用户有效权限，不信任手机提交的任何归属参数。
 - **状态由 Server 拥有**：Connector 只报 `known`，`fetching/ready/failed/unavailable` 与 `sha256` 由 Server 推进；`ready` 不会因新的 transcript 回落，传输/上传产生的 `failed` 也不会被普通轮询重置成 `known`，只有移动 GET 会显式触发重试。Server 启动时会把上一进程遗留的 `fetching` 恢复为 `known`，避免永久等待已消失的命令。
 - **字节与元数据分离**：内容寻址写 `DSH_CONNECT_ATTACHMENT_DIR/<sha[0:2]>/<sha>`，DB 只存引用；上传先写临时文件再 rename，避免半成品。Docker 镜像默认使用可写的 `/data/attachments`，Compose 必须挂载 `dsh-connect-attachments` 持久卷。
 - **就绪通知**：上传成功后向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅元数据），App 立即重载而不轮询。
@@ -191,7 +184,7 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 
 M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/翻页；非图片文件显示为信息行（下载/保存/打开属 M2）；手机上行为 M3。配置项见 `.env.example` 的 `DSH_CONNECT_ATTACHMENT*`（默认 `DSH_CONNECT_ATTACHMENTS=read`，单文件 20 MiB，blob 目录总量 2 GiB，blob TTL 168h）。
 
-已知未实现：blob TTL 的定时回收任务（当前仅记录 TTL 配置，不主动删除过期 blob）。手机上行需启用 `DSH_CONNECT_ATTACHMENTS=readwrite`，并由桌面为当前工作区授予手机 `prompt` 权限。
+已知未实现：blob TTL 的定时回收任务（当前仅记录 TTL 配置，不主动删除过期 blob）。手机上行需启用 `DSH_CONNECT_ATTACHMENTS=readwrite`，并由用户策略和桌面当前授权共同为该工作区提供 `prompt` 权限。
 
 ## 数据模型（ent schema）
 
@@ -205,9 +198,9 @@ M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/�
 | `approval_policies` | 单例远程审批开关、TTL 与 revision |
 | `users` | 管理账号（owner/admin/member/auditor） |
 | `admin_sessions` | 浏览器登录会话 token hash |
-| `mobile_pairing_codes` | 手机一次性配对码 hash、目标用户与消费状态 |
-| `mobile_devices` | 手机身份、平台、Access/Refresh Token hash、过期与吊销状态 |
-| `mobile_access_grants` | 手机—桌面—工作区/动作授权：`pending/active/denied/revoked` |
+| `mobile_pairing_codes` | 历史遗留手机配对码数据；新登录流程不读写，仅保留表避免破坏性迁移 |
+| `mobile_devices` | 手机登录设备身份、平台、Access/Refresh Token hash、过期与吊销状态 |
+| `mobile_access_grants` | 历史遗留逐手机授权数据；不再参与有效权限计算，仅保留表避免破坏性迁移 |
 | `session_attachments` | 会话声明的文件元数据：归属、来源、状态、digest、过期时间（不含路径与字节） |
 | `attachment_blobs` | 按 sha256 去重的 blob 索引，字节存 `DSH_CONNECT_ATTACHMENT_DIR` |
 
@@ -245,7 +238,7 @@ DSH_CONNECT_TEST_DATABASE_DIALECT=sqlite go test ./...
 - CI 中要求必须跑 PostgreSQL 测试：设置 `DSH_CONNECT_REQUIRE_PG=1`，缺少 Docker 时失败而非跳过；SQLite 测试始终需要执行。
 - `make test-e2e` 也会分别运行 PostgreSQL 与 SQLite。SQLite E2E 使用独立临时文件；PostgreSQL 可用 `DSH_CONNECT_E2E_DATABASE_URL` 指定独立业务数据库，不能使用共享开发库或 pgtest 维护库。
 
-集成测试覆盖：配对码一次性消费与过期、显式桌面授权、设备令牌重连、工作区越权拒绝、七类会话命令、create/prompt 并发与持久幂等、持久事件与临时流、慢消费者、离线快速失败、数据库重开后的持久性、**明文令牌不落库**，以及管理 API 的登录、角色隔离、最后 Owner 保护、设备吊销断连与审计记录。手机链路额外覆盖配对码单次消费与过期、令牌轮换、手机登出、管理员吊销、用户删除清理、移动角色隔离，以及访问申请、桌面批准/拒绝/撤销、工作区过滤、移动创建与 prompt 幂等、模型目录与会话级选择、模型选择持久重放、Server 重启恢复、撤销后失败关闭、transcript 和跨手机越权撤销。
+集成测试覆盖：桌面配对码一次性消费与过期、显式桌面授权、设备令牌重连、工作区越权拒绝、七类会话命令、create/prompt 并发与持久幂等、持久事件与临时流、慢消费者、离线快速失败、数据库重开后的持久性、**明文令牌不落库**，以及管理 API 的登录、角色隔离、最后 Owner 保护、设备吊销断连与审计记录。手机链路额外覆盖邮箱密码登录、失败限流、令牌轮换、手机登出、管理员吊销、用户删除清理、同账号多手机继承用户策略、无策略默认拒绝、策略与 Connector 收窄后的全设备收紧、工作区过滤、移动创建与 prompt 幂等、模型目录与会话级选择、模型选择持久重放、Server 重启恢复、撤销后失败关闭、transcript、审批一次性决定和跨手机附件隔离。
 
 ## 退出
 

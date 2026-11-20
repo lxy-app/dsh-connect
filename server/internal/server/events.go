@@ -21,7 +21,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	s.serveEvents(w, r, deviceID, "", sessionID, cursor, nil)
 }
 
-// handleMobileEvents authenticates a paired phone, checks its workspace grant,
+// handleMobileEvents authenticates a mobile login device, checks the user's
+// effective workspace read policy, and relays only display-safe streaming events.
 // and relays only display-safe streaming events. The mobile App has its own
 // transcript via HTTP; this socket exists for live tokens and status changes.
 func (s *Server) handleMobileEvents(w http.ResponseWriter, r *http.Request) {

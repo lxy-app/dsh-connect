@@ -115,6 +115,8 @@ func httpStatus(code string) int {
 		return http.StatusForbidden
 	case protocol.CodeInvalidRequest:
 		return http.StatusBadRequest
+	case protocol.CodeRateLimited:
+		return http.StatusTooManyRequests
 	case protocol.CodeNotFound:
 		return http.StatusNotFound
 	case protocol.CodePayloadTooLarge:

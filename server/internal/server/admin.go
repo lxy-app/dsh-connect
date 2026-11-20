@@ -525,10 +525,6 @@ func (s *Server) handleAdminRevokeDevice(w http.ResponseWriter, r *http.Request)
 	if connection := s.hub.Get(deviceID); connection != nil {
 		connection.shutdown("device revoked by administrator")
 	}
-	if err := s.store.RevokeMobileAccessGrantsForDevice(r.Context(), deviceID, nowUTC()); err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
-		return
-	}
 	s.events.CloseDevice(deviceID)
 	s.recordAdminAudit(r, "admin.device.revoke", "success", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
@@ -542,10 +538,6 @@ func (s *Server) handleAdminDeleteDevice(w http.ResponseWriter, r *http.Request)
 	}
 	if connection := s.hub.Get(deviceID); connection != nil {
 		connection.shutdown("device deleted by administrator")
-	}
-	if err := s.store.RevokeMobileAccessGrantsForDevice(r.Context(), deviceID, nowUTC()); err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
-		return
 	}
 	if err := s.store.DeleteDevice(r.Context(), deviceID); err != nil {
 		if errors.Is(err, store.ErrDeviceNotFound) {

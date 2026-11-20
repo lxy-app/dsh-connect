@@ -395,18 +395,10 @@ func TestMobileRefreshRotationHasSingleWinner(t *testing.T) {
 	if _, err := persistent.CreateUser(ctx, "usr_mobile", "mobile@example.com", "Mobile", "member-password", store.RoleMember); err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	code := "MOBILE-CODE"
-	if err := persistent.CreateMobilePairingCode(ctx, store.MobilePairingCode{
-		CodeHash:  store.HashToken(code),
-		UserID:    "usr_mobile",
-		CreatedAt: now,
-		ExpiresAt: now.Add(time.Minute),
-	}); err != nil {
-		t.Fatalf("CreateMobilePairingCode: %v", err)
-	}
-	paired, _, err := persistent.RedeemMobilePairingCode(ctx, store.HashToken(code), store.MobileDeviceRecord{
+	registered, _, err := persistent.RegisterMobileDevice(ctx, store.MobileDeviceRecord{
 		Device: protocol.MobileDevice{
 			MobileDeviceID: "mob-store-1",
+			UserID:         "usr_mobile",
 			DeviceName:     "Store Phone",
 			Platform:       "ios",
 			AppVersion:     "0.1.0",
@@ -420,7 +412,7 @@ func TestMobileRefreshRotationHasSingleWinner(t *testing.T) {
 		RefreshExpiresAt: now.Add(time.Hour),
 	}, now)
 	if err != nil {
-		t.Fatalf("RedeemMobilePairingCode: %v", err)
+		t.Fatalf("RegisterMobileDevice: %v", err)
 	}
 
 	start := make(chan struct{})
@@ -429,7 +421,7 @@ func TestMobileRefreshRotationHasSingleWinner(t *testing.T) {
 		index := index
 		go func() {
 			<-start
-			_, _, rotationError := persistent.RotateMobileRefresh(ctx, paired.RefreshTokenHash, store.MobileCredential{
+			_, _, rotationError := persistent.RotateMobileRefresh(ctx, registered.RefreshTokenHash, store.MobileCredential{
 				AccessTokenHash:  store.HashToken(fmt.Sprintf("access-after-%d", index)),
 				RefreshTokenHash: store.HashToken(fmt.Sprintf("refresh-after-%d", index)),
 				AccessExpiresAt:  now.Add(2 * time.Minute),

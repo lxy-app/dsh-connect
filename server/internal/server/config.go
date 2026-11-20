@@ -13,7 +13,6 @@ type Config struct {
 	ServerURL             string
 	PairingCodeTTL        time.Duration
 	PairingChallengeTTL   time.Duration
-	MobilePairingCodeTTL  time.Duration
 	MobileAccessTokenTTL  time.Duration
 	MobileRefreshTokenTTL time.Duration
 	CommandTimeout        time.Duration
@@ -57,9 +56,6 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if c.PairingChallengeTTL == 0 {
 		c.PairingChallengeTTL = 5 * time.Minute
-	}
-	if c.MobilePairingCodeTTL == 0 {
-		c.MobilePairingCodeTTL = 5 * time.Minute
 	}
 	if c.MobileAccessTokenTTL == 0 {
 		c.MobileAccessTokenTTL = 15 * time.Minute
@@ -106,7 +102,7 @@ func (c Config) withDefaults() (Config, error) {
 	if c.PairingCodeTTL < 0 || c.PairingChallengeTTL < 0 || c.CommandTimeout < 0 || c.CommandTimeout > maxCommandTimeout {
 		return Config{}, errors.New("invalid timeout configuration")
 	}
-	if c.MobilePairingCodeTTL <= 0 || c.MobileAccessTokenTTL <= 0 || c.MobileRefreshTokenTTL <= 0 {
+	if c.MobileAccessTokenTTL <= 0 || c.MobileRefreshTokenTTL <= 0 {
 		return Config{}, errors.New("invalid mobile token TTL configuration")
 	}
 	if c.MaxPayloadBytes < 1024 || c.HeartbeatInterval <= 0 || c.WriteTimeout <= 0 || c.EventBuffer < 1 {

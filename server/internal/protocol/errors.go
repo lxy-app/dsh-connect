@@ -7,6 +7,7 @@ const (
 	CodeNotFound                 = "not_found"
 	CodeConflict                 = "conflict"
 	CodePayloadTooLarge          = "payload_too_large"
+	CodeRateLimited              = "rate_limited"
 	CodePairingCodeInvalid       = "pairing_code_invalid"
 	CodePairingCodeUsed          = "pairing_code_used"
 	CodePairingCodeExpired       = "pairing_code_expired"

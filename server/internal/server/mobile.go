@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -19,7 +18,7 @@ type mobileActor struct {
 	User   store.User
 }
 
-// mobileAuth authenticates a paired phone with its short-lived access token.
+// mobileAuth authenticates a mobile login device with its short-lived access token.
 // It never accepts the bootstrap or Web Admin credentials.
 func (s *Server) mobileAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +67,7 @@ func mobileFromContext(ctx context.Context) (mobileActor, bool) {
 }
 
 func (s *Server) mobileRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v1/mobile/pair", s.handleMobilePair)
+	mux.HandleFunc("POST /v1/mobile/auth/login", s.handleMobileLogin)
 	mux.HandleFunc("POST /v1/mobile/auth/refresh", s.handleMobileRefresh)
 	mux.HandleFunc("POST /v1/mobile/auth/logout", s.mobileAuth(s.handleMobileLogout))
 	mux.HandleFunc("GET /v1/mobile/me", s.mobileAuth(s.handleMobileMe))
@@ -76,105 +75,55 @@ func (s *Server) mobileRoutes(mux *http.ServeMux) {
 	s.mobileAccessRoutes(mux)
 	s.mobileInteractionRoutes(mux)
 
-	mux.HandleFunc("POST /v1/admin/mobile/pairing-codes", s.adminAuth(s.handleAdminCreateMobilePairingCode))
 	mux.HandleFunc("GET /v1/admin/mobile-devices", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminMobileDevices))
 	mux.HandleFunc("POST /v1/admin/mobile-devices/{mobileDeviceId}/revoke", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminRevokeMobileDevice))
 }
 
-// handleAdminCreateMobilePairingCode issues a one-time code for a specific user.
-// A non-bootstrap caller may omit userId to pair their own phone; issuing for
-// another user requires the owner or admin role.
-func (s *Server) handleAdminCreateMobilePairingCode(w http.ResponseWriter, r *http.Request) {
-	var request protocol.MobilePairingCodeRequest
+func (s *Server) handleMobileLogin(w http.ResponseWriter, r *http.Request) {
+	var request protocol.MobileLoginRequest
 	if commandError := decodeJSON(w, r, s.config.MaxPayloadBytes, &request); commandError != nil {
 		writeAPIError(w, *commandError)
 		return
 	}
-	actor, ok := adminFromContext(r.Context())
-	if !ok {
-		writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "authentication required", false))
-		return
-	}
-	targetUserID := request.UserID
-	if targetUserID == "" {
-		if actor.ViaBearer {
-			writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "userId is required when using the bootstrap token", false))
-			return
-		}
-		targetUserID = actor.User.ID
-	} else if !validID(targetUserID) {
-		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "valid userId required", false))
-		return
-	}
-	if targetUserID != actor.User.ID && actor.User.Role != store.RoleOwner && actor.User.Role != store.RoleAdmin {
-		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "only an owner or admin can issue a pairing code for another user", false))
-		return
-	}
-	targetUser, err := s.store.UserByID(r.Context(), targetUserID)
-	if errors.Is(err, store.ErrUserNotFound) {
-		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "user not found", false))
-		return
-	}
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load user", true))
-		return
-	}
-	if targetUser.Status != store.UserStatusActive {
-		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "user is disabled", false))
-		return
-	}
-
-	code, err := randomPairingCode()
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not generate mobile pairing code", true))
-		return
-	}
-	now := nowUTC()
-	expiresAt := now.Add(s.config.MobilePairingCodeTTL)
-	pairingURL, err := mobilePairingURL(s.config.ServerURL, code)
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "server URL cannot be encoded as a mobile pairing link", false))
-		return
-	}
-	if err := s.store.CreateMobilePairingCode(r.Context(), store.MobilePairingCode{
-		CodeHash:  store.HashToken(code),
-		UserID:    targetUser.ID,
-		CreatedAt: now,
-		ExpiresAt: expiresAt,
-	}); err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not persist mobile pairing code", true))
-		return
-	}
-	s.audit(store.AuditEntry{
-		OccurredAt: now,
-		Actor:      auditActor(r),
-		Action:     "admin.mobile_pairing_code.create",
-		Result:     "success",
-		SourceIP:   sourceIP(r),
-	})
-	writeJSON(w, http.StatusCreated, protocol.MobilePairingCodeResponse{
-		Code:       code,
-		ExpiresAt:  expiresAt,
-		ServerURL:  s.config.ServerURL,
-		PairingURL: pairingURL,
-		UserID:     targetUser.ID,
-	})
-}
-
-func (s *Server) handleMobilePair(w http.ResponseWriter, r *http.Request) {
-	var request protocol.MobilePairRequest
-	if commandError := decodeJSON(w, r, s.config.MaxPayloadBytes, &request); commandError != nil {
-		writeAPIError(w, *commandError)
-		return
-	}
-	request.Code = normalizeMobilePairingCode(request.Code)
+	request.Email = strings.TrimSpace(request.Email)
 	request.DeviceName = strings.TrimSpace(request.DeviceName)
 	request.AppVersion = strings.TrimSpace(request.AppVersion)
-	if !validText(request.Code, 128) || !validText(request.DeviceName, 128) || !validText(request.AppVersion, 64) || !validMobilePlatform(request.Platform) {
-		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "code, deviceName, platform (ios|android) and appVersion are required", false))
+	if !validText(request.Email, 254) || request.Password == "" || len(request.Password) > 1024 ||
+		!validText(request.DeviceName, 128) || !validText(request.AppVersion, 64) || !validMobilePlatform(request.Platform) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "email, password, deviceName, platform (ios|android) and appVersion are required", false))
 		return
 	}
-
+	loginKey := sourceIP(r) + "\x00" + store.NormalizeEmail(request.Email)
+	if !s.mobileLoginRateLimiter.allow(loginKey, nowUTC()) {
+		s.audit(store.AuditEntry{
+			OccurredAt: nowUTC(), Actor: "anonymous", Action: "mobile.login", Result: "error",
+			ErrorCode: protocol.CodeRateLimited, SourceIP: sourceIP(r),
+		})
+		writeAPIError(w, protocol.NewError(protocol.CodeRateLimited, "too many failed login attempts; try again later", true))
+		return
+	}
+	user, err := s.store.UserByEmail(r.Context(), request.Email)
+	if errors.Is(err, store.ErrUserNotFound) || (err == nil && !store.CheckPassword(user.PasswordHash, request.Password)) {
+		s.mobileLoginRateLimiter.failure(loginKey, nowUTC())
+		s.audit(store.AuditEntry{
+			OccurredAt: nowUTC(), Actor: "anonymous", Action: "mobile.login", Result: "error",
+			ErrorCode: protocol.CodeUnauthorized, SourceIP: sourceIP(r),
+		})
+		writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "invalid email or password", false))
+		return
+	}
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile login user", true))
+		return
+	}
+	if user.Status != store.UserStatusActive {
+		s.audit(store.AuditEntry{
+			OccurredAt: nowUTC(), Actor: "user:" + user.ID, Action: "mobile.login", Result: "error",
+			ErrorCode: protocol.CodeForbidden, SourceIP: sourceIP(r),
+		})
+		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "account is disabled", false))
+		return
+	}
 	now := nowUTC()
 	mobileDeviceID, err := randomToken("mob_")
 	if err != nil {
@@ -186,9 +135,10 @@ func (s *Server) handleMobilePair(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not generate mobile credentials", true))
 		return
 	}
-	device, user, err := s.store.RedeemMobilePairingCode(r.Context(), store.HashToken(request.Code), store.MobileDeviceRecord{
+	device, user, err := s.store.RegisterMobileDevice(r.Context(), store.MobileDeviceRecord{
 		Device: protocol.MobileDevice{
 			MobileDeviceID: mobileDeviceID,
+			UserID:         user.ID,
 			DeviceName:     request.DeviceName,
 			Platform:       request.Platform,
 			AppVersion:     request.AppVersion,
@@ -199,25 +149,13 @@ func (s *Server) handleMobilePair(w http.ResponseWriter, r *http.Request) {
 		},
 	}, credential, now)
 	if err != nil {
-		commandError := mobilePairingError(err)
-		s.audit(store.AuditEntry{
-			OccurredAt: now,
-			Actor:      "anonymous",
-			Action:     "mobile.pair",
-			Result:     "error",
-			ErrorCode:  commandError.Code,
-			SourceIP:   sourceIP(r),
-		})
-		writeAPIError(w, commandError)
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not register mobile login device", true))
 		return
 	}
+	s.mobileLoginRateLimiter.success(loginKey)
 	s.audit(store.AuditEntry{
-		OccurredAt: now,
-		Actor:      "user:" + user.ID,
-		Action:     "mobile.pair",
-		DeviceID:   device.Device.MobileDeviceID,
-		Result:     "success",
-		SourceIP:   sourceIP(r),
+		OccurredAt: now, Actor: "user:" + user.ID, Action: "mobile.login", DeviceID: device.Device.MobileDeviceID,
+		Result: "success", SourceIP: sourceIP(r),
 	})
 	writeJSON(w, http.StatusOK, mobileSessionResponse(device, user, accessToken, refreshToken, credential))
 }
@@ -282,11 +220,6 @@ func (s *Server) handleMobileLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.events.CloseMobile(actor.Device.Device.MobileDeviceID)
-	// Access grants must never outlive the phone credential that asked for them.
-	if err := s.store.RevokeMobileAccessGrantsForMobileDevice(r.Context(), actor.Device.Device.MobileDeviceID, now); err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
-		return
-	}
 	s.audit(store.AuditEntry{
 		OccurredAt: now,
 		Actor:      "user:" + actor.User.ID,
@@ -339,10 +272,6 @@ func (s *Server) handleAdminRevokeMobileDevice(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.events.CloseMobile(mobileDeviceID)
-	if err := s.store.RevokeMobileAccessGrantsForMobileDevice(r.Context(), mobileDeviceID, now); err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke mobile access grants", true))
-		return
-	}
 	s.audit(store.AuditEntry{
 		OccurredAt: nowUTC(),
 		Actor:      auditActor(r),
@@ -391,39 +320,6 @@ func mobileUser(user store.User) protocol.MobileUser {
 	}
 }
 
-func mobilePairingURL(serverURL, code string) (string, error) {
-	base, err := url.Parse(serverURL)
-	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
-		return "", errors.New("invalid server URL")
-	}
-	pairing := &url.URL{Scheme: "dshconnect", Host: "pair"}
-	query := pairing.Query()
-	query.Set("v", "1")
-	query.Set("server", strings.TrimRight(serverURL, "/"))
-	query.Set("code", code)
-	pairing.RawQuery = query.Encode()
-	return pairing.String(), nil
-}
-
-func normalizeMobilePairingCode(code string) string {
-	return strings.ToUpper(strings.TrimSpace(code))
-}
-
 func validMobilePlatform(platform string) bool {
 	return platform == "ios" || platform == "android"
-}
-
-func mobilePairingError(err error) protocol.Error {
-	switch {
-	case errors.Is(err, store.ErrPairingCodeUsed):
-		return protocol.NewError(protocol.CodePairingCodeUsed, "mobile pairing code has already been used", false)
-	case errors.Is(err, store.ErrPairingCodeExpired):
-		return protocol.NewError(protocol.CodePairingCodeExpired, "mobile pairing code has expired", false)
-	case errors.Is(err, store.ErrUserDisabled):
-		return protocol.NewError(protocol.CodeForbidden, "user is disabled", false)
-	case errors.Is(err, store.ErrPairingCodeInvalid), errors.Is(err, store.ErrUserNotFound):
-		return protocol.NewError(protocol.CodePairingCodeInvalid, "mobile pairing code is invalid", false)
-	default:
-		return protocol.NewError(protocol.CodeInternalError, "could not complete mobile pairing", true)
-	}
 }
