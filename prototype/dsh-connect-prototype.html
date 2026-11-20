@@ -262,6 +262,9 @@
 .turn-foot{display:flex;align-items:center;gap:4px;margin-top:8px;color:var(--muted)}
 .turn-foot .message-tts{margin:0;padding:2px 6px}
 .turn-time{margin-left:auto;font-variant-numeric:tabular-nums}
+.message-time-divider{margin:2px 0 8px;color:var(--muted);font-size:12px;line-height:17px;text-align:center;font-variant-numeric:tabular-nums}
+.chat-turn-group{display:block}
+.turn-elapsed{padding:2px 12px 8px;color:var(--muted);font-size:12px;line-height:18px}
 .turn-running{color:var(--muted);display:flex;align-items:center;gap:7px;padding:10px 12px}
 /* Mobile typography readability: scoped to the 390 pt App prototype only. */
 .phone{
@@ -472,6 +475,73 @@
 .grant-save-actions .btn{min-height:36px;padding:7px 12px;font-size:11px}
 @media(max-width:820px){.grant-scope-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.grant-save-bar{align-items:flex-start;flex-direction:column}.grant-save-actions{align-self:flex-end}}
 @media(max-width:560px){.grant-card-head,.grant-section-head{align-items:flex-start}.grant-workspace-tools{align-items:stretch;flex-direction:column}.grant-selected-filter{align-self:flex-end}.grant-workspace-state{display:none}.grant-list-foot{align-items:flex-start;flex-direction:column;gap:3px}}
+/* Pad product review: explicit device canvases, persistent navigation and master-detail layouts. */
+.device-preview{display:flex;flex:0 0 auto;flex-direction:column;align-items:stretch;gap:10px;margin:auto 0}
+.device-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:4px;border:1px solid var(--border);border-radius:14px;background:var(--surface);box-shadow:0 6px 20px #20262e0a}
+.device-switch{display:flex;flex:1;gap:3px;min-width:0}
+.device-switch button{flex:1;min-height:36px;padding:7px 12px;border:0;border-radius:10px;background:transparent;color:var(--muted);font-size:12px;font-weight:650;white-space:nowrap}
+.device-switch button:hover{background:var(--surface2);color:var(--text)}
+.device-switch button.on{background:var(--text);color:var(--surface);box-shadow:0 2px 7px #20262e1f}
+.device-preview-caption{color:var(--muted);font-size:11px;line-height:1.5;text-align:center}
+.phone.pad{border-width:10px;border-radius:38px;transform:none;margin-bottom:0}
+.phone.pad-portrait{width:834px;height:1194px;flex-basis:834px}
+.phone.pad-landscape{width:1194px;height:834px;flex-basis:1194px}
+.device-preview>.phone{flex:0 0 auto}
+.phone.pad .notch{display:none}
+.mobile-stage:has(.phone.pad){justify-content:flex-start}
+.mobile-stage:has(.phone.pad-landscape) .guide{display:none}
+.pad-app-shell{display:flex;flex:1;min-width:0;min-height:0;overflow:hidden}
+.pad-nav-rail{width:76px;flex:0 0 76px;padding:14px 8px;border-right:1px solid var(--border);background:var(--surface)}
+.phone.pad .pad-nav-rail .phone-nav{position:static;inset:auto;display:flex;flex-direction:column;gap:8px;width:100%;height:auto;padding:0;border:0;background:transparent;box-shadow:none}
+.phone.pad .pad-nav-rail .phone-nav button{position:relative;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 3px;border-radius:14px;background:transparent;color:var(--muted)}
+.phone.pad .pad-nav-rail .phone-nav button.on{background:var(--brand-soft);color:var(--text)}
+.phone.pad .pad-nav-rail .phone-nav .nav-badge{top:6px;right:7px}
+.pad-master{width:300px;flex:0 0 300px;min-width:0;min-height:0;border-right:1px solid var(--border);background:var(--surface);overflow:hidden}
+.pad-landscape .pad-master{width:324px;flex-basis:324px}
+.pad-master .session-drawer-layer{position:relative;inset:auto;width:100%;height:100%;z-index:1;overflow:hidden}
+.pad-master .session-drawer-backdrop{display:none}
+.pad-master .session-drawer{width:100%;max-width:none;height:100%;border:0;box-shadow:none;animation:none}
+.pad-master .drawer-device-wrap{padding-top:17px}
+.pad-master .drawer-new{min-height:44px}
+.pad-master .drawer-workspace-add{flex-basis:44px;min-height:44px}
+.pad-detail{display:flex;flex:1;min-width:0;min-height:0;flex-direction:column;overflow:hidden;background:var(--bg)}
+.pad-detail>*{min-width:0}
+.phone.pad .chat-head{min-height:70px;padding:12px 22px;border-bottom:1px solid var(--border);background:var(--surface)}
+.phone.pad .chat-head>.icon-btn:first-child{display:none}
+.phone.pad .chat-title{padding-left:0}
+.phone.pad .chat-messages{padding:22px max(24px,calc((100% - 760px)/2));overflow-y:auto}
+.phone.pad .composer{padding:12px max(24px,calc((100% - 760px)/2)) 18px;border-top:1px solid var(--border);background:var(--surface)}
+.phone.pad .bubble{max-width:82%}
+.phone.pad .new-session-head{padding:14px 24px}
+.phone.pad .new-session-scroll{padding:22px max(26px,calc((100% - 680px)/2)) 26px}
+.phone.pad .new-session-footer{padding:14px max(26px,calc((100% - 680px)/2)) 20px}
+.phone.pad .new-session-submit{min-height:46px}
+.pad-detail[data-page="tasks"]>.phone-scroll,.pad-detail[data-page="approval"]>.phone-scroll{padding:24px max(24px,calc((100% - 720px)/2))}
+.pad-detail[data-page="devices"]>.phone-scroll{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-content:start;padding:24px}
+.pad-detail[data-page="devices"]>.phone-scroll>.mobile-head,.pad-detail[data-page="devices"]>.phone-scroll>.onboard-tip,.pad-detail[data-page="devices"]>.phone-scroll>.policy-selection-summary,.pad-detail[data-page="devices"]>.phone-scroll>.section-label{grid-column:1/-1}
+.pad-detail[data-page="devices"]>.phone-scroll>.device-card{margin:0}
+.pad-detail[data-page="devices"]>.phone-scroll>[data-no-visible-desktops]{grid-column:1/-1}
+.pad-detail[data-page="profile"]>.phone-scroll,.pad-detail[data-page="voiceSettings"]>.phone-scroll,.pad-detail[data-page="phoneRecovery"]>.phone-scroll,.pad-detail[data-page="desktopAuth"]>.phone-scroll{padding:24px max(28px,calc((100% - 760px)/2))}
+.pad-task-master .phone-scroll{padding:18px 14px}
+.pad-task-master .mobile-head{padding-top:8px}
+.pad-task-master .mobile-title{font-size:23px}
+.pad-task-master .approval-card .code{white-space:normal;word-break:break-word}
+.phone.pad .icon-btn{width:44px;height:44px;flex-basis:44px}
+.phone.pad .voice-compose .voice-switch,.phone.pad .voice-compose .send{width:44px;height:44px;flex-basis:44px}
+.phone.pad .effort-chip,.phone.pad .attachment-confirm{min-height:44px}
+.phone.pad .sheet-layer{inset:34px 0 0;display:flex;align-items:center;justify-content:center;padding:32px}
+.phone.pad .model-sheet,.phone.pad .more-sheet,.phone.pad .attachment-sheet,.phone.pad .sheet{width:520px;max-width:100%;max-height:min(760px,92%);border-radius:24px;box-shadow:0 24px 70px #0003}
+.phone.pad .attachment-sheet{width:640px}
+.phone.pad .sheet{padding:28px}
+.phone.pad:has(.composer.voice-active) .pad-nav-rail .phone-nav{display:flex}
+.phone.pad .more-sheet{padding:14px 20px 20px}
+.phone.pad .more-tile{min-height:88px}
+.phone.pad .attachment-preview-layer{inset:34px 0 0}
+@media(max-width:1380px){.mobile-stage:has(.phone.pad) .guide{display:none}}
+@media(max-width:720px){.device-preview{margin:0 auto}.device-switch button{padding:7px 8px}.mobile-stage:has(.phone.pad){padding:16px;justify-content:flex-start}.mobile-stage:has(.phone.pad) .device-preview{margin:0}.phone.pad{transform:none;margin-bottom:0}}
+@media(max-width:420px){.mobile-stage:has(.phone:not(.pad)){padding-left:0;padding-right:0;overflow-x:hidden}}
+@media(max-width:380px){.mobile-stage:has(.phone:not(.pad)) .device-preview{transform:scale(.82);transform-origin:top center;margin-bottom:-140px}.mobile-stage:has(.phone:not(.pad)) .phone{transform:none;margin-bottom:0}}
+@media(prefers-reduced-motion:reduce){.pad-master .session-drawer{animation:none}}
 </style>
 </head>
 <body>
@@ -482,10 +552,15 @@
     <div class="demo"><span class="dot"></span>模拟数据 · 不连接 DSH</div>
     <button class="icon-btn" id="themeBtn" title="切换明暗主题"><span data-icon="theme"></span></button>
   </header>
-  <main class="mobile-stage" id="mobileView">
-    <div class="phone" id="phone"></div>
+  <main class="mobile-stage" id="mobileView" data-device="phone">
+    <div class="device-preview">
+      <div class="device-toolbar"><div class="device-switch" role="group" aria-label="预览设备"><button type="button" class="on" data-preview-device="phone" aria-pressed="true">手机</button><button type="button" data-preview-device="pad-portrait" aria-pressed="false">Pad 竖屏</button><button type="button" data-preview-device="pad-landscape" aria-pressed="false">Pad 横屏</button></div></div>
+      <div class="device-preview-caption" id="devicePreviewMeta">iPhone · 390 pt · 单栏与底部导航</div>
+      <div class="phone" id="phone"></div>
+    </div>
     <aside class="guide">
-      <section class="guide-card"><div class="kicker">Mobile experience</div><div class="guide-title">离开电脑，任务仍在推进</div><div class="guide-copy">390 pt 移动端高保真原型。点击会话、按钮和底部导航，体验完整控制链路。</div><div class="guide-list" id="guideList"></div></section>
+      <section class="guide-card"><div class="kicker">Mobile + Pad experience</div><div class="guide-title">离开电脑，任务仍在推进</div><div class="guide-copy">手机与 Pad 高保真原型。切换上方设备画布，点击会话、按钮和导航，体验完整控制链路。</div><div class="guide-list" id="guideList"></div></section>
+      <section class="guide-card"><div class="kicker">Pad adaptation</div><div class="guide-title">不是放大，而是双栏复用</div><div class="guide-copy">常驻导航 rail，会话与审批采用主从布局；新建会话保留上下文，模型与附件弹层改为居中浮层。</div></section>
       <section class="guide-card"><div class="kicker">Core journey</div><div id="flows"></div></section>
     </aside>
   </main>
@@ -515,6 +590,9 @@ function hydrate(root=document){
 }
 function esc(value){const d=document.createElement('div');d.textContent=value;return d.innerHTML}
 let mobilePage='chat',adminPage='overview',filter='all',approvalState='pending',sheet='',toastTimer,selectedSession=null;
+let previewDevice='phone';
+const previewDeviceMeta={phone:'iPhone · 390 pt · 单栏与底部导航','pad-portrait':'iPad 竖屏 · 834 × 1194 · 导航 rail 与双栏','pad-landscape':'iPad 横屏 · 1194 × 834 · 加宽会话栏与阅读区'};
+function isPadPreview(){return previewDevice==='pad-portrait'||previewDevice==='pad-landscape'}
 let sessionDrawerOpen=false,drawerDeviceMenu=false,currentDevice='MacBook Pro',currentWorkspace='dsh-connect',drawerExpandedWorkspace='dsh-connect',drawerSessionLimit=5;
 let connectorState='disconnected',showPairWizard=false,pairStage='code';
 const connectorWorkspaces=[
@@ -714,19 +792,37 @@ document.addEventListener('click',e=>{
   const backdrop=e.target.dataset&&e.target.dataset.action==='close-model-sheet'&&!e.target.closest('.model-sheet');
   if(closeButton||backdrop){modelSheetOpen=false;modelSheetNotice='';modelSwitchBusy='';renderMobile()}
 });
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||(!modelSheetOpen&&!moreSheetOpen))return;
+  e.preventDefault();e.stopImmediatePropagation();
+  modelSheetOpen=false;moreSheetOpen=false;modelSheetNotice='';modelSwitchBusy='';
+  renderMobile();setTimeout(()=>{(document.getElementById('draft')||document.getElementById('newPrompt')||document.querySelector('[data-action="toggle-voice-mode"]'))?.focus()},0);
+},true);
 function badge(text,tone=''){return `<span class="badge ${tone}">${text}</span>`}
-function nav(){return `<nav class="phone-nav">${[['chat','chat','会话'],['tasks','tasks','待办'],['devices','monitor','设备'],['profile','user','我的']].map(([id,ic,label])=>`<button class="${mobilePage===id||(id==='chat'&&mobilePage==='sessions')?'on':''}" data-page="${id}">${icon(ic,20)}<span>${label}</span>${id==='tasks'&&approvalState==='pending'?'<span class="nav-badge">1</span>':''}</button>`).join('')}</nav>`}
+function nav(){return `<nav class="phone-nav" aria-label="主导航">${[['chat','chat','会话'],['tasks','tasks','待办'],['devices','monitor','设备'],['profile','user','我的']].map(([id,ic,label])=>{const on=mobilePage===id||(id==='chat'&&['sessions','new'].includes(mobilePage))||(id==='tasks'&&mobilePage==='approval')||(id==='devices'&&mobilePage==='desktopAuth')||(id==='profile'&&['voiceSettings','phoneRecovery'].includes(mobilePage));return `<button class="${on?'on':''}" data-page="${id}" data-nav="${id}" ${on?'aria-current="page"':''}>${icon(ic,20)}<span>${label}</span>${id==='tasks'&&approvalState==='pending'?'<span class="nav-badge">1</span>':''}</button>`}).join('')}</nav>`}
 function sessionCard(s){const st=status[s.status];return `<button class="session-card" data-session="${s.id}"><div class="session-top"><div class="session-title">${esc(s.title)}</div>${badge(st[0],st[1])}</div><div class="session-preview">${esc(s.preview)}</div><div class="session-foot"><span>${esc(s.device)} · ${esc(s.workspace)}</span><span>${esc(s.time)}</span></div></button>`}
 function mobileSessions(){const visible=sessions.filter(s=>filter==='all'||s.status===filter);return `<div class="phone-scroll"><div class="mobile-head"><div><div class="mobile-title">会话</div><div class="mobile-sub">晚上好，李伟 · 2 个任务正在推进</div></div><button class="fab" data-action="new">${icon('plus',20)}</button></div><div class="device-pill"><div class="device-icon">${icon('monitor')}</div><div class="grow"><div class="device-name">MacBook Pro</div><div class="device-meta">局域网 · 延迟 18ms</div></div>${badge('在线','success')}${icon('chevron',14)}</div><div class="search">${icon('search',15)}<input id="sessionSearch" placeholder="搜索会话"></div><div class="chips">${[['all','全部'],['active','运行中'],['pending','待处理'],['finished','已完成']].map(([id,label])=>`<button class="chip ${filter===id?'on':''}" data-filter="${id}">${label}</button>`).join('')}</div><div class="session-list" id="sessionList">${visible.map(sessionCard).join('')}</div></div>`}
 function legacySessionDrawerHtml(){if(!sessionDrawerOpen)return '';const device=mobileVisibleDevices().find(d=>d.name===currentDevice)||mobileVisibleDevices()[0];const current=selectedSession||sessions[0];const visible=sessions.filter(s=>s.device===currentDevice&&s.workspace===currentWorkspace);return `<div class="session-drawer-layer"><button class="session-drawer-backdrop" data-action="close-session-drawer" aria-label="关闭会话侧边栏"></button><aside class="session-drawer" role="dialog" aria-modal="true" aria-label="设备、工作区与会话"><div class="drawer-device-wrap"><button class="drawer-device ${drawerDeviceMenu?'open':''}" data-action="toggle-device-menu" aria-expanded="${drawerDeviceMenu}"><span class="drawer-device-icon">${icon('monitor',18)}<span class="dot ${device.online?'':'drawer-offline'}"></span></span><span class="grow"><span class="drawer-device-name">${device.name}</span><span class="drawer-device-meta" style="display:block">${device.online?'在线 · 延迟 18ms':'离线 · 可查看历史会话'}</span></span>${icon('chevron',15)}</button>${drawerDeviceMenu?`<div class="drawer-device-menu">${mobileVisibleDevices().map(d=>`<button class="drawer-device-option ${d.name===currentDevice?'on':''}" data-action="drawer-device" data-device="${attr(d.name)}"><span class="dot ${d.online?'':'drawer-offline'}"></span><span>${d.name}</span>${d.name===currentDevice?icon('check',13):''}</button>`).join('')}</div>`:''}</div><button class="drawer-new" data-action="drawer-new-session">${icon('plus',16)}新建会话<span style="color:var(--muted);font-size:12px;font-weight:400">· ${attr(currentWorkspace)}</span></button><div class="drawer-scroll"><div class="drawer-section-head">会话<span>${visible.length} 个 · ${attr(currentWorkspace)}</span></div>${visible.length?visible.map(s=>`<button class="drawer-session ${current.id===s.id?'on':''}" data-session="${s.id}"><span class="drawer-status-dot ${s.status}"></span><span class="drawer-session-copy"><span class="drawer-session-title" style="display:block">${esc(s.title)}</span><span class="drawer-session-meta" style="display:block">${esc(s.preview)}</span></span><span class="drawer-session-time">${s.time}</span></button>`).join(''):`<div class="drawer-empty">这个工作区还没有会话。<br>点击上方“新建会话”开始。</div>`}<div class="drawer-section-head">工作区<span>${device.workspaces.length} 个</span></div>${device.workspaces.map(name=>`<button class="drawer-workspace ${name===currentWorkspace?'on':''}" data-action="drawer-workspace" data-workspace="${attr(name)}">${icon('folder',16)}<span class="drawer-workspace-name">${attr(name)}</span>${name===currentWorkspace?icon('check',13):icon('chevron',13)}</button>`).join('')}</div><div class="drawer-footer"><span class="dot ${device.online?'':'drawer-offline'}"></span>${device.online?'设备在线':'设备离线'} · 切换工作区会筛选对应会话</div></aside></div>`}
 function drawerSessionItem(s,current){return `<button class="drawer-session ${current.id===s.id?'on':''}" data-session="${s.id}"><span class="drawer-status-dot ${s.status}"></span><span class="drawer-session-copy"><span class="drawer-session-title" style="display:block">${esc(s.title)}</span><span class="drawer-session-meta" style="display:block">${esc(s.preview)}</span></span><span class="drawer-session-time">${s.time}</span></button>`}
 function renderDrawerPreserveScroll(){const previous=document.querySelector('.drawer-scroll');const top=previous?previous.scrollTop:0;renderMobile();const next=document.querySelector('.drawer-scroll');if(next)next.scrollTop=top}
-function sessionDrawerHtml(){if(!sessionDrawerOpen)return '';if(!mobileVisibleDevices().length){sessionDrawerOpen=false;return ''}const device=mobileVisibleDevices().find(d=>d.name===currentDevice)||mobileVisibleDevices()[0];const current=selectedSession||sessions[0];const workspaceHtml=device.workspaces.map(name=>{const items=sessions.filter(s=>s.device===currentDevice&&s.workspace===name);const open=drawerExpandedWorkspace===name;const shown=open?items.slice(0,drawerSessionLimit):[];const remaining=Math.max(0,items.length-shown.length);return `<div class="drawer-workspace-group"><div class="drawer-workspace-row"><button class="drawer-workspace ${name===currentWorkspace?'on':''} ${open?'open':''}" data-action="drawer-workspace" data-workspace="${attr(name)}" aria-expanded="${open}">${icon('folder',16)}<span class="drawer-workspace-name">${attr(name)}</span><span class="drawer-workspace-count">${items.length}</span>${icon('chevron',13)}</button><button class="drawer-workspace-add" data-action="drawer-new-workspace" data-workspace="${attr(name)}" title="在 ${attr(name)} 中新建会话" aria-label="在 ${attr(name)} 中新建会话">${icon('plus',15)}</button></div>${open?`<div class="drawer-workspace-sessions">${shown.length?shown.map(s=>drawerSessionItem(s,current)).join(''):'<div class="drawer-empty">这个工作区还没有会话</div>'}${remaining>0?`<button class="drawer-more" data-action="drawer-more-sessions" data-workspace="${attr(name)}">查看更多（${remaining}）</button>`:items.length>5?`<button class="drawer-more collapse" data-action="drawer-collapse-sessions" data-workspace="${attr(name)}">收起</button>`:''}</div>`:''}</div>`}).join('');return `<div class="session-drawer-layer"><button class="session-drawer-backdrop" data-action="close-session-drawer" aria-label="关闭会话侧边栏"></button><aside class="session-drawer" role="dialog" aria-modal="true" aria-label="设备、工作区与会话"><div class="drawer-device-wrap"><button class="drawer-device ${drawerDeviceMenu?'open':''}" data-action="toggle-device-menu" aria-expanded="${drawerDeviceMenu}"><span class="drawer-device-icon">${icon('monitor',18)}<span class="dot ${device.online?'':'drawer-offline'}"></span></span><span class="grow"><span class="drawer-device-name">${device.name}</span><span class="drawer-device-meta" style="display:block">${device.online?'在线 · 延迟 18ms':'离线 · 可查看历史会话'}</span></span>${icon('chevron',15)}</button>${drawerDeviceMenu?`<div class="drawer-device-menu">${mobileVisibleDevices().map(d=>`<button class="drawer-device-option ${d.name===currentDevice?'on':''}" data-action="drawer-device" data-device="${attr(d.name)}"><span class="dot ${d.online?'':'drawer-offline'}"></span><span>${d.name}</span>${d.name===currentDevice?icon('check',13):''}</button>`).join('')}</div>`:''}</div><button class="drawer-new" data-action="drawer-new-session">${icon('plus',16)}新建会话<span style="color:var(--muted);font-size:12px;font-weight:400">· ${attr(currentWorkspace)}</span></button><div class="drawer-scroll"><div class="drawer-section-head">工作区<span>${device.workspaces.length} 个 · 展开查看会话</span></div>${workspaceHtml}</div><div class="drawer-footer"><span class="dot ${device.online?'':'drawer-offline'}"></span>${device.online?'设备在线':'设备离线'} · 每个工作区默认展示 5 条会话</div></aside></div>`}
+function sessionDrawerHtml(forcePersistent=false){if(!sessionDrawerOpen&&!forcePersistent)return '';if(!mobileVisibleDevices().length){sessionDrawerOpen=false;return ''}const device=mobileVisibleDevices().find(d=>d.name===currentDevice)||mobileVisibleDevices()[0];const current=selectedSession||sessions[0];const workspaceHtml=device.workspaces.map(name=>{const items=sessions.filter(s=>s.device===currentDevice&&s.workspace===name);const open=drawerExpandedWorkspace===name;const shown=open?items.slice(0,drawerSessionLimit):[];const remaining=Math.max(0,items.length-shown.length);return `<div class="drawer-workspace-group"><div class="drawer-workspace-row"><button class="drawer-workspace ${name===currentWorkspace?'on':''} ${open?'open':''}" data-action="drawer-workspace" data-workspace="${attr(name)}" aria-expanded="${open}">${icon('folder',16)}<span class="drawer-workspace-name">${attr(name)}</span><span class="drawer-workspace-count">${items.length}</span>${icon('chevron',13)}</button><button class="drawer-workspace-add" data-action="drawer-new-workspace" data-workspace="${attr(name)}" title="在 ${attr(name)} 中新建会话" aria-label="在 ${attr(name)} 中新建会话">${icon('plus',15)}</button></div>${open?`<div class="drawer-workspace-sessions">${shown.length?shown.map(s=>drawerSessionItem(s,current)).join(''):'<div class="drawer-empty">这个工作区还没有会话</div>'}${remaining>0?`<button class="drawer-more" data-action="drawer-more-sessions" data-workspace="${attr(name)}">查看更多（${remaining}）</button>`:items.length>5?`<button class="drawer-more collapse" data-action="drawer-collapse-sessions" data-workspace="${attr(name)}">收起</button>`:''}</div>`:''}</div>`}).join('');return `<div class="session-drawer-layer"><button class="session-drawer-backdrop" data-action="close-session-drawer" aria-label="关闭会话侧边栏"></button><aside class="session-drawer" role="dialog" aria-modal="true" aria-label="设备、工作区与会话"><div class="drawer-device-wrap"><button class="drawer-device ${drawerDeviceMenu?'open':''}" data-action="toggle-device-menu" aria-expanded="${drawerDeviceMenu}"><span class="drawer-device-icon">${icon('monitor',18)}<span class="dot ${device.online?'':'drawer-offline'}"></span></span><span class="grow"><span class="drawer-device-name">${device.name}</span><span class="drawer-device-meta" style="display:block">${device.online?'在线 · 延迟 18ms':'离线 · 可查看历史会话'}</span></span>${icon('chevron',15)}</button>${drawerDeviceMenu?`<div class="drawer-device-menu">${mobileVisibleDevices().map(d=>`<button class="drawer-device-option ${d.name===currentDevice?'on':''}" data-action="drawer-device" data-device="${attr(d.name)}"><span class="dot ${d.online?'':'drawer-offline'}"></span><span>${d.name}</span>${d.name===currentDevice?icon('check',13):''}</button>`).join('')}</div>`:''}</div><button class="drawer-new" data-action="drawer-new-session">${icon('plus',16)}新建会话<span style="color:var(--muted);font-size:12px;font-weight:400">· ${attr(currentWorkspace)}</span></button><div class="drawer-scroll"><div class="drawer-section-head">工作区<span>${device.workspaces.length} 个 · 展开查看会话</span></div>${workspaceHtml}</div><div class="drawer-footer"><span class="dot ${device.online?'':'drawer-offline'}"></span>${device.online?'设备在线':'设备离线'} · 每个工作区默认展示 5 条会话</div></aside></div>`}
+function padSessionPaneHtml(){
+  const drawer=sessionDrawerHtml(true);
+  if(!drawer)return '';
+  const persistent=drawer.replace('class="session-drawer-layer"','class="session-drawer-layer pad-session-pane"').replace(/<button class="session-drawer-backdrop"[^>]*><\/button>/,'').replace('role="dialog" aria-modal="true"','role="complementary"');
+  return `<div class="pad-master pad-session-master">${persistent}</div>`;
+}
+function padLayout(content){
+  let master='';
+  if(['chat','sessions','new'].includes(mobilePage))master=padSessionPaneHtml();
+  else if(mobilePage==='approval')master=`<div class="pad-master pad-task-master">${tasks()}</div>`;
+  return `<div class="pad-app-shell"><div class="pad-nav-rail">${nav()}</div>${master}<section class="pad-detail" data-page="${attr(mobilePage)}">${content}</section></div>`;
+}
 function chat(){
   ensureAttachmentDraftOwner();
   const s=selectedSession||sessions[0];
   const voiceActive=voiceStatus!=='idle';
-  return `<div class="chat-head"><button class="icon-btn" data-action="open-session-drawer" title="设备、工作区与会话" aria-label="打开会话侧边栏">${icon('menu')}</button><div class="chat-title"><div class="chat-name">${esc(s.title)}</div><div class="chat-state">● ${esc(s.device)} · ${esc(s.workspace)}</div></div><button class="icon-btn" data-action="new" title="新建会话" aria-label="新建会话">${icon('plus',18)}</button></div><div class="chat-messages" id="chatMessages"><div class="date">今天 21:58</div>${messages.map(messageHtml).join('')}</div><div class="composer ${voiceActive?'voice-active':''}">${attachmentDraftHtml()}<div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="compose-box voice-compose ${voiceMode?'voice-mode':'text-mode'} ${chatDraft.trim()||draftAttachments.length?'has-draft':''} ${draftAttachments.length?'has-attachments':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="按住说话，松手发送，上移取消" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'?'disabled':''}><span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span></button><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button>`:`<textarea id="draft" rows="1" aria-label="输入消息" placeholder="发消息或按住说话…">${esc(chatDraft)}</textarea><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button><button class="send" data-action="send" title="发送" aria-label="发送">${icon('send',16)}</button>`}</div></div>`
+  return `<div class="chat-head"><button class="icon-btn" data-action="open-session-drawer" title="设备、工作区与会话" aria-label="打开会话侧边栏">${icon('menu')}</button><div class="chat-title"><div class="chat-name">${esc(s.title)}</div><div class="chat-state">● ${esc(s.device)} · ${esc(s.workspace)}</div></div><button class="icon-btn" data-action="new" title="新建会话" aria-label="新建会话">${icon('plus',18)}</button></div><div class="chat-messages" id="chatMessages">${chatMessagesHtml(messages)}</div><div class="composer ${voiceActive?'voice-active':''}">${attachmentDraftHtml()}<div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="compose-box voice-compose ${voiceMode?'voice-mode':'text-mode'} ${chatDraft.trim()||draftAttachments.length?'has-draft':''} ${draftAttachments.length?'has-attachments':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="按住说话，松手发送，上移取消" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'?'disabled':''}><span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span></button><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button>`:`<textarea id="draft" rows="1" aria-label="输入消息" placeholder="发消息或按住说话…">${esc(chatDraft)}</textarea><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button><button class="send" data-action="send" title="发送" aria-label="发送">${icon('send',16)}</button>`}</div></div>`
 }
 function voiceHoldText(){return voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?(mobilePage==='new'?'松手转写':'松手发送'):'按住说话'}
 function voiceFeedbackHtml(){if(voiceStatus==='idle')return '';const processing=voiceStatus==='processing';const releaseCopy=mobilePage==='new'?'松手转写，上移取消':'松手发送，上移取消';return `<div class="voice-release-copy">${processing?(mobilePage==='new'?'正在识别并转写…':'正在识别并发送…'):voiceCancelArmed?'松开取消':releaseCopy}</div><div class="voice-wave" aria-hidden="true">${Array.from({length:25},(_,i)=>`<i style="--i:${i}"></i>`).join('')}</div>`}
@@ -753,19 +849,45 @@ function stepHtml(step,turnIndex,stepIndex){
     <span class="step-chevron">${icon('chevron',12)}</span>
   </button>${detail}`;
 }
+/* Keep in sync with apps/mobile-shared/lib/turn-grouping.ts and lib/format.ts. */
+const PROTOTYPE_TIME_DIVIDER_GAP_MS=5*60*1000;
+function prototypeMessageAt(message){
+  if(Number.isFinite(message.at))return message.at;
+  const value=message.time||message.final?.time||'';
+  const clock=/^(\d{1,2}):(\d{2})$/.exec(value);
+  if(clock){const date=new Date();date.setHours(Number(clock[1]),Number(clock[2]),0,0);return date.getTime()}
+  if(value==='刚刚')return Date.now();
+  const minutes=/^(\d+) 分钟前$/.exec(value);if(minutes)return Date.now()-Number(minutes[1])*60*1000;
+  return 0;
+}
+function groupPrototypeTurns(list){
+  const groups=[];
+  list.forEach((message,index)=>{if(message.role==='user'||!groups.length)groups.push({entries:[]});groups[groups.length-1].entries.push({message,index})});
+  return groups.map(group=>{const times=group.entries.map(({message})=>prototypeMessageAt(message)).filter(time=>time>0);return {...group,startedAt:times.length?Math.min(...times):0,endedAt:times.length?Math.max(...times):0}});
+}
+function shouldShowPrototypeTimeDivider(previous,current,gapMs=PROTOTYPE_TIME_DIVIDER_GAP_MS){
+  if(current.startedAt<=0)return false;
+  if(!previous||previous.endedAt<=0)return true;
+  return current.startedAt-previous.endedAt>=gapMs;
+}
+function formatPrototypeTime(timestamp){const date=new Date(timestamp);return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`}
+function chatMessagesHtml(list){
+  const groups=groupPrototypeTurns(list);
+  return groups.map((group,index)=>{const previous=groups[index-1];const divider=shouldShowPrototypeTimeDivider(previous,group)?`<div class="message-time-divider">${formatPrototypeTime(group.startedAt)}</div>`:'';return `<section class="chat-turn-group">${divider}${group.entries.map(({message,index:messageIndex})=>messageHtml(message,messageIndex)).join('')}</section>`}).join('');
+}
 function turnHtml(turn,index){
   const steps=turn.steps||[];
   const running=turn.state==='running';
-  const meta=running
-    ? `<span class="turn-meta">· 用时 <span data-turn-started="${turn.startedAt||0}">${elapsedLabel(turn.startedAt?Date.now()-turn.startedAt:0)}</span></span>`
-    : `<span class="turn-meta">· 用时 ${esc(turn.elapsed||'')}</span>`;
+  const elapsed=running
+    ? `用时 <span data-turn-started="${turn.startedAt||0}">${elapsedLabel(turn.startedAt?Date.now()-turn.startedAt:0)}</span>`
+    : `用时 ${esc(turn.elapsed||'')}`;
   const head=`<button class="turn-head ${running?'running':'done'}" data-action="toggle-turn" data-turn-index="${index}" aria-expanded="${turn.open?'true':'false'}" aria-label="${running?'收起执行步骤':'展开执行步骤'}">
     <span class="turn-state">${running?'<span class="turn-spinner"></span>':icon('check',13)}</span>
-    <span class="turn-title">${running?'深度求索中':'已完成'}</span>${meta}
+    <span class="turn-title">${running?'深度求索中':'已完成'}</span>
     <span class="turn-chevron">${icon('chevron',13)}</span>
   </button>`;
-  const body=turn.open?`<div class="turn-steps">${steps.map((step,stepIndex)=>stepHtml(step,index,stepIndex)).join('')}</div>`:'';
-  const final=turn.final?`<div class="turn-final"><div class="final-text">${esc(turn.final.text)}</div><div class="turn-foot"><button class="message-tts" data-action="play-turn" data-turn-index="${index}" title="使用 TTS 朗读这条回复">${icon('volume',13)}朗读</button><span class="turn-time">${esc(turn.final.time)}</span></div></div>`:'';
+  const body=turn.open?`<div class="turn-steps">${steps.map((step,stepIndex)=>stepHtml(step,index,stepIndex)).join('')}<div class="turn-elapsed">${elapsed}</div></div>`:'';
+  const final=turn.final?`<div class="turn-final"><div class="final-text">${esc(turn.final.text)}</div><div class="turn-foot"><button class="message-tts" data-action="play-turn" data-turn-index="${index}" title="使用 TTS 朗读这条回复">${icon('volume',13)}朗读</button></div></div>`:'';
   return `<div class="turn-wrap"><div class="turn-card">${head}${body}${final}</div></div>`;
 }
 function messageHtml(m,index){
@@ -773,7 +895,7 @@ function messageHtml(m,index){
   if(m.role==='tool')return `<div class="tool-card"><div class="tool-head"><div class="tool-icon">${icon('command',15)}</div>${m.name}<span style="margin-left:auto">${badge('成功','success')}</span></div><div class="code">${m.command}</div><div class="message-time">${m.result}</div></div>`;
   const uploadSummary=m.uploadState==='uploading'?'<div class="message-upload-summary">附件上传完成后才会发送指令</div>':m.uploadState==='failed'?'<div class="message-upload-summary">部分附件上传失败，指令尚未发送；可只重试失败项。</div>':'';
   const messageIdentity=m.id?` data-upload-message="${attr(m.id)}"`:'';
-  return `<div class="message ${m.role==='user'?'user':m.role==='assistant'?'assistant':''}"${messageIdentity}><div class="bubble">${m.text?`<div class="message-text">${esc(m.text)}</div>`:''}${messageAttachmentsHtml(m)}${uploadSummary}<div class="message-time">${m.time}</div></div>${m.role==='assistant'?`<button class="message-tts" data-action="play-message" data-message-index="${index}" title="使用 TTS 朗读此回复">${icon('volume',13)}朗读</button>`:''}</div>`;
+  return `<div class="message ${m.role==='user'?'user':m.role==='assistant'?'assistant':''}"${messageIdentity}><div class="bubble">${m.text?`<div class="message-text">${esc(m.text)}</div>`:''}${messageAttachmentsHtml(m)}${uploadSummary}</div>${m.role==='assistant'?`<button class="message-tts" data-action="play-message" data-message-index="${index}" title="使用 TTS 朗读此回复">${icon('volume',13)}朗读</button>`:''}</div>`;
 }
 function tasks(){return `<div class="phone-scroll"><div class="mobile-head"><div><div class="mobile-title">待办</div><div class="mobile-sub">${approvalState==='pending'?'1 项需要你的处理':'待办已清空'}</div></div><button class="icon-btn" data-action="notify">${icon('refresh',16)}</button></div><div class="section-label">需要处理</div>${approvalState==='pending'?`<button class="approval-card clickable" data-page="approval"><div class="approval-top"><div class="risk">${icon('shield')}</div><div><div class="approval-title">运行集成测试</div><div class="approval-sub">高风险操作 · 剩余 04:38</div></div><span style="margin-left:auto">${icon('chevron',16)}</span></div><div class="approval-body">修复 WebSocket 断线重连 · server</div><div class="code">pnpm test:integration</div>${badge('等待你的决定','warn')}</button>`:`<div class="info-card" style="text-align:center;padding:28px;color:var(--muted)">${icon('check',26)}<div style="margin-top:9px">待办已清空</div></div>`}<div class="section-label">稍后关注</div><div class="approval-card"><div class="approval-top"><div class="risk" style="color:var(--red)">${icon('activity')}</div><div><div class="approval-title">推送证书即将到期</div><div class="approval-sub">系统提醒 · 7 天后到期</div></div></div><div class="approval-body">更新 APNs 证书后，后台通知才能正常送达。</div><button class="btn" data-action="notify">查看设置</button></div></div>`}
 function approval(){return `<div class="phone-scroll"><div class="detail-head"><button class="icon-btn" data-page="tasks">${icon('back',17)}</button><div class="detail-title">操作审批</div>${badge('高风险','warn')}</div><div class="info-card"><div style="display:flex;gap:12px;align-items:center"><div class="risk">${icon('command',19)}</div><div><div class="approval-title">运行集成测试</div><div class="approval-sub">bash · 22:04:18</div></div></div><div class="code">pnpm test:integration\n--workspace server</div><div class="approval-body" style="margin-bottom:0">Agent 需要运行完整集成测试，验证断线恢复期间不会重复提交指令。</div></div><div class="section-label">影响范围</div><div class="info-card">${[['桌面设备','MacBook Pro'],['工作区','server'],['会话','修复 WebSocket 断线重连'],['发起者','DeepSeek Agent'],['有效期','04:38']].map(([k,v])=>`<div class="info-row"><span>${k}</span><span>${v}</span></div>`).join('')}</div><div class="warning">此操作会在桌面工作区执行命令。请确认命令、路径和会话上下文。批准仅对本次请求有效。</div><div class="button-row"><button class="btn danger" data-action="reject">拒绝</button><button class="btn primary" data-action="allow">${icon('shield',15)}允许一次</button></div><button class="btn ghost" style="width:100%;margin-top:8px" data-action="view-session">查看会话</button></div>`}
@@ -886,7 +1008,23 @@ function createSession(){
 }
 function sheetHtml(){if(!sheet)return '';const approve=sheet==='approval';return `<div class="sheet-layer" data-action="close-sheet"><div class="sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><div class="sheet-icon">${icon(approve?'shield':'logout',27)}</div><div class="sheet-title">${approve?'使用 Face ID 确认':'解除这台设备的配对？'}</div><div class="sheet-copy">${approve?'你正在允许 MacBook Pro 执行一次集成测试。此授权不会应用到其他命令。':'解除后将阻止新的远程指令。桌面上的现有会话和正在运行的任务不会被删除。'}</div><div class="button-row"><button class="btn" data-action="close-sheet">再想想</button><button class="btn ${approve?'primary':'danger'}" data-action="${approve?'confirm-allow':'confirm-revoke'}">${approve?'验证并允许':'确认解除'}</button></div></div></div>`}
 function renderChatPreservingScroll(){const before=document.getElementById('chatMessages');const top=before?before.scrollTop:0;renderMobile();const after=document.getElementById('chatMessages');if(after)after.scrollTop=top}
-function renderMobile(){let content=mobilePage==='sessions'?chat():mobilePage==='chat'?chat():mobilePage==='tasks'?tasks():mobilePage==='approval'?approval():mobilePage==='devices'?devices():mobilePage==='desktopAuth'?desktopAuth():mobilePage==='phoneRecovery'?phoneRecovery():mobilePage==='new'?newSession():mobilePage==='voiceSettings'?voiceServiceSettings():profile();document.getElementById('phone').innerHTML=`<div class="phone-status"><span>9:41</span><div class="notch"></div><span>5G ▰</span></div><div class="phone-body">${content}</div>${sessionDrawerHtml()}${['sessions','chat','tasks','devices','profile'].includes(mobilePage)?nav():''}${sheetHtml()}${modelSheetHtml()}${moreSheetHtml()}${attachmentPickerHtml()}${attachmentPreviewHtml()}`;document.getElementById('guideList').innerHTML=guide.map(([id,title,sub],i)=>`<button class="guide-item ${mobilePage===id?'on':''}" data-page="${id}"><span class="num">${String(i+1).padStart(2,'0')}</span><div><div style="font-size:12px;font-weight:650">${title}</div><div style="font-size:9px;color:var(--muted);margin-top:3px">${sub}</div></div></button>`).join('');document.getElementById('flows').innerHTML=[['接收通知','任务完成或需要审批'],['核对上下文','设备、工作区与工具参数'],['安全推进','发送指令或允许一次'],['断线恢复','按会话游标补齐事件']].map(([t,c],i)=>`<div class="flow"><div class="flow-line"><div class="flow-dot">${i+1}</div></div><div><div class="flow-title">${t}</div><div class="flow-copy">${c}</div></div></div>`).join('');hydrate(document.getElementById('mobileView'));const cm=document.getElementById('chatMessages');if(cm)cm.scrollTop=cm.scrollHeight;startTurnTimer()}
+function renderMobile(){
+  const page=mobilePage==='sessions'?chat():mobilePage==='chat'?chat():mobilePage==='tasks'?tasks():mobilePage==='approval'?approval():mobilePage==='devices'?devices():mobilePage==='desktopAuth'?desktopAuth():mobilePage==='phoneRecovery'?phoneRecovery():mobilePage==='new'?newSession():mobilePage==='voiceSettings'?voiceServiceSettings():profile();
+  const pad=isPadPreview();
+  const content=pad?padLayout(page):page;
+  const phone=document.getElementById('phone');
+  phone.className=pad?`phone pad ${previewDevice}`:'phone';
+  phone.setAttribute('aria-label',pad?'Pad 应用预览':'手机应用预览');
+  document.getElementById('mobileView').dataset.device=previewDevice;
+  phone.innerHTML=`<div class="phone-status"><span>9:41</span><div class="notch"></div><span>${pad?'Wi-Fi':'5G ▰'}</span></div><div class="phone-body">${content}</div>${pad?'':sessionDrawerHtml()}${!pad&&['sessions','chat','tasks','devices','profile'].includes(mobilePage)?nav():''}${sheetHtml()}${modelSheetHtml()}${moreSheetHtml()}${attachmentPickerHtml()}${attachmentPreviewHtml()}`;
+  document.querySelectorAll('[data-preview-device]').forEach(button=>{const on=button.dataset.previewDevice===previewDevice;button.classList.toggle('on',on);button.setAttribute('aria-pressed',String(on))});
+  document.getElementById('devicePreviewMeta').textContent=previewDeviceMeta[previewDevice];
+  document.getElementById('guideList').innerHTML=guide.map(([id,title,sub],i)=>`<button class="guide-item ${mobilePage===id?'on':''}" data-page="${id}"><span class="num">${String(i+1).padStart(2,'0')}</span><div><div style="font-size:12px;font-weight:650">${title}</div><div style="font-size:9px;color:var(--muted);margin-top:3px">${sub}</div></div></button>`).join('');
+  document.getElementById('flows').innerHTML=[['接收通知','任务完成或需要审批'],['核对上下文','设备、工作区与工具参数'],['安全推进','发送指令或允许一次'],['断线恢复','按会话游标补齐事件']].map(([t,c],i)=>`<div class="flow"><div class="flow-line"><div class="flow-dot">${i+1}</div></div><div><div class="flow-title">${t}</div><div class="flow-copy">${c}</div></div></div>`).join('');
+  hydrate(document.getElementById('mobileView'));
+  const cm=document.getElementById('chatMessages');if(cm)cm.scrollTop=cm.scrollHeight;
+  startTurnTimer();
+}
 const adminNav=[['overview','home','概览'],['users','users','用户与角色'],['devices','monitor','设备管理'],['policies','lock','访问策略'],['running','activity','运行与会话'],['approvals','shield','审批策略'],['audit','list','审计日志'],['settings','settings','系统设置']];
 const adminSessions=[['设计 DSH Connect 高保真原型','sess_8fa2','MacBook Pro','李伟','active','刚刚'],['修复 WebSocket 断线重连','sess_72bc','MacBook Pro','陈晨','pending','2 分钟前'],['实现会话事件协议','sess_31de','Mac Studio','李伟','finished','18:26'],['补充移动端断网测试','sess_19a8','Mac Studio','王敏','error','17:42']];
 function metric(ic,label,value,delta,down=false){return `<div class="metric"><div class="metric-top"><span>${label}</span><div class="metric-icon">${icon(ic,16)}</div></div><div class="metric-value">${value}</div><div class="metric-delta ${down?'down':''}">${delta}</div></div>`}
@@ -984,6 +1122,13 @@ function switchView(view){
 }
 document.getElementById('mobileTab').onclick=()=>{mobilePreviewUser='李伟';switchView('mobile')};document.getElementById('connectorTab').onclick=()=>switchView('connector');document.getElementById('adminTab').onclick=()=>switchView('admin');document.getElementById('themeBtn').onclick=()=>{const dark=document.documentElement.dataset.theme==='dark';document.documentElement.dataset.theme=dark?'':'dark';try{localStorage.setItem('dsh-prototype-theme',dark?'light':'dark')}catch(e){}};
 document.addEventListener('click',e=>{
+  const button=e.target.closest('[data-preview-device]');
+  if(!button||!previewDeviceMeta[button.dataset.previewDevice])return;
+  previewDevice=button.dataset.previewDevice;
+  sessionDrawerOpen=false;drawerDeviceMenu=false;
+  renderMobile();
+});
+document.addEventListener('click',e=>{
   const el=e.target.closest('button'),action=el?.dataset.action;
   if(!action)return;
   const handled=['request-desktop-access','submit-desktop-access','open-mobile-grant-connector','connector-confirm-mobile-grant','connector-view-mobile-devices','open-authorized-desktop','phone-recovery','simulate-reinstall','recovery-view-devices','recovery-back','user-policy','preview-user-devices','exit-user-preview','policy-dropdown','policy-option','policy-select-all','policy-clear','save-policy','grant-workspace-toggle','grant-select-all','grant-selected-filter','grant-clear-filter','grant-scope-toggle','grant-reset','grant-save','connector-disconnect'];
@@ -1078,7 +1223,7 @@ function finishAttachmentMessage(message,targetMessages){
   if(messages.includes(message)&&mobilePage==='chat')renderMobile();
   toast('附件已就绪，指令已发送（模拟）');
   setTimeout(()=>{
-    targetMessages.push({role:'assistant',text:`已收到 ${message.attachments.length} 个附件${message.text?'和补充指令':''}。附件会作为当前会话的消息内容交给 DSH（模拟）。`,time:'刚刚'});
+    targetMessages.push({role:'assistant',text:`已收到 ${message.attachments.length} 个附件${message.text?'和补充指令':''}。附件会作为当前会话的消息内容交给 DSH（模拟）。`,at:Date.now(),time:'刚刚'});
     if(messages===targetMessages&&mobilePage==='chat')renderMobile();
   },700);
 }
@@ -1087,10 +1232,10 @@ function sendChatMessage(text){
   const outgoing=draftAttachments.map(item=>({...item,status:'uploading',progress:8}));
   if(!value&&!outgoing.length){toast('请输入补充指令或添加附件');return false}
   if(!outgoing.length){
-    messages.push({role:'user',text:value,time:'刚刚'});renderMobile();toast('DSH 已接受指令（模拟）');setTimeout(()=>{messages.push({role:'assistant',text:'收到。我会沿用当前工作区与权限策略继续执行，并在需要审批时通知你。',time:'刚刚'});if(mobilePage==='chat')renderMobile()},700);return true;
+    messages.push({role:'user',text:value,at:Date.now(),time:'刚刚'});renderMobile();toast('DSH 已接受指令（模拟）');setTimeout(()=>{messages.push({role:'assistant',text:'收到。我会沿用当前工作区与权限策略继续执行，并在需要审批时通知你。',at:Date.now(),time:'刚刚'});if(mobilePage==='chat')renderMobile()},700);return true;
   }
   const targetMessages=messages;
-  const message={id:'msg_attachment_'+Date.now()+'_'+(++attachmentSerial),role:'user',text:value,time:'刚刚',attachments:outgoing,uploadState:'uploading'};
+  const message={id:'msg_attachment_'+Date.now()+'_'+(++attachmentSerial),role:'user',text:value,at:Date.now(),time:'刚刚',attachments:outgoing,uploadState:'uploading'};
   targetMessages.push(message);draftAttachments=[];chatDraft='';renderMobile();toast(`正在上传 ${outgoing.length} 个附件（模拟）`);
   setTimeout(()=>{if(message.uploadState!=='uploading')return;outgoing.forEach(item=>{if(item.status==='uploading')item.progress=46});if(messages.includes(message)&&mobilePage==='chat')renderMobile()},350);
   setTimeout(()=>{
@@ -1206,7 +1351,7 @@ document.addEventListener('keydown',e=>{
   if(attachmentPreview){e.preventDefault();e.stopImmediatePropagation();attachmentPreview=null;renderMobile()}
   else if(attachmentPicker){e.preventDefault();e.stopImmediatePropagation();closeAttachmentPicker();renderMobile()}
 },true);
-try{if(localStorage.getItem('dsh-prototype-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}hydrate();renderMobile();renderAdmin();renderConnector();
+try{if(localStorage.getItem('dsh-prototype-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}try{const requested=new URLSearchParams(location.search).get('device');if(previewDeviceMeta[requested])previewDevice=requested}catch(e){}hydrate();renderMobile();renderAdmin();renderConnector();
 </script>
 </body>
 </html>
