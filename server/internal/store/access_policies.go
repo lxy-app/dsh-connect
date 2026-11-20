@@ -61,7 +61,12 @@ func (s *Store) CreateAccessPolicy(ctx context.Context, record AccessPolicyRecor
 		}
 		return AccessPolicyRecord{}, fmt.Errorf("create access policy: %w", err)
 	}
-	return toAccessPolicyRecord(created), nil
+	// Return the persisted representation so timestamp precision matches later reads.
+	persisted, err := s.client.AccessPolicy.Query().Where(accesspolicy.IDEQ(created.ID)).Only(ctx)
+	if err != nil {
+		return AccessPolicyRecord{}, fmt.Errorf("reload created access policy: %w", err)
+	}
+	return toAccessPolicyRecord(persisted), nil
 }
 
 // AccessPolicies lists access policies ordered by creation time.
@@ -154,8 +159,8 @@ func toAccessPolicyRecord(record *ent.AccessPolicy) AccessPolicyRecord {
 		MemberIDs:   append([]string(nil), record.MemberIds...),
 		Rules:       toAccessPolicyRules(record.Rules),
 		Revision:    record.Revision,
-		CreatedAt:   record.CreatedAt,
-		UpdatedAt:   record.UpdatedAt,
+		CreatedAt:   record.CreatedAt.UTC(),
+		UpdatedAt:   record.UpdatedAt.UTC(),
 	}
 }
 

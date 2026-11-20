@@ -1,5 +1,5 @@
 import { App as AntApp } from 'antd';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { AccessPolicy, AuditEntry } from '../api/client';
@@ -69,6 +69,9 @@ it('expands policy audit details as formatted before and after JSON', async () =
   await screen.findByText('admin.policy.update');
   const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
   expect(expandButtons).toHaveLength(1);
+  await waitFor(() => {
+    expect(getComputedStyle(expandButtons[0]!).pointerEvents).not.toBe('none');
+  });
   await user.click(expandButtons[0]!);
 
   const before = screen.getByLabelText('策略变更前 JSON');
