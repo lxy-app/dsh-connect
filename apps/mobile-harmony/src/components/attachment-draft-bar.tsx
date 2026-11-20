@@ -18,12 +18,15 @@ export function AttachmentDraftBar({
   onRemove,
   onRetry,
   onAdd,
+  compositionLocked = false,
 }: {
   attachments: readonly PromptAttachmentDraft[];
   disabled: boolean;
   onRemove: (localId: string) => void;
   onRetry: (localId: string) => void;
   onAdd: () => void;
+  /** Keep failed-item retry available while preventing draft changes after submission starts. */
+  compositionLocked?: boolean;
 }) {
   const theme = useAppTheme();
   if (attachments.length === 0) return null;
@@ -82,11 +85,11 @@ export function AttachmentDraftBar({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`移除 ${draft.name}`}
-              disabled={disabled || uploading}
+              disabled={disabled || compositionLocked || uploading}
               onPress={() => onRemove(draft.localId)}
               style={({ pressed }) => [
                 styles.remove,
-                { backgroundColor: theme.text, borderColor: theme.background, opacity: disabled || uploading ? 0.4 : 1 },
+                { backgroundColor: theme.text, borderColor: theme.background, opacity: disabled || compositionLocked || uploading ? 0.4 : 1 },
                 pressed && styles.pressed,
               ]}
             >
@@ -98,9 +101,9 @@ export function AttachmentDraftBar({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="继续添加附件"
-        disabled={disabled}
+        disabled={disabled || compositionLocked}
         onPress={onAdd}
-        style={({ pressed }) => [styles.add, { borderColor: theme.border, opacity: disabled ? 0.45 : 1 }, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.add, { borderColor: theme.border, opacity: disabled || compositionLocked ? 0.45 : 1 }, pressed && styles.pressed]}
       >
         <Text style={[styles.addText, { color: theme.textSecondary }]}>＋</Text>
       </Pressable>

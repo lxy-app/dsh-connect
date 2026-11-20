@@ -231,7 +231,7 @@ func TestWaitingDesktopAuthorizationControlRequestDoesNotDropChallenge(t *testin
 
 	// A panel may ask for an authenticated-only capability while the transport
 	// is open. Reject the request without destroying the valid pairing challenge.
-	writeTestFrame(t, connection, protocol.ConnectorRequest{V: 1, Type: protocol.TypeRequest, RequestID: "waiting-control-request", Method: "mobile.access.list", Params: json.RawMessage(`{}`)})
+	writeTestFrame(t, connection, protocol.ConnectorRequest{V: 1, Type: protocol.TypeRequest, RequestID: "waiting-control-request", Method: protocol.ConnectorMethodInteractionAudience, Params: json.RawMessage(`{"workspaceId":"ws-1"}`)})
 	response := readTestFrame[protocol.ErrorEnvelope](t, connection)
 	if response.Error.Code != protocol.CodeUnauthorized {
 		t.Fatalf("waiting control request error=%+v", response.Error)

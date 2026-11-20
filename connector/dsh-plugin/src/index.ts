@@ -2,8 +2,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { HostContext, RpcResult } from './host-api.js';
 import type {
-  ConnectorDecisionInput,
-  ConnectorMobileAccessList,
   ConnectorStatus,
   PairingCompletion,
   PublicChallenge,
@@ -41,8 +39,6 @@ export interface ConnectorApi {
   connect(): Promise<void>;
   disconnect(): void;
   listWorkspaces(): WorkspaceInfo[];
-  listMobileAccess(): Promise<ConnectorMobileAccessList>;
-  decideMobileAccess(input: ConnectorDecisionInput): Promise<unknown>;
   updateGrants(grants: WorkspaceGrants): Promise<unknown>;
   status(): Promise<ConnectorStatus>;
 }
@@ -188,18 +184,6 @@ export function apply(ctx: HostContext): void {
       }));
     },
 
-    async listMobileAccess() {
-      await ready;
-      if (!runtime) throw protocolError('not_paired', 'Pair this desktop before reviewing phone access');
-      return runtime.mobileAccessList();
-    },
-
-    async decideMobileAccess(input) {
-      await ready;
-      if (!runtime) throw protocolError('not_paired', 'Pair this desktop before reviewing phone access');
-      return runtime.mobileAccessDecide(input);
-    },
-
     async updateGrants(grants) {
       await ready;
       if (!runtime) throw protocolError('not_paired', 'Pair this desktop before updating grants');
@@ -237,8 +221,6 @@ export function apply(ctx: HostContext): void {
         switch (endpoint) {
           case 'status.get': return success(await api.status());
           case 'workspace.list': return success(api.listWorkspaces());
-          case 'mobile.access.list': return success(await api.listMobileAccess());
-          case 'mobile.access.decide': return success(await api.decideMobileAccess(payload as ConnectorDecisionInput));
           case 'settings.update': return success(await api.updateSettings(payload as UpdateSettingsRequest));
           case 'pair.start': return success(await api.startPairing(payload as StartPairingRequest));
           case 'pair.authorize': return success(await api.authorize(payload as WorkspaceGrants));

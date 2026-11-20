@@ -19,7 +19,6 @@ type mobileModelFixture struct {
 	ownerToken  string
 	connector   pairedConnector
 	phone       protocol.MobileSessionResponse
-	grantID     string
 }
 
 func newMobileModelFixture(t *testing.T, scopes []string) mobileModelFixture {
@@ -27,24 +26,9 @@ func newMobileModelFixture(t *testing.T, scopes []string) mobileModelFixture {
 	environment := newAdminEnvironment(t)
 	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	code := issueMobilePairingCode(t, environment, ownerToken, "")
-	phone := pairMobile(t, environment, code.Code, "Model iPhone")
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Model iPhone")
 	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, scopes)
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
-		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": scopes,
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("model access request status=%d body=%s", status, body)
-	}
-	var requested protocol.MobileAccessGrant
-	decodeTestJSON(t, body, &requested)
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessDecide, map[string]any{
-		"mobileDeviceId": phone.MobileDeviceID,
-		"action":         "allow",
-		"workspaces":     []string{"ws-1"},
-		"scopes":         scopes,
-	})
-	return mobileModelFixture{environment: environment, ownerToken: ownerToken, connector: connector, phone: phone, grantID: requested.GrantID}
+	return mobileModelFixture{environment: environment, ownerToken: ownerToken, connector: connector, phone: phone}
 }
 
 func serveModelCommand(connection *websocket.Conn, method string, expectedParams map[string]any, result any) <-chan error {
@@ -229,16 +213,16 @@ func TestMobileModelCatalogSelectionIdempotencyAndRestart(t *testing.T) {
 		t.Fatalf("persisted model replay status=%d body=%s", status, body)
 	}
 
-	// Authorization still precedes the cache after restart and revocation.
-	status, body = testRequest(t, http.MethodDelete, restartedHTTP.URL+"/v1/mobile/access/"+fixture.grantID, fixture.phone.AccessToken, nil)
-	if status != http.StatusNoContent {
-		t.Fatalf("revoke model grant status=%d body=%s", status, body)
+	// Device revocation is checked before the cache after restart.
+	status, body = testRequest(t, http.MethodPost, restartedHTTP.URL+"/v1/admin/mobile-devices/"+fixture.phone.MobileDeviceID+"/revoke", fixture.ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("revoke mobile device status=%d body=%s", status, body)
 	}
 	status, body = testRequest(t, http.MethodPost, restartedHTTP.URL+"/v1/mobile/sessions/sess-1/model", fixture.phone.AccessToken, selectBody)
-	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
 }
 
-func TestMobileModelReadOnlyGrantCannotSelect(t *testing.T) {
+func TestMobileModelReadOnlyPolicyCannotSelect(t *testing.T) {
 	fixture := newMobileModelFixture(t, []string{"read"})
 	modelURL := fixture.environment.http.URL + "/v1/mobile/sessions/sess-1/model"
 	catalogResult := map[string]any{

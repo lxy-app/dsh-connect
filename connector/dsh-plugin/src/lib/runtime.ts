@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { HostAttachmentsService, RuntimeHostContext, WorkspaceFilesService } from '../host-api.js';
-import type { ConnectorDecisionInput, ConnectorMobileAccessList, Logger, UnknownRecord, WorkspaceGrants, WorkspaceInfo } from '../types.js';
+import type { Logger, UnknownRecord, WorkspaceGrants, WorkspaceInfo } from '../types.js';
 import { isRecord } from '../types.js';
 import { CommandHandler } from './command-handler.js';
 import type { FileStateStore } from './file-state-store.js';
@@ -137,19 +137,7 @@ export class ConnectorRuntime extends EventEmitter {
     this.#transport.stop();
   }
 
-  /**
-   * Desktop-scoped control-plane query over the same authenticated WSS. Used by
-   * the panel to review and decide phone access requests.
-   */
-  async mobileAccessList(): Promise<ConnectorMobileAccessList> {
-    return await this.#callServer('mobile.access.list') as ConnectorMobileAccessList;
-  }
-
-  async mobileAccessDecide(input: ConnectorDecisionInput): Promise<unknown> {
-    return await this.#callServer('mobile.access.decide', input);
-  }
-
-  /** Whether a granted phone is actively waiting for interactions right now. */
+  /** Whether an authorized phone is actively waiting for interactions right now. */
   async interactionAudience(workspaceId: string): Promise<boolean> {
     if (!this.#transport.connected) return false;
     const result = await this.#callServer('interaction.audience', { workspaceId }, 2_000);

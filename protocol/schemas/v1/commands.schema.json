@@ -332,8 +332,8 @@
         "method": {
           "type": "string",
           "enum": [
-            "mobile.access.list",
-            "mobile.access.decide"
+            "pair.updateGrants",
+            "interaction.audience"
           ]
         },
         "params": {

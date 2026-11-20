@@ -15,25 +15,9 @@ import (
 
 func TestMobileEventsWebSocketStreamsAssistantDeltas(t *testing.T) {
 	environment := newAdminEnvironment(t)
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	code := issueMobilePairingCode(t, environment, ownerToken, "")
-	phone := pairMobile(t, environment, code.Code, "Stream iPhone")
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Stream iPhone")
 	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
-
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
-		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("access request status=%d body=%s", status, body)
-	}
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessList, map[string]any{})
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessDecide, map[string]any{
-		"mobileDeviceId": phone.MobileDeviceID,
-		"action":         "allow",
-		"workspaces":     []string{"ws-1"},
-		"scopes":         []string{"read"},
-	})
 
 	observed := make(chan protocol.SessionFollowParams, 1)
 	followErr := make(chan error, 1)
@@ -132,24 +116,6 @@ func TestMobileEventsCloseWhenAccessIsRevoked(t *testing.T) {
 			},
 		},
 		{
-			name: "phone withdraws grant",
-			action: func(t *testing.T, environment *adminEnvironment, _ string, phone protocol.MobileSessionResponse) {
-				status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/access", phone.AccessToken, nil)
-				if status != http.StatusOK {
-					t.Fatalf("load access status=%d body=%s", status, body)
-				}
-				var access protocol.MobileAccessOverviewResponse
-				decodeTestJSON(t, body, &access)
-				if len(access.Desktops) != 1 || access.Desktops[0].Grant == nil {
-					t.Fatalf("missing active grant: %+v", access)
-				}
-				status, body = testRequest(t, http.MethodDelete, environment.http.URL+"/v1/mobile/access/"+access.Desktops[0].Grant.GrantID, phone.AccessToken, nil)
-				if status != http.StatusNoContent {
-					t.Fatalf("revoke grant status=%d body=%s", status, body)
-				}
-			},
-		},
-		{
 			name: "owner disables user",
 			action: func(t *testing.T, environment *adminEnvironment, ownerToken string, phone protocol.MobileSessionResponse) {
 				status, body := testRequest(t, http.MethodPatch, environment.http.URL+"/v1/admin/users/"+phone.User.ID, ownerToken, map[string]string{"status": "disabled"})
@@ -179,10 +145,9 @@ func TestMobileEventsCloseWhenAccessIsRevoked(t *testing.T) {
 			if status != http.StatusCreated {
 				t.Fatalf("create stream member status=%d body=%s", status, body)
 			}
-			var member struct{ ID string }
+			var member store.User
 			decodeTestJSON(t, body, &member)
-			code := issueMobilePairingCode(t, environment, ownerToken, member.ID)
-			phone := pairMobile(t, environment, code.Code, "Revocable iPhone")
+			phone := loginMobile(t, environment, member.Email, "member-password", "Revocable iPhone")
 			connection := openMobileEventStream(t, environment, phone)
 
 			test.action(t, environment, ownerToken, phone)
@@ -194,9 +159,12 @@ func TestMobileEventsCloseWhenAccessIsRevoked(t *testing.T) {
 func TestMobileEventsCloseWhenPolicyIsNarrowed(t *testing.T) {
 	environment := newAdminEnvironment(t)
 	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
-	code := issueMobilePairingCode(t, environment, ownerToken, "")
-	phone := pairMobile(t, environment, code.Code, "Policy Update iPhone")
-	connection := openMobileEventStream(t, environment, phone)
+	connector := pairConnector(t, environment.testEnvironment)
+	phoneA := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Policy Update iPhone A")
+	phoneB := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Policy Update iPhone B")
+	allowUserAccess(t, environment, phoneA.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
+	connectionA := openMobileEventStreamOnConnector(t, environment, phoneA, connector, "sess-policy-a")
+	connectionB := openMobileEventStreamOnConnector(t, environment, phoneB, connector, "sess-policy-b")
 
 	status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/policies", ownerToken, nil)
 	if status != http.StatusOK {
@@ -220,7 +188,8 @@ func TestMobileEventsCloseWhenPolicyIsNarrowed(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("narrow policy status=%d body=%s", status, body)
 	}
-	assertWebSocketClosed(t, connection)
+	assertWebSocketClosed(t, connectionA)
+	assertWebSocketClosed(t, connectionB)
 }
 
 func TestMobileEventsRevocationCancelsPendingFollow(t *testing.T) {
@@ -231,9 +200,8 @@ func TestMobileEventsRevocationCancelsPendingFollow(t *testing.T) {
 		config.CommandTimeout = 5 * time.Second
 	})}
 	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
-	code := issueMobilePairingCode(t, environment, ownerToken, "")
-	phone := pairMobile(t, environment, code.Code, "Pending Follow iPhone")
-	connector := grantMobileReadAccess(t, environment, phone)
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Pending Follow iPhone")
+	connector := allowMobileReadAccess(t, environment, phone)
 
 	followStarted := make(chan error, 1)
 	go func() {
@@ -286,7 +254,7 @@ func TestMobileEventReauthorizationUsesCurrentIdentityState(t *testing.T) {
 			},
 		},
 		{
-			name: "user already disabled with grant intact",
+			name: "user already disabled with policy intact",
 			revoke: func(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse) {
 				status := store.UserStatusDisabled
 				if _, err := environment.server.store.UpdateUser(context.Background(), phone.User.ID, store.UserUpdate{Status: &status}); err != nil {
@@ -314,11 +282,10 @@ func TestMobileEventReauthorizationUsesCurrentIdentityState(t *testing.T) {
 			if status != http.StatusCreated {
 				t.Fatalf("create member status=%d body=%s", status, body)
 			}
-			var member struct{ ID string }
+			var member store.User
 			decodeTestJSON(t, body, &member)
-			code := issueMobilePairingCode(t, environment, ownerToken, member.ID)
-			phone := pairMobile(t, environment, code.Code, "Stale iPhone")
-			connector := grantMobileReadAccess(t, environment, phone)
+			phone := loginMobile(t, environment, member.Email, "member-password", "Stale iPhone")
+			connector := allowMobileReadAccess(t, environment, phone)
 			device, err := environment.server.store.MobileDeviceByID(context.Background(), phone.MobileDeviceID)
 			if err != nil {
 				t.Fatalf("load mobile device: %v", err)
@@ -341,31 +308,23 @@ func TestMobileEventReauthorizationUsesCurrentIdentityState(t *testing.T) {
 	}
 }
 
-func grantMobileReadAccess(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse) pairedConnector {
+func allowMobileReadAccess(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse) pairedConnector {
 	t.Helper()
 	connector := pairConnector(t, environment.testEnvironment)
 	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
-		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("access request status=%d body=%s", status, body)
-	}
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessList, map[string]any{})
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessDecide, map[string]any{
-		"mobileDeviceId": phone.MobileDeviceID,
-		"action":         "allow",
-		"workspaces":     []string{"ws-1"},
-		"scopes":         []string{"read"},
-	})
 	return connector
 }
 
-// openMobileEventStream completes the real grant and follow handshake before
+// openMobileEventStream completes a user-policy and follow handshake before
 // returning, so revocation tests observe an established mobile event socket.
 func openMobileEventStream(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse) *websocket.Conn {
 	t.Helper()
-	connector := grantMobileReadAccess(t, environment, phone)
+	connector := allowMobileReadAccess(t, environment, phone)
+	return openMobileEventStreamOnConnector(t, environment, phone, connector, "sess-1")
+}
+
+func openMobileEventStreamOnConnector(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse, connector pairedConnector, sessionID string) *websocket.Conn {
+	t.Helper()
 
 	followErr := make(chan error, 1)
 	go func() {
@@ -389,7 +348,7 @@ func openMobileEventStream(t *testing.T, environment *adminEnvironment, phone pr
 			followErr <- errUnexpectedCommand
 			return
 		}
-		payload, _ := json.Marshal(map[string]any{"accepted": true, "sessionId": "sess-1"})
+		payload, _ := json.Marshal(map[string]any{"accepted": true, "sessionId": sessionID})
 		response, _ := json.Marshal(protocol.Result{
 			V: protocol.Version, Type: protocol.TypeResult, RequestID: command.RequestID, Result: payload,
 		})
@@ -399,7 +358,7 @@ func openMobileEventStream(t *testing.T, environment *adminEnvironment, phone pr
 	connection := dialWebSocket(
 		t,
 		environment.http.URL,
-		"/v1/mobile/events/ws?deviceId="+connector.deviceID+"&workspaceId=ws-1&sessionId=sess-1",
+		"/v1/mobile/events/ws?deviceId="+connector.deviceID+"&workspaceId=ws-1&sessionId="+sessionID,
 		phone.AccessToken,
 	)
 	t.Cleanup(func() { _ = connection.Close(websocket.StatusNormalClosure, "test complete") })

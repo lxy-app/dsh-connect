@@ -33,8 +33,6 @@ var (
 	ErrDeviceNotFound          = errors.New("device not found")
 	ErrMobileDeviceNotFound    = errors.New("mobile device not found")
 	ErrMobileSessionInvalid    = errors.New("mobile session is invalid or expired")
-	ErrMobileGrantNotFound     = errors.New("mobile access grant not found")
-	ErrMobileGrantState        = errors.New("mobile access grant is not in the required state")
 	ErrUserDisabled            = errors.New("user is disabled")
 	ErrIdempotencyExists       = errors.New("idempotency record already exists")
 	ErrUserNotFound            = errors.New("user not found")

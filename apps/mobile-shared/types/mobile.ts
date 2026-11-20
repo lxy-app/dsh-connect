@@ -49,22 +49,16 @@ export type StoredMobileSession = {
 export type MobileWorkspaceSummary = {
   id: string;
   name: string;
+  /** Effective per-workspace scopes in the user access overview. */
+  scopes?: string[];
 };
 
+/** Read-only projection of the signed-in user's effective desktop permissions. */
 export type MobileAccessGrant = {
-  grantId: string;
-  mobileDeviceId?: string;
-  mobileDeviceName?: string;
-  mobileUserName?: string;
-  mobilePlatform?: string;
   deviceId: string;
-  deviceName?: string;
   workspaces: MobileWorkspaceSummary[];
   scopes: string[];
-  status: 'pending' | 'active' | 'denied' | 'revoked';
-  createdAt: string;
-  updatedAt: string;
-  decidedAt?: string;
+  status: 'active';
 };
 
 export type MobileDesktopAccess = {
@@ -82,7 +76,6 @@ export type MobileAccessOverview = {
 };
 
 export type MobileWorkspaceView = {
-  grantId: string;
   deviceId: string;
   deviceName: string;
   workspace: MobileWorkspaceSummary;

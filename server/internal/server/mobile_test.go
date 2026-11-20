@@ -5,43 +5,22 @@ import (
 	"context"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
 	"github.com/deepseek/dsh-connect/server/internal/store"
 )
 
-func issueMobilePairingCode(t *testing.T, environment *adminEnvironment, token string, userID string) protocol.MobilePairingCodeResponse {
+func loginMobile(t *testing.T, environment *adminEnvironment, email, password, deviceName string) protocol.MobileSessionResponse {
 	t.Helper()
-	body := map[string]string{}
-	if userID != "" {
-		body["userId"] = userID
-	}
-	status, response := testRequest(t, http.MethodPost, environment.http.URL+"/v1/admin/mobile/pairing-codes", token, body)
-	if status != http.StatusCreated {
-		t.Fatalf("create mobile pairing code status=%d body=%s", status, response)
-	}
-	var code protocol.MobilePairingCodeResponse
-	decodeTestJSON(t, response, &code)
-	if code.Code == "" || code.ExpiresAt.IsZero() || code.UserID == "" || code.PairingURL == "" {
-		t.Fatalf("invalid mobile pairing code response: %+v", code)
-	}
-	if !bytes.Contains([]byte(code.PairingURL), []byte("dshconnect://pair?")) || !bytes.Contains([]byte(code.PairingURL), []byte(code.Code)) {
-		t.Fatalf("pairing URL does not contain the code: %s", code.PairingURL)
-	}
-	return code
-}
-
-func pairMobile(t *testing.T, environment *adminEnvironment, code, deviceName string) protocol.MobileSessionResponse {
-	t.Helper()
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/pair", "", map[string]string{
-		"code":       code,
+	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/login", "", map[string]string{
+		"email":      email,
+		"password":   password,
 		"deviceName": deviceName,
 		"platform":   "ios",
 		"appVersion": "0.1.0",
 	})
 	if status != http.StatusOK {
-		t.Fatalf("mobile pair status=%d body=%s", status, body)
+		t.Fatalf("mobile login status=%d body=%s", status, body)
 	}
 	var session protocol.MobileSessionResponse
 	decodeTestJSON(t, body, &session)
@@ -54,66 +33,50 @@ func pairMobile(t *testing.T, environment *adminEnvironment, code, deviceName st
 	return session
 }
 
-func TestMobilePairingRefreshAndLogoutLifecycle(t *testing.T) {
+func TestMobileLoginRefreshAndLogoutLifecycle(t *testing.T) {
 	environment := newAdminEnvironment(t)
 	ownerToken, ownerID := environment.login(t, testOwnerEmail, testOwnerPassword)
-
-	code := issueMobilePairingCode(t, environment, ownerToken, "")
-	if code.UserID != ownerID || code.ServerURL != "http://server.test" {
-		t.Fatalf("unexpected pairing code target: %+v", code)
-	}
-	pair := pairMobile(t, environment, code.Code, "Owner iPhone")
-	if pair.User.ID != ownerID || pair.User.Email != testOwnerEmail {
-		t.Fatalf("mobile user projection=%+v", pair.User)
+	session := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Owner iPhone")
+	if session.User.ID != ownerID || session.User.Email != testOwnerEmail {
+		t.Fatalf("mobile user projection=%+v", session.User)
 	}
 
-	// Mobile access tokens do not grant session/device APIs until desktop grants
-	// are mapped to mobile users.
-	status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/devices", pair.AccessToken, nil)
+	// Mobile access tokens never authenticate bootstrap/Web Admin APIs.
+	status, body := testRequest(t, http.MethodGet, environment.http.URL+"/v1/devices", session.AccessToken, nil)
 	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
 
-	// The plaintext code and both credentials must never be persisted.
+	// The plaintext password and both credentials must never be persisted.
 	deviceDump := dumpTable(t, environment.databaseURL, "mobile_devices")
-	if bytes.Contains([]byte(deviceDump), []byte(pair.AccessToken)) || bytes.Contains([]byte(deviceDump), []byte(pair.RefreshToken)) {
-		t.Fatal("plaintext mobile credentials were persisted")
-	}
-	codeDump := dumpTable(t, environment.databaseURL, "mobile_pairing_codes")
-	if bytes.Contains([]byte(codeDump), []byte(code.Code)) {
-		t.Fatal("plaintext mobile pairing code was persisted")
+	if bytes.Contains([]byte(deviceDump), []byte(session.AccessToken)) || bytes.Contains([]byte(deviceDump), []byte(session.RefreshToken)) || bytes.Contains([]byte(deviceDump), []byte(testOwnerPassword)) {
+		t.Fatal("plaintext mobile login or credential material was persisted")
 	}
 
-	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", pair.AccessToken, nil)
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", session.AccessToken, nil)
 	if status != http.StatusOK {
 		t.Fatalf("mobile me status=%d body=%s", status, body)
 	}
 	var me protocol.MobileMeResponse
 	decodeTestJSON(t, body, &me)
-	if me.MobileDevice.MobileDeviceID != pair.MobileDeviceID || me.User.ID != ownerID || me.MobileDevice.Platform != "ios" {
+	if me.MobileDevice.MobileDeviceID != session.MobileDeviceID || me.User.ID != ownerID || me.MobileDevice.Platform != "ios" {
 		t.Fatalf("unexpected mobile me: %+v", me)
 	}
 
-	// Reusing the one-time code fails and does not create a second phone.
-	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/pair", "", map[string]string{
-		"code": code.Code, "deviceName": "Replay iPhone", "platform": "ios", "appVersion": "0.1.0",
-	})
-	assertErrorResponse(t, status, body, http.StatusConflict, protocol.CodePairingCodeUsed)
-
-	// Refreshing rotates both credentials.
+	// Refreshing rotates both credentials and invalidates both old values.
 	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/refresh", "", map[string]string{
-		"refreshToken": pair.RefreshToken,
+		"refreshToken": session.RefreshToken,
 	})
 	if status != http.StatusOK {
 		t.Fatalf("mobile refresh status=%d body=%s", status, body)
 	}
 	var refreshed protocol.MobileSessionResponse
 	decodeTestJSON(t, body, &refreshed)
-	if refreshed.AccessToken == pair.AccessToken || refreshed.RefreshToken == pair.RefreshToken {
-		t.Fatalf("refresh did not rotate tokens: %+v", refreshed)
+	if refreshed.MobileDeviceID != session.MobileDeviceID || refreshed.AccessToken == session.AccessToken || refreshed.RefreshToken == session.RefreshToken {
+		t.Fatalf("refresh did not rotate the same device credentials: %+v", refreshed)
 	}
-	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", pair.AccessToken, nil)
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", session.AccessToken, nil)
 	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
 	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/refresh", "", map[string]string{
-		"refreshToken": pair.RefreshToken,
+		"refreshToken": session.RefreshToken,
 	})
 	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
 	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", refreshed.AccessToken, nil)
@@ -132,54 +95,47 @@ func TestMobilePairingRefreshAndLogoutLifecycle(t *testing.T) {
 	})
 	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
 
-	// Pairing and refresh are audited without leaking credentials.
-	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/audit?action=mobile.pair&result=success", ownerToken, nil)
+	// Login is audited by user and mobile device without leaking secrets.
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/audit?action=mobile.login&result=success", ownerToken, nil)
 	if status != http.StatusOK {
 		t.Fatalf("mobile audit status=%d body=%s", status, body)
 	}
 	var audit auditListResponse
 	decodeTestJSON(t, body, &audit)
-	if audit.Total != 1 || audit.Entries[0].Actor != "user:"+ownerID || audit.Entries[0].DeviceID != pair.MobileDeviceID {
-		t.Fatalf("unexpected mobile pair audit: %+v", audit.Entries)
+	if audit.Total != 1 || audit.Entries[0].Actor != "user:"+ownerID || audit.Entries[0].DeviceID != session.MobileDeviceID {
+		t.Fatalf("unexpected mobile login audit: %+v", audit.Entries)
 	}
-	if bytes.Contains(body, []byte(pair.AccessToken)) || bytes.Contains(body, []byte(pair.RefreshToken)) {
-		t.Fatal("mobile audit leaked a credential")
+	if bytes.Contains(body, []byte(session.AccessToken)) || bytes.Contains(body, []byte(session.RefreshToken)) || bytes.Contains(body, []byte(testOwnerPassword)) {
+		t.Fatal("mobile audit leaked login or credential material")
 	}
 }
 
-func TestMobilePairingCodeExpiryAndValidation(t *testing.T) {
+func TestMobileLoginValidationAndAccountIdentity(t *testing.T) {
 	environment := newAdminEnvironment(t)
-	ownerToken, ownerID := environment.login(t, testOwnerEmail, testOwnerPassword)
+	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/pair", "", map[string]string{
-		"code": "invalid", "deviceName": "Bad iPhone", "platform": "windows", "appVersion": "0.1.0",
-	})
-	assertErrorResponse(t, status, body, http.StatusBadRequest, protocol.CodeInvalidRequest)
-
-	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/pair", "", map[string]string{
-		"code": "INVALID-CODE", "deviceName": "Bad iPhone", "platform": "ios", "appVersion": "0.1.0",
-	})
-	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodePairingCodeInvalid)
-
-	// Bootstrap callers must identify the target user explicitly.
-	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/admin/mobile/pairing-codes", testBootstrapToken, map[string]string{})
-	assertErrorResponse(t, status, body, http.StatusBadRequest, protocol.CodeInvalidRequest)
-	bootstrapCode := issueMobilePairingCode(t, environment, testBootstrapToken, ownerID)
-	if bootstrapCode.UserID != ownerID {
-		t.Fatalf("bootstrap pairing code target=%q, want %q", bootstrapCode.UserID, ownerID)
+	loginBody := map[string]string{
+		"email": testOwnerEmail, "password": "wrong-password", "deviceName": "Bad iPhone", "platform": "ios", "appVersion": "0.1.0",
+	}
+	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/login", "", loginBody)
+	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	wrongPasswordResponse := append([]byte(nil), body...)
+	loginBody["email"] = "missing-mobile@example.com"
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/login", "", loginBody)
+	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	if !bytes.Equal(body, wrongPasswordResponse) {
+		t.Fatalf("unknown email and wrong password responses differ: unknown=%s wrong=%s", body, wrongPasswordResponse)
 	}
 
-	expiring := newAdminEnvironment(t)
-	expiring.server.config.MobilePairingCodeTTL = 10 * time.Millisecond
-	expiringOwnerToken, _ := expiring.login(t, testOwnerEmail, testOwnerPassword)
-	expiringCode := issueMobilePairingCode(t, expiring, expiringOwnerToken, "")
-	time.Sleep(40 * time.Millisecond)
-	status, body = testRequest(t, http.MethodPost, expiring.http.URL+"/v1/mobile/pair", "", map[string]string{
-		"code": expiringCode.Code, "deviceName": "Late iPhone", "platform": "ios", "appVersion": "0.1.0",
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/login", "", map[string]string{
+		"email": testOwnerEmail, "password": testOwnerPassword, "deviceName": "Bad iPhone", "platform": "windows", "appVersion": "0.1.0",
 	})
-	assertErrorResponse(t, status, body, http.StatusConflict, protocol.CodePairingCodeExpired)
+	assertErrorResponse(t, status, body, http.StatusBadRequest, protocol.CodeInvalidRequest)
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/login", "", map[string]any{
+		"email": testOwnerEmail, "password": testOwnerPassword, "deviceName": "Bad iPhone", "platform": "ios", "appVersion": "0.1.0", "userId": "usr_other",
+	})
+	assertErrorResponse(t, status, body, http.StatusBadRequest, protocol.CodeInvalidRequest)
 
-	// A code issued for another user is bound to that user, not the issuer.
 	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/admin/users", ownerToken, map[string]string{
 		"email": "mobile-member@example.com", "displayName": "Mobile Member", "password": "member-password", "role": store.RoleMember,
 	})
@@ -188,17 +144,41 @@ func TestMobilePairingCodeExpiryAndValidation(t *testing.T) {
 	}
 	var member store.User
 	decodeTestJSON(t, body, &member)
-	memberCode := issueMobilePairingCode(t, environment, ownerToken, member.ID)
-	if memberCode.UserID != member.ID {
-		t.Fatalf("pairing code target=%q, want %q", memberCode.UserID, member.ID)
-	}
-	memberSession := pairMobile(t, environment, memberCode.Code, "Member iPhone")
+	memberSession := loginMobile(t, environment, member.Email, "member-password", "Member iPhone")
 	if memberSession.User.ID != member.ID || memberSession.User.Role != store.RoleMember {
 		t.Fatalf("mobile session user=%+v", memberSession.User)
 	}
 }
 
-func TestMobilePairingPermissionsAndAdminRevocation(t *testing.T) {
+func TestMobileLoginRateLimitAndSuccessReset(t *testing.T) {
+	environment := newAdminEnvironment(t)
+	loginURL := environment.http.URL + "/v1/mobile/auth/login"
+	failedBody := func() map[string]string {
+		return map[string]string{
+			"email": testOwnerEmail, "password": "wrong-password", "deviceName": "Rate Limit iPhone", "platform": "ios", "appVersion": "0.1.0",
+		}
+	}
+
+	// Four failures are still below the threshold; a successful login clears them.
+	for attempt := 1; attempt < mobileLoginMaxFailures; attempt++ {
+		status, body := testRequest(t, http.MethodPost, loginURL, "", failedBody())
+		assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	}
+	loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Successful Reset iPhone")
+
+	// If success had not reset the key, the first request here would reach the
+	// threshold. Five fresh failures must all remain ordinary unauthorized responses.
+	for attempt := 1; attempt <= mobileLoginMaxFailures; attempt++ {
+		status, body := testRequest(t, http.MethodPost, loginURL, "", failedBody())
+		assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	}
+	status, body := testRequest(t, http.MethodPost, loginURL, "", map[string]string{
+		"email": testOwnerEmail, "password": testOwnerPassword, "deviceName": "Blocked iPhone", "platform": "ios", "appVersion": "0.1.0",
+	})
+	assertErrorResponse(t, status, body, http.StatusTooManyRequests, protocol.CodeRateLimited)
+}
+
+func TestMobileDeviceAdminPermissionsAndRevocation(t *testing.T) {
 	environment := newAdminEnvironment(t)
 	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 
@@ -211,19 +191,7 @@ func TestMobilePairingPermissionsAndAdminRevocation(t *testing.T) {
 	var member store.User
 	decodeTestJSON(t, body, &member)
 	memberToken, _ := environment.login(t, member.Email, "member-password")
-
-	// Members may issue a code for themselves, but not for another user.
-	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/admin/mobile/pairing-codes", memberToken, map[string]string{})
-	if status != http.StatusCreated {
-		t.Fatalf("member self pairing code status=%d body=%s", status, body)
-	}
-	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/admin/mobile/pairing-codes", memberToken, map[string]string{
-		"userId": "usr_owner",
-	})
-	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
-
-	code := issueMobilePairingCode(t, environment, ownerToken, member.ID)
-	session := pairMobile(t, environment, code.Code, "Member iPhone")
+	session := loginMobile(t, environment, member.Email, "member-password", "Member iPhone")
 
 	// Members cannot enumerate or revoke phones.
 	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/admin/mobile-devices", memberToken, nil)
@@ -239,7 +207,7 @@ func TestMobilePairingPermissionsAndAdminRevocation(t *testing.T) {
 	var listed protocol.MobileDeviceListResponse
 	decodeTestJSON(t, body, &listed)
 	if len(listed.Devices) != 1 || listed.Devices[0].MobileDeviceID != session.MobileDeviceID || listed.Devices[0].Status != "active" || listed.Devices[0].UserID != member.ID {
-		t.Fatalf("unexpected mobile devices: %+v", listed.Devices)
+		t.Fatalf("unexpected mobile devices: %+v", listed)
 	}
 	if bytes.Contains(body, []byte(session.AccessToken)) || bytes.Contains(body, []byte(session.RefreshToken)) {
 		t.Fatal("mobile device listing leaked a credential")
@@ -273,8 +241,7 @@ func TestDisabledUserInvalidatesMobileAccess(t *testing.T) {
 	}
 	var member store.User
 	decodeTestJSON(t, body, &member)
-	code := issueMobilePairingCode(t, environment, ownerToken, member.ID)
-	session := pairMobile(t, environment, code.Code, "Disabled iPhone")
+	session := loginMobile(t, environment, member.Email, "member-password", "Disabled iPhone")
 
 	status, body = testRequest(t, http.MethodPatch, environment.http.URL+"/v1/admin/users/"+member.ID, ownerToken, map[string]string{
 		"status": store.UserStatusDisabled,
@@ -288,6 +255,10 @@ func TestDisabledUserInvalidatesMobileAccess(t *testing.T) {
 		"refreshToken": session.RefreshToken,
 	})
 	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/login", "", map[string]string{
+		"email": member.Email, "password": "member-password", "deviceName": "Disabled Login", "platform": "ios", "appVersion": "0.1.0",
+	})
+	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
 }
 
 func TestDeletingUserRemovesMobileIdentity(t *testing.T) {
@@ -302,8 +273,7 @@ func TestDeletingUserRemovesMobileIdentity(t *testing.T) {
 	}
 	var member store.User
 	decodeTestJSON(t, body, &member)
-	code := issueMobilePairingCode(t, environment, ownerToken, member.ID)
-	session := pairMobile(t, environment, code.Code, "Delete iPhone")
+	session := loginMobile(t, environment, member.Email, "member-password", "Delete iPhone")
 
 	status, body = testRequest(t, http.MethodDelete, environment.http.URL+"/v1/admin/users/"+member.ID, ownerToken, nil)
 	if status != http.StatusNoContent {

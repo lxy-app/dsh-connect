@@ -18,8 +18,6 @@ import (
 
 func (s *Server) mobileAccessRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/mobile/access", s.mobileAuth(s.handleMobileAccessOverview))
-	mux.HandleFunc("POST /v1/mobile/access/requests", s.mobileAuth(s.handleMobileAccessRequest))
-	mux.HandleFunc("DELETE /v1/mobile/access/{grantId}", s.mobileAuth(s.handleMobileAccessRevoke))
 	mux.HandleFunc("GET /v1/mobile/workspaces", s.mobileAuth(s.handleMobileWorkspaces))
 	mux.HandleFunc("GET /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionList))
 	mux.HandleFunc("POST /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionCreate))
@@ -30,68 +28,100 @@ func (s *Server) mobileAccessRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/cancel", s.mobileAuth(s.handleMobileSessionCancel))
 }
 
-// handleMobileAccessOverview lists desktops and the phone's grant state. It
-// intentionally omits workspace filesystem paths.
+type mobileUserWorkspaceAccess struct {
+	summary protocol.MobileWorkspaceSummary
+	scopes  []string
+}
+
+type mobileUserDesktopAccess struct {
+	device     protocol.Device
+	workspaces []mobileUserWorkspaceAccess
+}
+
+// mobileUserDesktops resolves the only mobile authorization source: enabled
+// user policies intersected with the workspaces and scopes currently exposed by
+// each Connector. Mobile device identity never adds or removes permissions.
+func (s *Server) mobileUserDesktops(ctx context.Context, userID string) ([]mobileUserDesktopAccess, error) {
+	access, err := s.policyAccessForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	devices, err := s.store.Devices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]mobileUserDesktopAccess, 0, len(devices))
+	for _, record := range devices {
+		device := record.Device
+		if device.Status == "revoked" || device.Status == "waiting_desktop_authorization" {
+			continue
+		}
+		allowedWorkspaces := access.workspaceScopes(device.DeviceID)
+		if len(allowedWorkspaces) == 0 {
+			continue
+		}
+		desktop := mobileUserDesktopAccess{
+			device:     device,
+			workspaces: make([]mobileUserWorkspaceAccess, 0, len(allowedWorkspaces)),
+		}
+		for _, workspace := range mobileWorkspaceSummaries(device.Workspaces) {
+			allowedScopes, allowed := allowedWorkspaces[workspace.ID]
+			if !allowed {
+				continue
+			}
+			effectiveScopes := make([]string, 0, len(allowedScopes))
+			for scope := range allowedScopes {
+				if hasScope(device.Scopes, scope) {
+					effectiveScopes = append(effectiveScopes, scope)
+				}
+			}
+			if len(effectiveScopes) == 0 {
+				continue
+			}
+			desktop.workspaces = append(desktop.workspaces, mobileUserWorkspaceAccess{
+				summary: workspace,
+				scopes:  orderScopes(effectiveScopes),
+			})
+		}
+		if len(desktop.workspaces) > 0 {
+			result = append(result, desktop)
+		}
+	}
+	return result, nil
+}
+
+// handleMobileAccessOverview lists effective user permissions without exposing
+// workspace filesystem paths.
 func (s *Server) handleMobileAccessOverview(w http.ResponseWriter, r *http.Request) {
 	actor, ok := mobileFromContext(r.Context())
 	if !ok {
 		writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile authentication required", false))
 		return
 	}
-	grants, err := s.store.MobileAccessGrantsForMobile(r.Context(), actor.Device.Device.MobileDeviceID)
+	accessible, err := s.mobileUserDesktops(r.Context(), actor.User.ID)
 	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user desktop access", true))
 		return
 	}
-	byDevice := make(map[string]store.MobileAccessGrantRecord, len(grants))
-	for _, grant := range grants {
-		byDevice[grant.DeviceID] = grant
-	}
-	devices, err := s.store.Devices(r.Context())
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load desktop devices", true))
-		return
-	}
-	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
-		return
-	}
-	desktops := make([]protocol.MobileDesktopAccess, 0, len(devices))
-	for _, device := range devices {
-		if device.Device.Status == "revoked" || device.Device.Status == "waiting_desktop_authorization" {
-			continue
-		}
-		allowedWorkspaces := access.workspaceScopes(device.Device.DeviceID)
-		if len(allowedWorkspaces) == 0 {
-			continue
-		}
-		availableWorkspaces := make([]protocol.MobileWorkspaceSummary, 0, len(allowedWorkspaces))
-		for _, workspace := range mobileWorkspaceSummaries(device.Device.Workspaces) {
-			if _, allowed := allowedWorkspaces[workspace.ID]; allowed {
-				availableWorkspaces = append(availableWorkspaces, workspace)
-			}
-		}
+	desktops := make([]protocol.MobileDesktopAccess, 0, len(accessible))
+	for _, current := range accessible {
 		desktop := protocol.MobileDesktopAccess{
-			DeviceID:            device.Device.DeviceID,
-			DeviceName:          device.Device.DeviceName,
-			ConnectorVersion:    device.Device.ConnectorVersion,
-			Online:              s.hub.Get(device.Device.DeviceID) != nil,
-			AvailableWorkspaces: availableWorkspaces,
-			AvailableScopes:     policyScopeUnion(allowedWorkspaces, device.Device.Scopes),
+			DeviceID:            current.device.DeviceID,
+			DeviceName:          current.device.DeviceName,
+			ConnectorVersion:    current.device.ConnectorVersion,
+			Online:              s.hub.Get(current.device.DeviceID) != nil,
+			AvailableWorkspaces: make([]protocol.MobileWorkspaceSummary, 0, len(current.workspaces)),
 		}
-		if grant, exists := byDevice[device.Device.DeviceID]; exists {
-			effectiveGrant := grant
-			effectiveGrant.Workspaces = nil
-			for _, workspace := range grant.Workspaces {
-				if _, allowed := allowedWorkspaces[workspace.ID]; allowed {
-					effectiveGrant.Workspaces = append(effectiveGrant.Workspaces, workspace)
-				}
+		scopeSet := make(map[string]struct{})
+		for _, workspace := range current.workspaces {
+			summary := workspace.summary
+			summary.Scopes = append([]string(nil), workspace.scopes...)
+			desktop.AvailableWorkspaces = append(desktop.AvailableWorkspaces, summary)
+			for _, scope := range workspace.scopes {
+				scopeSet[scope] = struct{}{}
 			}
-			effectiveGrant.Scopes = policyGrantScopes(grant, access)
-			projection := mobileGrantProjection(effectiveGrant, actor, device.Device)
-			desktop.Grant = &projection
 		}
+		desktop.AvailableScopes = orderScopes(setKeys(scopeSet))
 		desktops = append(desktops, desktop)
 	}
 	sort.Slice(desktops, func(i, j int) bool {
@@ -103,173 +133,27 @@ func (s *Server) handleMobileAccessOverview(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, protocol.MobileAccessOverviewResponse{Desktops: desktops})
 }
 
-// handleMobileAccessRequest asks the desktop user to approve a narrow grant.
-func (s *Server) handleMobileAccessRequest(w http.ResponseWriter, r *http.Request) {
-	actor, ok := mobileFromContext(r.Context())
-	if !ok {
-		writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile authentication required", false))
-		return
-	}
-	var request protocol.MobileAccessRequest
-	if commandError := decodeJSON(w, r, s.config.MaxPayloadBytes, &request); commandError != nil {
-		writeAPIError(w, *commandError)
-		return
-	}
-	if !validID(request.DeviceID) {
-		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "valid deviceId required", false))
-		return
-	}
-	device, err := s.store.Device(r.Context(), request.DeviceID)
-	if errors.Is(err, store.ErrDeviceNotFound) {
-		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "desktop device not found", false))
-		return
-	}
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load desktop device", true))
-		return
-	}
-	if device.Device.Status == "revoked" || device.Device.Status == "waiting_desktop_authorization" {
-		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "desktop device is not available for access", false))
-		return
-	}
-	workspaces, workspaceError := selectGrantedWorkspaces(device.Device.Workspaces, request.Workspaces)
-	if workspaceError != nil {
-		writeAPIError(w, *workspaceError)
-		return
-	}
-	scopes, scopeError := selectGrantedScopes(device.Device.Scopes, request.Scopes)
-	if scopeError != nil {
-		writeAPIError(w, *scopeError)
-		return
-	}
-	access, accessError := s.policyAccessForUser(r.Context(), actor.User.ID)
-	if accessError != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
-		return
-	}
-	if !access.allowsRequest(device.Device.DeviceID, request.Workspaces, request.Scopes) {
-		writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "the user access policy does not allow this request", false))
-		return
-	}
-
-	grantID, err := randomToken("mag_")
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not generate access grant", true))
-		return
-	}
-	now := nowUTC()
-	record, err := s.store.RequestMobileAccess(r.Context(), store.MobileAccessGrantRecord{
-		ID:             grantID,
-		MobileDeviceID: actor.Device.Device.MobileDeviceID,
-		DeviceID:       device.Device.DeviceID,
-		UserID:         actor.User.ID,
-		Workspaces:     workspaces,
-		Scopes:         scopes,
-	}, now)
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not persist access request", true))
-		return
-	}
-	s.audit(store.AuditEntry{
-		OccurredAt: now,
-		Actor:      "user:" + actor.User.ID,
-		Action:     "mobile.access.request",
-		DeviceID:   actor.Device.Device.MobileDeviceID,
-		Result:     "success",
-		SourceIP:   sourceIP(r),
-	})
-	grant := mobileGrantProjection(record, actor, device.Device)
-	writeJSON(w, http.StatusCreated, grant)
-}
-
-// handleMobileAccessRevoke lets the phone withdraw its own request or grant.
-func (s *Server) handleMobileAccessRevoke(w http.ResponseWriter, r *http.Request) {
-	actor, ok := mobileFromContext(r.Context())
-	if !ok {
-		writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile authentication required", false))
-		return
-	}
-	grantID := r.PathValue("grantId")
-	if !validID(grantID) {
-		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "valid grantId required", false))
-		return
-	}
-	grant, err := s.store.MobileAccessGrantByID(r.Context(), grantID)
-	if errors.Is(err, store.ErrMobileGrantNotFound) || (err == nil && grant.MobileDeviceID != actor.Device.Device.MobileDeviceID) {
-		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "access grant not found", false))
-		return
-	}
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load access grant", true))
-		return
-	}
-	now := nowUTC()
-	err = s.store.RevokeMobileAccessGrantByID(r.Context(), grantID, actor.Device.Device.MobileDeviceID, now)
-	if errors.Is(err, store.ErrMobileGrantNotFound) {
-		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "access grant not found", false))
-		return
-	}
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not revoke access grant", true))
-		return
-	}
-	s.events.CloseMobileForDevice(actor.Device.Device.MobileDeviceID, grant.DeviceID)
-	s.audit(store.AuditEntry{
-		OccurredAt: now,
-		Actor:      "user:" + actor.User.ID,
-		Action:     "mobile.access.revoke",
-		DeviceID:   actor.Device.Device.MobileDeviceID,
-		Result:     "success",
-		SourceIP:   sourceIP(r),
-	})
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleMobileWorkspaces flattens active grants into a workspace directory.
+// handleMobileWorkspaces flattens effective user policies into a workspace directory.
 func (s *Server) handleMobileWorkspaces(w http.ResponseWriter, r *http.Request) {
 	actor, ok := mobileFromContext(r.Context())
 	if !ok {
 		writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile authentication required", false))
 		return
 	}
-	grants, err := s.store.MobileAccessGrantsForMobile(r.Context(), actor.Device.Device.MobileDeviceID)
+	accessible, err := s.mobileUserDesktops(r.Context(), actor.User.ID)
 	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
-		return
-	}
-	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user desktop access", true))
 		return
 	}
 	workspaces := make([]protocol.MobileWorkspaceView, 0)
-	for _, grant := range grants {
-		if grant.Status != "active" {
-			continue
-		}
-		device, err := s.store.Device(r.Context(), grant.DeviceID)
-		if err != nil {
-			continue
-		}
-		online := s.hub.Get(grant.DeviceID) != nil
-		for _, workspace := range grant.Workspaces {
-			allowedScopes := access.scopes(grant.DeviceID, workspace.ID)
-			scopes := make([]string, 0, len(allowedScopes))
-			for _, scope := range grant.Scopes {
-				if hasScope(allowedScopes, scope) {
-					scopes = append(scopes, scope)
-				}
-			}
-			if len(scopes) == 0 {
-				continue
-			}
+	for _, desktop := range accessible {
+		for _, workspace := range desktop.workspaces {
 			workspaces = append(workspaces, protocol.MobileWorkspaceView{
-				GrantID:    grant.ID,
-				DeviceID:   grant.DeviceID,
-				DeviceName: device.Device.DeviceName,
-				Workspace:  protocol.MobileWorkspaceSummary{ID: workspace.ID, Name: workspace.Name},
-				Scopes:     orderScopes(scopes),
-				Online:     online,
+				DeviceID:   desktop.device.DeviceID,
+				DeviceName: desktop.device.DeviceName,
+				Workspace:  workspace.summary,
+				Scopes:     workspace.scopes,
+				Online:     s.hub.Get(desktop.device.DeviceID) != nil,
 			})
 		}
 	}
@@ -296,8 +180,8 @@ type connectorSessionList struct {
 }
 
 // handleMobileSessionList aggregates session metadata from every desktop with
-// an active read grant. Sessions outside the phone's granted workspaces are
-// filtered out locally even though the desktop only returns authorized ones.
+// an effective user read policy. Sessions outside the user's authorized workspaces
+// are filtered locally even though the desktop only returns authorized ones.
 func (s *Server) handleMobileSessionList(w http.ResponseWriter, r *http.Request) {
 	actor, ok := mobileFromContext(r.Context())
 	if !ok {
@@ -310,14 +194,9 @@ func (s *Server) handleMobileSessionList(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "valid deviceId and workspaceId required", false))
 		return
 	}
-	grants, err := s.store.MobileAccessGrantsForMobile(r.Context(), actor.Device.Device.MobileDeviceID)
+	accessible, err := s.mobileUserDesktops(r.Context(), actor.User.ID)
 	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
-		return
-	}
-	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user desktop access", true))
 		return
 	}
 	type workspaceAccess struct {
@@ -329,39 +208,26 @@ func (s *Server) handleMobileSessionList(w http.ResponseWriter, r *http.Request)
 		workspaces map[string]workspaceAccess
 	}
 	groups := make(map[string]*accessGroup)
-	for _, grant := range grants {
-		if grant.Status != "active" || !hasScope(grant.Scopes, "read") {
+	for _, desktop := range accessible {
+		deviceID := desktop.device.DeviceID
+		if deviceFilter != "" && deviceID != deviceFilter {
 			continue
 		}
-		if deviceFilter != "" && grant.DeviceID != deviceFilter {
-			continue
-		}
-		group := groups[grant.DeviceID]
-		if group == nil {
-			group = &accessGroup{deviceID: grant.DeviceID, workspaces: make(map[string]workspaceAccess)}
-			groups[grant.DeviceID] = group
-		}
-		for _, workspace := range grant.Workspaces {
-			if workspaceFilter != "" && workspace.ID != workspaceFilter {
+		group := &accessGroup{deviceID: deviceID, workspaces: make(map[string]workspaceAccess)}
+		for _, workspace := range desktop.workspaces {
+			if workspaceFilter != "" && workspace.summary.ID != workspaceFilter {
 				continue
 			}
-			allowedScopes := access.scopes(grant.DeviceID, workspace.ID)
-			if !hasScope(allowedScopes, "read") {
+			if !hasScope(workspace.scopes, "read") {
 				continue
 			}
-			effectiveScopes := make([]string, 0, len(allowedScopes))
-			for _, scope := range grant.Scopes {
-				if hasScope(allowedScopes, scope) {
-					effectiveScopes = append(effectiveScopes, scope)
-				}
-			}
-			group.workspaces[workspace.ID] = workspaceAccess{
-				summary: protocol.MobileWorkspaceSummary{ID: workspace.ID, Name: workspace.Name},
-				scopes:  orderScopes(effectiveScopes),
+			group.workspaces[workspace.summary.ID] = workspaceAccess{
+				summary: workspace.summary,
+				scopes:  workspace.scopes,
 			}
 		}
-		if len(group.workspaces) == 0 {
-			delete(groups, grant.DeviceID)
+		if len(group.workspaces) > 0 {
+			groups[deviceID] = group
 		}
 	}
 	if deviceFilter != "" {
@@ -443,8 +309,8 @@ func (s *Server) handleMobileSessionList(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, protocol.MobileSessionListResponse{Sessions: sessions, Warnings: warnings})
 }
 
-// handleMobileSessionCreate creates a session in a workspace explicitly granted
-// to this phone. The first prompt is sent separately with its own requestId.
+// handleMobileSessionCreate creates a session in a workspace allowed by the
+// user's effective policy. The first prompt is sent separately with its own requestId.
 func (s *Server) handleMobileSessionCreate(w http.ResponseWriter, r *http.Request) {
 	var request protocol.MobileSessionCreateRequest
 	if commandError := decodeJSON(w, r, s.config.MaxPayloadBytes, &request); commandError != nil {
@@ -765,46 +631,30 @@ func (s *Server) handleMobileSessionCancel(w http.ResponseWriter, r *http.Reques
 	writeRawJSON(w, http.StatusOK, result)
 }
 
-// authorizeMobileSession verifies that this phone has an active grant for the
-// desktop, workspace and required scope. The Connector independently validates
-// the session's real workspace ownership.
+// authorizeMobileSession verifies the user's effective policy for the desktop,
+// workspace and required scope. The Connector independently validates the
+// session's real workspace ownership and Router rechecks desktop grants.
 func (s *Server) authorizeMobileSession(r *http.Request, deviceID, workspaceID, sessionID, scope string) (mobileActor, *protocol.Error) {
 	actor, ok := mobileFromContext(r.Context())
 	if !ok {
 		return mobileActor{}, errorPtr(protocol.NewError(protocol.CodeUnauthorized, "mobile authentication required", false))
 	}
 	_ = sessionID
-	grant, err := s.store.MobileAccessGrant(r.Context(), actor.Device.Device.MobileDeviceID, deviceID)
-	if errors.Is(err, store.ErrMobileGrantNotFound) {
-		return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "no access grant for this desktop", false))
-	}
+	accessible, err := s.mobileUserDesktops(r.Context(), actor.User.ID)
 	if err != nil {
-		return actor, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load access grant", true))
+		return actor, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not resolve user desktop access", true))
 	}
-	if grant.Status != "active" {
-		return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "desktop access is not active", false))
-	}
-	if !hasScope(grant.Scopes, scope) {
-		return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "the access grant does not include this action", false))
-	}
-	allowed := false
-	for _, workspace := range grant.Workspaces {
-		if workspace.ID == workspaceID {
-			allowed = true
-			break
+	for _, desktop := range accessible {
+		if desktop.device.DeviceID != deviceID {
+			continue
+		}
+		for _, workspace := range desktop.workspaces {
+			if workspace.summary.ID == workspaceID && hasScope(workspace.scopes, scope) {
+				return actor, nil
+			}
 		}
 	}
-	if !allowed {
-		return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "the workspace is not granted to this phone", false))
-	}
-	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
-	if err != nil {
-		return actor, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
-	}
-	if !access.allows(deviceID, workspaceID, scope) {
-		return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "the user access policy does not include this action", false))
-	}
-	return actor, nil
+	return actor, errorPtr(protocol.NewError(protocol.CodeForbidden, "the user access policy does not include this desktop, workspace, and action", false))
 }
 
 func (s *Server) auditMobileSession(actor mobileActor, r *http.Request, action, deviceID, sessionID, requestID string, commandError *protocol.Error) {
@@ -837,10 +687,6 @@ func (s *Server) handleConnectorRequest(ctx context.Context, connection *connect
 		return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "requestId and method are required", false))
 	}
 	switch request.Method {
-	case protocol.ConnectorMethodMobileAccessList:
-		return s.connectorMobileAccessList(ctx, connection.deviceID)
-	case protocol.ConnectorMethodMobileAccessDecide:
-		return s.connectorMobileAccessDecide(ctx, connection.deviceID, request.Params)
 	case protocol.ConnectorMethodPairUpdateGrants:
 		return s.connectorUpdateGrants(ctx, connection.deviceID, request.Params)
 	case protocol.ConnectorMethodInteractionAudience:
@@ -851,9 +697,8 @@ func (s *Server) handleConnectorRequest(ctx context.Context, connection *connect
 }
 
 // connectorUpdateGrants lets the desktop explicitly widen or narrow its own
-// authorized workspaces and scopes without re-pairing. Phones keep their own
-// grants; every later command still checks the device grant, so a narrowed
-// desktop grant takes effect immediately.
+// authorized workspaces and scopes without re-pairing. User-policy permissions
+// are intersected with these current grants, so narrowing takes effect immediately.
 func (s *Server) connectorUpdateGrants(ctx context.Context, deviceID string, params json.RawMessage) (protocol.Device, *protocol.Error) {
 	var input protocol.ConnectorUpdateGrants
 	if commandError := decodeRawJSON(params, &input); commandError != nil {
@@ -881,169 +726,7 @@ func (s *Server) connectorUpdateGrants(ctx context.Context, deviceID string, par
 	return updated.Device, nil
 }
 
-func (s *Server) connectorMobileAccessList(ctx context.Context, deviceID string) (protocol.ConnectorMobileAccessListResponse, *protocol.Error) {
-	device, err := s.store.Device(ctx, deviceID)
-	if errors.Is(err, store.ErrDeviceNotFound) {
-		return protocol.ConnectorMobileAccessListResponse{}, errorPtr(protocol.NewError(protocol.CodeNotFound, "desktop device not found", false))
-	}
-	if err != nil {
-		return protocol.ConnectorMobileAccessListResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load desktop device", true))
-	}
-	grants, err := s.store.MobileAccessGrantsForDevice(ctx, deviceID)
-	if err != nil {
-		return protocol.ConnectorMobileAccessListResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
-	}
-	projections := make([]protocol.MobileAccessGrant, 0, len(grants))
-	for _, grant := range grants {
-		projection := protocol.MobileAccessGrant{
-			GrantID:        grant.ID,
-			MobileDeviceID: grant.MobileDeviceID,
-			DeviceID:       grant.DeviceID,
-			DeviceName:     device.Device.DeviceName,
-			Workspaces:     mobileWorkspaceSummaries(grant.Workspaces),
-			Scopes:         orderScopes(grant.Scopes),
-			Status:         grant.Status,
-			CreatedAt:      grant.CreatedAt,
-			UpdatedAt:      grant.UpdatedAt,
-			DecidedAt:      grant.DecidedAt,
-		}
-		if mobileDevice, err := s.store.MobileDeviceByID(ctx, grant.MobileDeviceID); err == nil {
-			projection.MobileDeviceName = mobileDevice.Device.DeviceName
-			projection.MobilePlatform = mobileDevice.Device.Platform
-		}
-		if owner, err := s.store.UserByID(ctx, grant.UserID); err == nil {
-			projection.MobileUserName = owner.DisplayName
-		}
-		projections = append(projections, projection)
-	}
-	return protocol.ConnectorMobileAccessListResponse{
-		Grants:              projections,
-		AvailableWorkspaces: mobileWorkspaceSummaries(device.Device.Workspaces),
-		AvailableScopes:     orderScopes(device.Device.Scopes),
-	}, nil
-}
-
-func (s *Server) connectorMobileAccessDecide(ctx context.Context, deviceID string, params json.RawMessage) (protocol.MobileAccessGrant, *protocol.Error) {
-	var decision protocol.ConnectorMobileAccessDecision
-	if commandError := decodeRawJSON(params, &decision); commandError != nil {
-		return protocol.MobileAccessGrant{}, commandError
-	}
-	if !validID(decision.MobileDeviceID) {
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "valid mobileDeviceId required", false))
-	}
-	var status string
-	switch decision.Action {
-	case "allow":
-		status = "active"
-	case "deny":
-		status = "denied"
-	case "revoke":
-		status = "revoked"
-	default:
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "action must be allow, deny or revoke", false))
-	}
-	device, err := s.store.Device(ctx, deviceID)
-	if errors.Is(err, store.ErrDeviceNotFound) {
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeNotFound, "desktop device not found", false))
-	}
-	if err != nil {
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load desktop device", true))
-	}
-	grant, err := s.store.MobileAccessGrant(ctx, decision.MobileDeviceID, deviceID)
-	if errors.Is(err, store.ErrMobileGrantNotFound) {
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeNotFound, "mobile access request not found", false))
-	}
-	if err != nil {
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load mobile access request", true))
-	}
-
-	if status == "active" {
-		requestedWorkspaces := make(map[string]struct{}, len(grant.Workspaces))
-		for _, workspace := range grant.Workspaces {
-			requestedWorkspaces[workspace.ID] = struct{}{}
-		}
-		for _, workspaceID := range decision.Workspaces {
-			if _, requested := requestedWorkspaces[workspaceID]; !requested {
-				return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeForbidden, "the desktop can only narrow the requested workspaces", false))
-			}
-		}
-		requestedScopes := make(map[string]struct{}, len(grant.Scopes))
-		for _, scope := range grant.Scopes {
-			requestedScopes[scope] = struct{}{}
-		}
-		for _, scope := range decision.Scopes {
-			if _, requested := requestedScopes[scope]; !requested {
-				return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeForbidden, "the desktop can only narrow the requested actions", false))
-			}
-		}
-	}
-
-	workspaces := grant.Workspaces
-	scopes := grant.Scopes
-	if status == "active" {
-		selectedWorkspaces, workspaceError := selectGrantedWorkspaces(device.Device.Workspaces, decision.Workspaces)
-		if workspaceError != nil {
-			return protocol.MobileAccessGrant{}, workspaceError
-		}
-		selectedScopes, scopeError := selectGrantedScopes(device.Device.Scopes, decision.Scopes)
-		if scopeError != nil {
-			return protocol.MobileAccessGrant{}, scopeError
-		}
-		workspaces = selectedWorkspaces
-		scopes = selectedScopes
-	}
-	now := nowUTC()
-	updated, err := s.store.DecideMobileAccessGrant(ctx, decision.MobileDeviceID, deviceID, status, workspaces, scopes, now)
-	if errors.Is(err, store.ErrMobileGrantState) {
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeConflict, "mobile access request is no longer pending", false))
-	}
-	if err != nil {
-		return protocol.MobileAccessGrant{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not decide mobile access request", true))
-	}
-	if status != "active" {
-		s.events.CloseMobileForDevice(decision.MobileDeviceID, deviceID)
-	}
-	action := "mobile.access." + decision.Action
-	s.audit(store.AuditEntry{
-		OccurredAt: now,
-		Actor:      "desktop:" + deviceID,
-		Action:     action,
-		DeviceID:   deviceID,
-		Result:     "success",
-	})
-	return protocol.MobileAccessGrant{
-		GrantID:        updated.ID,
-		MobileDeviceID: updated.MobileDeviceID,
-		DeviceID:       updated.DeviceID,
-		DeviceName:     device.Device.DeviceName,
-		Workspaces:     mobileWorkspaceSummaries(updated.Workspaces),
-		Scopes:         orderScopes(updated.Scopes),
-		Status:         updated.Status,
-		CreatedAt:      updated.CreatedAt,
-		UpdatedAt:      updated.UpdatedAt,
-		DecidedAt:      updated.DecidedAt,
-	}, nil
-}
-
 // ---------- small helpers ----------
-
-func mobileGrantProjection(grant store.MobileAccessGrantRecord, actor mobileActor, device protocol.Device) protocol.MobileAccessGrant {
-	return protocol.MobileAccessGrant{
-		GrantID:          grant.ID,
-		MobileDeviceID:   grant.MobileDeviceID,
-		MobileDeviceName: actor.Device.Device.DeviceName,
-		MobileUserName:   actor.User.DisplayName,
-		MobilePlatform:   actor.Device.Device.Platform,
-		DeviceID:         grant.DeviceID,
-		DeviceName:       device.DeviceName,
-		Workspaces:       mobileWorkspaceSummaries(grant.Workspaces),
-		Scopes:           orderScopes(grant.Scopes),
-		Status:           grant.Status,
-		CreatedAt:        grant.CreatedAt,
-		UpdatedAt:        grant.UpdatedAt,
-		DecidedAt:        grant.DecidedAt,
-	}
-}
 
 func mobileWorkspaceSummaries(values []protocol.Workspace) []protocol.MobileWorkspaceSummary {
 	result := make([]protocol.MobileWorkspaceSummary, 0, len(values))
@@ -1063,101 +746,6 @@ func mobileWorkspaceSummaries(values []protocol.Workspace) []protocol.MobileWork
 		result = append(result, protocol.MobileWorkspaceSummary{ID: workspace.ID, Name: name})
 	}
 	return result
-}
-
-func selectGrantedWorkspaces(available []protocol.Workspace, requested []string) ([]protocol.Workspace, *protocol.Error) {
-	if len(requested) == 0 {
-		return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "select at least one workspace", false))
-	}
-	byID := make(map[string]protocol.Workspace, len(available))
-	for _, workspace := range available {
-		byID[workspace.ID] = workspace
-	}
-	result := make([]protocol.Workspace, 0, len(requested))
-	seen := make(map[string]struct{}, len(requested))
-	for _, id := range requested {
-		if !validID(id) {
-			return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "invalid workspace id", false))
-		}
-		if _, duplicate := seen[id]; duplicate {
-			continue
-		}
-		workspace, exists := byID[id]
-		if !exists {
-			return nil, errorPtr(protocol.NewError(protocol.CodeForbidden, "workspace is not authorized on this desktop", false))
-		}
-		seen[id] = struct{}{}
-		result = append(result, workspace)
-	}
-	if len(result) == 0 {
-		return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "select at least one workspace", false))
-	}
-	return result, nil
-}
-
-func selectGrantedScopes(available []string, requested []string) ([]string, *protocol.Error) {
-	if len(requested) == 0 {
-		return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "select at least one action", false))
-	}
-	byName := make(map[string]struct{}, len(available))
-	for _, scope := range available {
-		byName[scope] = struct{}{}
-	}
-	seen := make(map[string]struct{}, len(requested))
-	for _, scope := range requested {
-		if scope != "read" && scope != "prompt" && scope != "approve" && scope != "cancel" {
-			return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "unsupported scope", false))
-		}
-		if _, duplicate := seen[scope]; duplicate {
-			continue
-		}
-		if _, allowed := byName[scope]; !allowed {
-			return nil, errorPtr(protocol.NewError(protocol.CodeForbidden, "scope is not authorized on this desktop", false))
-		}
-		seen[scope] = struct{}{}
-	}
-	if len(seen) == 0 {
-		return nil, errorPtr(protocol.NewError(protocol.CodeInvalidRequest, "select at least one action", false))
-	}
-	result := make([]string, 0, len(seen))
-	for _, scope := range canonicalScopes {
-		if _, allowed := seen[scope]; allowed {
-			result = append(result, scope)
-		}
-	}
-	return result, nil
-}
-
-func policyScopeUnion(workspaces map[string]map[string]struct{}, deviceScopes []string) []string {
-	allowed := make(map[string]struct{})
-	for _, scopes := range workspaces {
-		for scope := range scopes {
-			if hasScope(deviceScopes, scope) {
-				allowed[scope] = struct{}{}
-			}
-		}
-	}
-	result := make([]string, 0, len(allowed))
-	for scope := range allowed {
-		result = append(result, scope)
-	}
-	return orderScopes(result)
-}
-
-func policyGrantScopes(grant store.MobileAccessGrantRecord, access policyAccess) []string {
-	allowed := make(map[string]struct{})
-	for _, workspace := range grant.Workspaces {
-		for _, scope := range access.scopes(grant.DeviceID, workspace.ID) {
-			if hasScope(grant.Scopes, scope) {
-				allowed[scope] = struct{}{}
-			}
-		}
-	}
-	result := make([]string, 0, len(allowed))
-	for scope := range allowed {
-		result = append(result, scope)
-	}
-	return orderScopes(result)
 }
 
 // orderScopes keeps user-facing action order stable regardless of storage order.

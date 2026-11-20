@@ -11,15 +11,16 @@ import (
 )
 
 type Server struct {
-	config          Config
-	store           *store.Store
-	hub             *Hub
-	events          *EventHub
-	interactions    *InteractionStore
-	router          *Router
-	attachmentBlobs attachmentBlobs
-	handler         http.Handler
-	closeOnce       sync.Once
+	config                 Config
+	store                  *store.Store
+	hub                    *Hub
+	events                 *EventHub
+	interactions           *InteractionStore
+	router                 *Router
+	attachmentBlobs        attachmentBlobs
+	mobileLoginRateLimiter *mobileLoginRateLimiter
+	handler                http.Handler
+	closeOnce              sync.Once
 }
 
 func New(ctx context.Context, config Config) (*Server, error) {
@@ -57,12 +58,13 @@ func New(ctx context.Context, config Config) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{
-		config:          config,
-		store:           persistentStore,
-		hub:             NewHub(),
-		events:          NewEventHub(config.EventBuffer),
-		interactions:    NewInteractionStore(time.Duration(approvalPolicy.TTLSeconds) * time.Second),
-		attachmentBlobs: attachmentBlobs{dir: config.AttachmentDir},
+		config:                 config,
+		store:                  persistentStore,
+		hub:                    NewHub(),
+		events:                 NewEventHub(config.EventBuffer),
+		interactions:           NewInteractionStore(time.Duration(approvalPolicy.TTLSeconds) * time.Second),
+		attachmentBlobs:        attachmentBlobs{dir: config.AttachmentDir},
+		mobileLoginRateLimiter: newMobileLoginRateLimiter(),
 	}
 	s.interactions.SetEnabled(approvalPolicy.RemoteEnabled)
 	s.router = NewRouter(s)

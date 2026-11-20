@@ -96,38 +96,6 @@ export function errorRetryable(error: unknown): boolean {
   return isRecord(error) && error.retryable === true;
 }
 
-/** Desktop-facing view of one phone access decision. */
-export interface ConnectorMobileAccessGrant {
-  readonly grantId: string;
-  readonly mobileDeviceId: string;
-  readonly mobileDeviceName?: string;
-  readonly mobileUserName?: string;
-  readonly mobilePlatform?: string;
-  readonly deviceId: string;
-  readonly deviceName?: string;
-  readonly workspaces: readonly { readonly id: string; readonly name: string }[];
-  readonly scopes: readonly ConnectorScope[];
-  readonly status: 'pending' | 'active' | 'denied' | 'revoked';
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly decidedAt?: string;
-}
-
-export interface ConnectorMobileAccessList {
-  readonly grants: readonly ConnectorMobileAccessGrant[];
-  readonly availableWorkspaces: readonly { readonly id: string; readonly name: string }[];
-  readonly availableScopes: readonly ConnectorScope[];
-}
-
-export type ConnectorAccessAction = 'allow' | 'deny' | 'revoke';
-
-export interface ConnectorDecisionInput {
-  readonly mobileDeviceId: string;
-  readonly action: ConnectorAccessAction;
-  readonly workspaces?: readonly string[];
-  readonly scopes?: readonly ConnectorScope[];
-}
-
 /** Stable v1 model-selection DTOs. Host objects never cross this boundary. */
 export interface SessionModelSelection {
   readonly provider: string;

@@ -103,8 +103,8 @@ func TestRemoteApprovalDisabledFullChain(t *testing.T) {
 	environment := newAdminEnvironment(t)
 	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnectorWithScopes(t, environment.testEnvironment, []string{"read", "approve"})
-	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Policy iPhone")
-	approveMobileAccess(t, environment, connector, phone, []string{"read", "approve"})
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Policy iPhone")
+	allowMobileInteractionAccess(t, environment, connector, phone, []string{"read", "approve"})
 
 	audience := func() bool {
 		t.Helper()

@@ -1,7 +1,9 @@
+import { File } from 'expo-file-system';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,16 +16,31 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActionButton } from '@/components/action-button';
+import { AttachmentDraftBar } from '@/components/attachment-draft-bar';
+import { ChatIcon } from '@/components/chat-icon';
 import { EmptyState } from '@/components/empty-state';
+import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
+import { useVoiceTranscription } from '@/features/session/use-voice-transcription';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { pickAttachments, type AttachmentSource } from '@/lib/attachment-picker';
+import { shouldCancelVoiceGesture } from '@/lib/voice-gesture';
 import {
   createMobileSession,
   createRequestId,
   describeMobileApiError,
   getMobileAccessOverview,
   promptMobileSession,
+  uploadMobileAttachment,
 } from '@/lib/mobile-api';
+import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
+import { appendNewSessionTranscript, newSessionTitle, submitNewSessionDraft } from '@shared/lib/new-session-submit';
+import {
+  admitAttachment,
+  canSubmitPrompt,
+  MAX_PROMPT_ATTACHMENTS,
+  type PromptAttachmentDraft,
+} from '@shared/lib/prompt-attachments';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import type {
   MobileAccessOverview,
@@ -32,10 +49,13 @@ import type {
   MobileSessionCreateResult,
 } from '@shared/types/mobile';
 
+const VOICE_WAVE_BARS = [6, 6, 10, 6, 14, 10, 20, 10, 14, 6, 10, 20, 14, 10, 6, 14, 20, 10, 6, 14, 10, 20, 10, 6, 6] as const;
+
 type CreateAttempt = {
   deviceId: string;
   workspaceId: string;
   text: string;
+  attachments: PromptAttachmentDraft[];
   createRequestId: string;
   promptRequestId: string;
 };
@@ -50,6 +70,10 @@ export function NewSessionScreen() {
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [attachments, setAttachments] = useState<PromptAttachmentDraft[]>([]);
+  const attachmentUploads = useRef(new KeyedPublishQueue<PromptAttachmentDraft>());
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [attemptStarted, setAttemptStarted] = useState(false);
@@ -58,6 +82,12 @@ export function NewSessionScreen() {
   const [created, setCreated] = useState<MobileSessionCreateResult | null>(null);
   const attemptRef = useRef<CreateAttempt | null>(null);
   const creatingRef = useRef(false);
+  const onVoiceTranscript = useCallback((text: string) => {
+    setPrompt((current) => appendNewSessionTranscript(current, text));
+    setPromptError(null);
+  }, []);
+  const voice = useVoiceTranscription(onVoiceTranscript);
+  const { voiceTouchStartY: voiceTouchStartYRef, voiceCancelArmedRef } = voice;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,16 +111,18 @@ export function NewSessionScreen() {
   const desktops = useMemo(
     () => (overview?.desktops ?? []).filter(
       (desktop) => desktop.grant?.status === 'active'
-        && desktop.grant.scopes.includes('read')
-        && desktop.grant.scopes.includes('prompt')
-        && desktop.grant.workspaces.length > 0,
+        && desktop.grant.workspaces.some(
+          (workspace) => workspace.scopes?.includes('read') && workspace.scopes.includes('prompt'),
+        ),
     ),
     [overview],
   );
 
   const requestedDeviceId = selectedDeviceId || params.deviceId || lastSession?.deviceId;
   const desktop = desktops.find((item) => item.deviceId === requestedDeviceId) ?? desktops[0];
-  const workspaces = desktop?.grant?.workspaces ?? [];
+  const workspaces = (desktop?.grant?.workspaces ?? []).filter(
+    (workspace) => workspace.scopes?.includes('read') && workspace.scopes.includes('prompt'),
+  );
   const requestedWorkspaceId = selectedWorkspaceId || (desktop?.deviceId === params.deviceId
     ? params.workspaceId
     : desktop?.deviceId === lastSession?.deviceId
@@ -102,15 +134,87 @@ export function NewSessionScreen() {
   const selectDevice = (next: MobileDesktopAccess) => {
     if (locked) return;
     setSelectedDeviceId(next.deviceId);
-    setSelectedWorkspaceId(next.grant?.workspaces[0]?.id ?? '');
+    setSelectedWorkspaceId(next.grant?.workspaces.find(
+      (workspace) => workspace.scopes?.includes('read') && workspace.scopes.includes('prompt'),
+    )?.id ?? '');
     setError(null);
   };
 
+  const readAttachmentBytes = useCallback(async (uri: string): Promise<Uint8Array> => {
+    return new File(uri).bytes();
+  }, []);
+
+  const uploadAttachment = useCallback(
+    (item: PromptAttachmentDraft, target: { sessionId: string; deviceId: string; workspaceId: string }) =>
+      attachmentUploads.current.run(item.localId, async () => {
+        setAttachments((current) => current.map((entry) => entry.localId === item.localId ? { ...entry, state: 'uploading', error: undefined } : entry));
+        let result: PromptAttachmentDraft;
+        try {
+          const bytes = await readAttachmentBytes(item.uri);
+          const staged = await authorized((serverUrl, token) =>
+            uploadMobileAttachment(serverUrl, token, target.sessionId, {
+              deviceId: target.deviceId,
+              workspaceId: target.workspaceId,
+              name: item.name,
+              mime: item.mime,
+              bytes,
+            }),
+          );
+          result = { ...item, state: 'ready', attachmentId: staged.attachmentId, mime: staged.mime, bytes: staged.bytes, error: undefined };
+        } catch (cause) {
+          result = { ...item, state: 'failed', error: describeMobileApiError(cause) };
+        }
+        if (attemptRef.current) {
+          attemptRef.current.attachments = attemptRef.current.attachments.map((entry) => entry.localId === result.localId ? result : entry);
+        }
+        setAttachments((current) => current.map((entry) => entry.localId === result.localId ? result : entry));
+        return result;
+      }),
+    [authorized, readAttachmentBytes],
+  );
+
+  const addAttachments = useCallback(async (source: AttachmentSource) => {
+    if (locked) return;
+    setMoreOptionsOpen(false);
+    const picked = await pickAttachments(source, { remainingSlots: MAX_PROMPT_ATTACHMENTS - attachments.length });
+    if (picked.kind === 'canceled') return;
+    if (picked.kind === 'denied') {
+      Alert.alert('无法添加附件', picked.reason);
+      return;
+    }
+    const accepted: PromptAttachmentDraft[] = [];
+    let rejected: string | null = null;
+    const next = [...attachments];
+    for (const candidate of picked.drafts) {
+      const admission = admitAttachment(candidate, next);
+      if (admission.ok) {
+        next.push(admission.draft);
+        accepted.push(admission.draft);
+      } else rejected = admission.reason;
+    }
+    setAttachments((current) => [
+      ...current,
+      ...accepted.filter((candidate) => !current.some((item) => item.localId === candidate.localId)),
+    ]);
+    if (accepted.length > 0) setPromptError(null);
+    if (rejected) Alert.alert('部分附件未添加', rejected);
+  }, [attachments, locked]);
+
+  const retryAttachment = useCallback((localId: string) => {
+    const attempt = attemptRef.current;
+    if (!created || !attempt || creatingRef.current) return;
+    const item = attempt.attachments.find((entry) => entry.localId === localId);
+    if (!item || item.state === 'uploading') return;
+    setUploadingAttachments(true);
+    void uploadAttachment(item, { sessionId: created.sessionId, deviceId: attempt.deviceId, workspaceId: attempt.workspaceId })
+      .finally(() => setUploadingAttachments(false));
+  }, [created, uploadAttachment]);
+
   const submit = async () => {
-    if (creatingRef.current) return;
+    if (creatingRef.current || uploadingAttachments || voice.voiceActive) return;
     const text = prompt.trim();
-    if (!text) {
-      setPromptError('请输入首条指令，再创建会话。');
+    if (!canSubmitPrompt(text, attachments)) {
+      setPromptError('请输入首条指令、添加附件，或使用语音输入。');
       return;
     }
     if (!desktop?.online || !workspace || creating) return;
@@ -128,6 +232,7 @@ export function NewSessionScreen() {
       deviceId: desktop.deviceId,
       workspaceId: workspace.id,
       text,
+      attachments,
       createRequestId: createRequestId('mcr'),
       promptRequestId: createRequestId('mpr'),
     };
@@ -137,28 +242,48 @@ export function NewSessionScreen() {
     setCreating(true);
     setError(null);
     setPromptError(null);
+    setUploadingAttachments(attempt.attachments.some((item) => item.state !== 'ready'));
 
     try {
-      const createdResult = created ?? await authorized((serverUrl, token) =>
-        createMobileSession(serverUrl, token, {
-          requestId: attempt.createRequestId,
+      const result = await submitNewSessionDraft({
+        created,
+        attachments: attempt.attachments,
+        createSession: () => authorized((serverUrl, token) =>
+          createMobileSession(serverUrl, token, {
+            requestId: attempt.createRequestId,
+            deviceId: attempt.deviceId,
+            workspaceId: attempt.workspaceId,
+          }),
+        ),
+        onCreated: setCreated,
+        uploadAttachment: (item, sessionId) => uploadAttachment(item, {
+          sessionId,
           deviceId: attempt.deviceId,
           workspaceId: attempt.workspaceId,
         }),
-      );
-      setCreated(createdResult);
-      await authorized((serverUrl, token) =>
-        promptMobileSession(serverUrl, token, createdResult.sessionId, {
-          requestId: attempt.promptRequestId,
-          deviceId: attempt.deviceId,
-          workspaceId: attempt.workspaceId,
-          text: attempt.text,
-        }),
-      );
+        onAttachments: (staged) => {
+          attempt.attachments = [...staged];
+          setAttachments([...staged]);
+        },
+        prompt: (sessionId, stagedIds) => authorized((serverUrl, token) =>
+          promptMobileSession(serverUrl, token, sessionId, {
+            requestId: attempt.promptRequestId,
+            deviceId: attempt.deviceId,
+            workspaceId: attempt.workspaceId,
+            text: attempt.text,
+            ...(stagedIds.length > 0 ? { attachmentIds: stagedIds } : {}),
+          }),
+        ),
+      });
+      setCreated(result.created);
+      if (!result.sent) {
+        setError('附件尚未全部上传成功，首条指令尚未发送。可只重试失败附件，或点击重试继续。');
+        return;
+      }
 
       const nextSession: MobileSession = {
-        sessionId: createdResult.sessionId,
-        title: sessionTitle(attempt.text),
+        sessionId: result.created.sessionId,
+        title: newSessionTitle(attempt.text, attempt.attachments),
         deviceId: attempt.deviceId,
         deviceName: desktop.deviceName,
         workspaceId: attempt.workspaceId,
@@ -186,6 +311,7 @@ export function NewSessionScreen() {
     } finally {
       creatingRef.current = false;
       setCreating(false);
+      setUploadingAttachments(false);
     }
   };
 
@@ -322,27 +448,115 @@ export function NewSessionScreen() {
               <Text style={[styles.characterCount, { color: theme.textSecondary }]}>{prompt.length} / 500</Text>
             </View>
             <View style={[styles.promptCard, { backgroundColor: theme.surface, borderColor: promptError ? theme.danger : theme.border }]}>
-              <TextInput
-                accessibilityLabel="首条指令"
-                editable={!locked}
-                maxLength={500}
-                multiline
-                onChangeText={(value) => {
-                  setPrompt(value);
-                  setPromptError(null);
-                }}
-                placeholder="描述你希望 DSH 完成的任务…"
-                placeholderTextColor={theme.textSecondary}
-                style={[styles.promptInput, { color: theme.text }]}
-                textAlignVertical="top"
-                value={prompt}
-              />
-              <Text style={[styles.promptMeta, { color: theme.textSecondary, borderTopColor: theme.border }]}>创建后立即发送 · Agent 与模型跟随桌面默认</Text>
+              {voice.voiceActive ? (
+                <View pointerEvents="none" style={styles.voiceActivePanel}>
+                  <View style={[styles.voiceGlow, styles.voiceGlowOuter, { backgroundColor: voice.voiceCancelArmed ? theme.danger : theme.accent }]} />
+                  <View style={[styles.voiceGlow, styles.voiceGlowMiddle, { backgroundColor: voice.voiceCancelArmed ? theme.danger : theme.accent }]} />
+                  <View style={[styles.voiceGlow, styles.voiceGlowInner, { backgroundColor: voice.voiceCancelArmed ? theme.danger : theme.accent }]} />
+                  <Text accessibilityLiveRegion="polite" style={[styles.voiceActiveText, { color: voice.voiceCancelArmed ? theme.danger : theme.text }]}>
+                    {voice.voiceActiveText}
+                  </Text>
+                  <View style={[styles.voiceWave, { opacity: voice.voiceStopping ? 0.55 : 1 }]}>
+                    {VOICE_WAVE_BARS.map((height, index) => (
+                      <View key={index} style={[styles.voiceWaveBar, { height, backgroundColor: voice.voiceCancelArmed ? theme.danger : theme.accent }]} />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+              {voice.voiceActive ? null : (
+                <AttachmentDraftBar
+                  attachments={attachments}
+                  disabled={creating || uploadingAttachments}
+                  compositionLocked={attemptStarted}
+                  onAdd={() => setMoreOptionsOpen(true)}
+                  onRemove={(localId) => setAttachments((current) => current.filter((item) => item.localId !== localId))}
+                  onRetry={retryAttachment}
+                />
+              )}
+              {voice.voiceActive ? null : attachments.filter((item) => item.state === 'failed').map((item) => (
+                <Text key={item.localId} style={[styles.attachmentFailure, { color: theme.danger }]}>{item.name} 上传失败。{item.error}</Text>
+              ))}
+              <View style={[styles.promptComposerRow, voice.voiceActive && styles.composeBoxHidden]}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={voice.voiceMode ? '切换为键盘输入' : '切换为语音输入'}
+                  disabled={!voice.voiceEnabled || locked || voice.voicePreparing || voice.voiceListening || voice.voiceStopping || voice.systemVoiceClosing}
+                  onPress={() => voice.setVoiceMode((current) => !current)}
+                  style={({ pressed }) => [styles.voiceSwitch, { backgroundColor: voice.voiceMode ? theme.accentSoft : 'transparent', opacity: !voice.voiceEnabled || locked ? 0.45 : 1 }, pressed && styles.pressed]}
+                >
+                  <ChatIcon name={voice.voiceMode ? 'keyboard' : 'voice'} color={theme.accent} size={18} />
+                </Pressable>
+                {voice.voiceMode ? (
+                  <View
+                    accessible
+                    accessibilityRole="button"
+                    accessibilityLabel="按住说话，松手完成，上移取消"
+                    accessibilityState={{ disabled: locked || !voice.voiceEnabled || voice.voiceStopping || voice.systemVoiceClosing, busy: voice.voicePreparing || voice.voiceStopping }}
+                    onStartShouldSetResponder={() => !locked && voice.voiceEnabled && !voice.voicePreparing && !voice.voiceListening && !voice.voiceStopping && !voice.voiceStarting.current && voice.systemVoiceGuard.canStart()}
+                    onResponderTerminationRequest={() => false}
+                    onResponderGrant={(event) => {
+                      if (locked || voice.voicePreparing || voice.voiceListening || voice.voiceStopping || voice.voiceStarting.current || !voice.systemVoiceGuard.canStart()) return;
+                      voiceTouchStartYRef.current = event.nativeEvent.pageY;
+                      void voice.startVoice();
+                    }}
+                    onResponderMove={(event) => {
+                      const startY = voiceTouchStartYRef.current;
+                      if (startY === null || voice.voiceStopping) return;
+                      const cancelArmed = shouldCancelVoiceGesture(startY, event.nativeEvent.pageY);
+                      if (cancelArmed !== voiceCancelArmedRef.current) {
+                        voiceCancelArmedRef.current = cancelArmed;
+                        voice.setVoiceCancelArmed(cancelArmed);
+                      }
+                    }}
+                    onResponderRelease={() => {
+                      if (voiceTouchStartYRef.current === null) return;
+                      if (voiceCancelArmedRef.current) voice.cancelVoice();
+                      else voice.stopVoice();
+                    }}
+                    onResponderTerminate={() => {
+                      if (voiceTouchStartYRef.current !== null) voice.cancelVoice();
+                    }}
+                    style={styles.holdTalk}
+                  >
+                    <Text style={[styles.holdTalkText, { color: theme.text }]}>
+                      {voice.voicePreparing ? '正在准备…' : voice.voiceStopping ? '正在转写…' : voice.voiceListening ? '松手完成' : '按住说话'}
+                    </Text>
+                  </View>
+                ) : (
+                  <TextInput
+                    accessibilityLabel="首条指令"
+                    editable={!locked}
+                    maxLength={500}
+                    multiline
+                    onChangeText={(value) => {
+                      setPrompt(value);
+                      setPromptError(null);
+                    }}
+                    placeholder="描述任务，或添加图片、使用语音输入…"
+                    placeholderTextColor={theme.textSecondary}
+                    style={[styles.promptInput, { color: theme.text }]}
+                    textAlignVertical="top"
+                    value={prompt}
+                  />
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="更多输入选项"
+                  disabled={locked || voice.voiceActive}
+                  onPress={() => setMoreOptionsOpen(true)}
+                  style={({ pressed }) => [styles.voiceSwitch, { opacity: locked ? 0.45 : 1 }, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.moreOptionsText, { color: theme.textSecondary }]}>＋</Text>
+                </Pressable>
+              </View>
+              <Text style={[styles.promptMeta, { color: theme.textSecondary, borderTopColor: theme.border }]}>
+                {voice.voiceMode ? '语音转写后仍可编辑 · 创建前请确认内容' : '创建后立即发送 · Agent 与模型跟随桌面默认'}
+              </Text>
             </View>
             <Text style={[styles.promptHint, { color: promptError ? theme.danger : theme.textSecondary }]}>
               {promptError ?? '建议写清任务目标、范围和验收标准。'}
             </Text>
-            {locked ? <Text style={[styles.lockedHint, { color: theme.textSecondary }]}>为避免重复提交，本次设备、工作区和首条指令已锁定。</Text> : null}
+            {locked ? <Text style={[styles.lockedHint, { color: theme.textSecondary }]}>为避免重复提交，本次设备、工作区、首条指令和附件已锁定；失败附件仍可单独重试。</Text> : null}
             <Text style={[styles.security, { color: theme.textSecondary }]}>仅使用已授权工作区，桌面审批策略保持不变。</Text>
           </ScrollView>
 
@@ -352,21 +566,26 @@ export function NewSessionScreen() {
             </Text>
             <ActionButton
               accessibilityHint="创建会话并发送首条指令"
-              disabled={!desktop?.online || !workspace || !desktop.grant}
-              label={creating ? (created ? '正在发送首条指令…' : '正在创建会话…') : attemptStarted ? '重试创建并发送' : '创建并发送'}
+              disabled={!desktop?.online || !workspace || !desktop.grant || voice.voiceActive || uploadingAttachments}
+              label={creating ? (created ? (uploadingAttachments ? '正在上传附件…' : '正在发送首条指令…') : '正在创建会话…') : attemptStarted ? '重试创建并发送' : '创建并发送'}
               loading={creating}
               onPress={() => void submit()}
             />
           </View>
         </>
       )}
+
+      <MoreOptionsSheet
+        visible={moreOptionsOpen}
+        catalog={null}
+        refreshing={false}
+        attachmentSlots={MAX_PROMPT_ATTACHMENTS - attachments.length}
+        attachmentPurpose="first"
+        onPickAttachments={(source) => void addAttachments(source)}
+        onClose={() => setMoreOptionsOpen(false)}
+      />
     </KeyboardAvoidingView>
   );
-}
-
-function sessionTitle(text: string): string {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  return normalized.length > 32 ? `${normalized.slice(0, 32)}…` : normalized;
 }
 
 const styles = StyleSheet.create({
@@ -405,8 +624,23 @@ const styles = StyleSheet.create({
   offlineText: { fontSize: Typography.secondary, lineHeight: 20 },
   promptLabel: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   characterCount: { fontSize: Typography.caption, lineHeight: 18, marginBottom: 8 },
-  promptCard: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  promptInput: { minHeight: 124, maxHeight: 220, padding: 13, fontSize: Typography.reading, lineHeight: 24 },
+  promptCard: { position: 'relative', borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
+  promptComposerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 7, paddingVertical: 6 },
+  promptInput: { flex: 1, minHeight: 112, maxHeight: 220, paddingHorizontal: 4, paddingVertical: 8, fontSize: Typography.reading, lineHeight: 24 },
+  voiceSwitch: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  moreOptionsText: { fontSize: 24, lineHeight: 28, fontWeight: '500' },
+  holdTalk: { flex: 1, minHeight: 112, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  holdTalkText: { fontSize: Typography.control, lineHeight: 22, fontWeight: '600' },
+  composeBoxHidden: { opacity: 0 },
+  attachmentFailure: { fontSize: Typography.caption, lineHeight: 18, paddingHorizontal: 10, paddingBottom: 6 },
+  voiceActivePanel: { position: 'absolute', zIndex: 2, left: 0, right: 0, bottom: 33, height: 174, alignItems: 'center', paddingTop: 42 },
+  voiceGlow: { position: 'absolute', bottom: -120, width: 260, height: 210, borderRadius: 130, transform: [{ scaleX: 1.45 }] },
+  voiceGlowOuter: { bottom: -100, width: 300, height: 230, opacity: 0.06 },
+  voiceGlowMiddle: { bottom: -110, width: 270, height: 210, opacity: 0.1 },
+  voiceGlowInner: { width: 230, height: 190, opacity: 0.16 },
+  voiceActiveText: { fontSize: Typography.control, lineHeight: 22, fontWeight: '600', textAlign: 'center' },
+  voiceWave: { height: 34, flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 20 },
+  voiceWaveBar: { width: 4, borderRadius: 2 },
   promptMeta: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 9, fontSize: Typography.caption, lineHeight: 18 },
   promptHint: { fontSize: Typography.secondary, lineHeight: 20, marginTop: 7 },
   lockedHint: { fontSize: Typography.secondary, lineHeight: 20, marginTop: 6 },

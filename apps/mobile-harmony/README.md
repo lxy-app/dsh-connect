@@ -2,7 +2,9 @@
 
 DSH Connect 的鸿蒙运行时壳。与 `apps/mobile/` 的 iOS/Android 主线并列：**共享业务源码，但不共享 Expo 依赖版本或原生构建产物**。
 
-当前基线为 Expo SDK 55.0.31 + RNOH 0.84.1，已在 HUAWEI Mate 80 Pro（HarmonyOS 7 / API 26）上完成签名 HAP 构建、安装、配对和真实远程 DSH 会话验证。
+当前基线为 Expo SDK 55.0.31 + RNOH 0.84.1，已在 HUAWEI Mate 80 Pro（HarmonyOS 7 / API 26）上完成签名 HAP 构建、安装、用户登录和真实远程 DSH 会话验证。
+
+新建会话与主线共用“创建 → 附件上传 → 首条 prompt”编排和语音转写 Hook。火山 ASR 依赖实时音频原生模块；附件选择器仍按现有能力明确提示不支持，不以静态检查代替 HAP 与真机验收。
 
 ## 环境要求
 
@@ -111,6 +113,6 @@ apps/mobile-harmony/
 - 原生 Stack 在本基线上出现白屏，因此使用 Slot；恢复前必须真机验证。
 - `expo-speech-recognition` 无鸿蒙实现，当前 shim 不代表系统 ASR 可用。
 - 火山 ASR 通过本地 `harmony-audio-stream` 原生模块采集 16 kHz 单声道 Int16 PCM，再按约 200 ms 聚包发送；支持边说边返回识别文本。该原生模块与麦克风权限变更必须重新执行 `setup:native`、构建并安装 HAP，不能仅靠 Reload 验收。
-- 相机扫码、语音播放/识别、附件、远程审批需要逐项真机验收。
+- 用户登录、语音播放/识别、附件、远程审批需要逐项真机验收；扫码配对入口已移除。
 - 静态检查和 JS bundle 不等于 HAP 构建或真机通过。
 - 生产跨网络必须使用 HTTPS/WSS；hdc reverse forwarding 只用于开发调试。

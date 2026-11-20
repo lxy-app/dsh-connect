@@ -9,7 +9,7 @@ import {
   logoutMobileDevice,
   MobileApiError,
   normalizeServerUrl,
-  pairMobileDevice,
+  loginMobileDevice,
   refreshMobileSession,
 } from '@/lib/mobile-api';
 import {
@@ -32,9 +32,10 @@ type MobileSessionState = {
   notice: string | null;
 };
 
-type PairInput = {
+type LoginInput = {
   serverUrl: string;
-  code: string;
+  email: string;
+  password: string;
 };
 
 type AuthorizedOperation<T> = (serverUrl: string, accessToken: string) => Promise<T>;
@@ -42,7 +43,7 @@ type AuthorizedOperation<T> = (serverUrl: string, accessToken: string) => Promis
 type AuthorizedConnection = { serverUrl: string; accessToken: string };
 
 type MobileSessionContextValue = MobileSessionState & {
-  pair: (input: PairInput) => Promise<void>;
+  login: (input: LoginInput) => Promise<void>;
   disconnect: () => Promise<void>;
   dismissNotice: () => void;
   /** Runs an API call with a valid access token, rotating it once on 401. */
@@ -113,14 +114,14 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
           setIfActive({
             status: 'unpaired',
             session: null,
-            notice: '配对凭据已失效，请重新生成配对码。',
+            notice: '登录凭据已失效，请重新登录。',
           });
           return;
         }
         setIfActive({
           status: 'paired',
           session: stored,
-          notice: '已加载本机配对信息，但暂时无法刷新 Server 凭据。',
+          notice: '已加载本机登录信息，但暂时无法刷新 Server 凭据。',
         });
       }
     };
@@ -133,7 +134,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
         setIfActive({
           status: 'unpaired',
           session: null,
-          notice: '无法读取系统安全存储，请重新配对。',
+          notice: '无法读取系统安全存储，请重新登录。',
         });
         return;
       }
@@ -156,7 +157,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
         setIfActive({
           status: 'unpaired',
           session: null,
-          notice: '配对凭据已过期，请重新生成配对码。',
+          notice: '登录凭据已过期，请重新登录。',
         });
         return;
       }
@@ -186,7 +187,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
         setIfActive({
           status: 'paired',
           session: stored,
-          notice: '已加载本机配对信息，但当前无法验证 Server。',
+          notice: '已加载本机登录信息，但当前无法验证 Server。',
         });
       }
     };
@@ -197,27 +198,27 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshSession]);
 
-  const pair = useCallback(
-    async ({ serverUrl, code }: PairInput) => {
+  const login = useCallback(
+    async ({ serverUrl, email, password }: LoginInput) => {
       const normalizedServerUrl = normalizeServerUrl(serverUrl);
-      const device = pairingDevice();
+      const device = loginDevice();
       const previous = state.session;
-      const response = await pairMobileDevice({
+      const response = await loginMobileDevice({
         serverUrl: normalizedServerUrl,
-        code,
+        email,
+        password,
         deviceName: device.name,
         platform: device.platform,
         appVersion: appVersion(),
       });
-      const stored = storedFromPairing(normalizedServerUrl, response, device.name);
+      const stored = storedFromLogin(normalizedServerUrl, response, device.name);
       operationGeneration.current += 1;
       sessionRef.current = stored;
       const notice = await persist(stored);
       setState({ status: 'paired', session: stored, notice });
 
       if (previous) {
-        // Replacing the local pairing should not leave the previous phone
-        // credential active on the Server longer than necessary.
+        // Replacing the local login should revoke the previous device credential.
         void bestEffortRevoke(previous);
       }
     },
@@ -245,7 +246,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
   ): Promise<StoredMobileSession> => {
     const before = sessionRef.current ?? state.session;
     if (!before || !isSameMobileDevice(before, expected)) {
-      throw new MobileApiError('unauthorized', '本机配对已变化，请重试。');
+      throw new MobileApiError('unauthorized', '本机登录已变化，请重试。');
     }
     // Another request already rotated this credential while the old access
     // token was in flight. Reuse its result instead of replaying the old RT.
@@ -254,7 +255,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
     const { session: updated, notice } = await refreshSession(expected);
     const latest = sessionRef.current ?? state.session;
     if (!latest || !isSameMobileDevice(latest, expected)) {
-      throw new MobileApiError('unauthorized', '本机配对已变化，请重试。');
+      throw new MobileApiError('unauthorized', '本机登录已变化，请重试。');
     }
     if (!isSameMobileCredential(latest, expected)) return latest;
     sessionRef.current = updated;
@@ -264,7 +265,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
 
   const clearInvalidSession = useCallback(async (invalidated: StoredMobileSession): Promise<void> => {
     const current = sessionRef.current ?? state.session;
-    // A delayed 401 must not delete a newer rotation or a newly paired device.
+    // A delayed 401 must not delete a newer rotation or a newer login.
     if (!current || !isSameMobileCredential(current, invalidated)) return;
     try {
       await deleteStoredMobileSession();
@@ -277,14 +278,14 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
     setState({
       status: 'unpaired',
       session: null,
-      notice: '配对凭据已失效，请重新配对。',
+      notice: '登录凭据已失效，请重新登录。',
     });
   }, [state.session]);
 
   const authorized = useCallback(
     async <T,>(operation: AuthorizedOperation<T>): Promise<T> => {
       const current = sessionRef.current ?? state.session;
-      if (!current) throw new MobileApiError('unauthorized', '尚未配对这台手机。');
+      if (!current) throw new MobileApiError('unauthorized', '尚未登录。');
       let credential = current;
       try {
         if (Date.parse(credential.accessTokenExpiresAt) <= Date.now() + 30_000) {
@@ -308,7 +309,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
   const connection = useCallback(
     async (): Promise<AuthorizedConnection> => {
       const current = sessionRef.current ?? state.session;
-      if (!current) throw new MobileApiError('unauthorized', '尚未配对这台手机。');
+      if (!current) throw new MobileApiError('unauthorized', '尚未登录。');
       let credential = current;
       if (Date.parse(credential.accessTokenExpiresAt) <= Date.now() + 30_000) {
         credential = await refreshSessionForRequest(credential);
@@ -322,7 +323,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
     <MobileSessionContext.Provider
       value={{
         ...state,
-        pair,
+        login,
         disconnect,
         dismissNotice,
         authorized,
@@ -349,11 +350,11 @@ async function persist(session: StoredMobileSession): Promise<string | null> {
     await saveMobileSession(session);
     return null;
   } catch {
-    return '无法写入系统安全存储；关闭 App 后可能需要重新配对。';
+    return '无法写入系统安全存储；关闭 App 后可能需要重新登录。';
   }
 }
 
-function storedFromPairing(
+function storedFromLogin(
   serverUrl: string,
   response: MobileSessionResponse,
   deviceName: string,
@@ -371,9 +372,9 @@ function storedFromPairing(
   };
 }
 
-function pairingDevice(): { name: string; platform: MobilePlatform } {
+function loginDevice(): { name: string; platform: MobilePlatform } {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
-    throw new Error('手机配对仅支持 iOS 与 Android。');
+    throw new Error('手机登录仅支持 iOS 与 Android。');
   }
   const name = (Device.deviceName ?? Device.modelName ?? '').trim().slice(0, 128);
   return {
@@ -400,7 +401,7 @@ async function bestEffortRevoke(session: StoredMobileSession): Promise<void> {
     }
     await logoutMobileDevice(session.serverUrl, accessToken);
   } catch {
-    // The local pairing is already gone; administrators can still revoke the
+    // The local login is already gone; administrators can still revoke the
     // device from the Server.
   }
 }

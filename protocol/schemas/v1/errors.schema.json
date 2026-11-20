@@ -10,6 +10,7 @@
     "not_found",
     "conflict",
     "payload_too_large",
+    "rate_limited",
     "pairing_code_invalid",
     "pairing_code_used",
     "pairing_code_expired",

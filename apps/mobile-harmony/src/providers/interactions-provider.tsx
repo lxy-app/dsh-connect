@@ -37,8 +37,8 @@ export function InteractionsProvider({ children }: { children: ReactNode }) {
   });
   const [busyId, setBusyId] = useState<string | null>(null);
   const inflight = useRef(false);
-  // A snapshot only counts for the phone identity that produced it, so a
-  // re-pair can never surface another account's pending prompt.
+  // A snapshot only counts for the login device identity that produced it, so
+  // re-login can never surface another account's pending prompt.
   const interactions = identity !== null && snapshot.identity === identity ? snapshot.items : [];
 
   const refresh = useCallback(async (): Promise<void> => {

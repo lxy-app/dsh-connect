@@ -17,6 +17,7 @@ export function MoreOptionsSheet({
   onPickAttachments,
   onClose,
   onOpenModel,
+  attachmentPurpose = 'current',
 }: {
   visible: boolean;
   catalog: MobileSessionModelCatalog | null;
@@ -25,7 +26,8 @@ export function MoreOptionsSheet({
   attachmentSlots: number;
   onPickAttachments: (source: AttachmentSource) => void;
   onClose: () => void;
-  onOpenModel: () => void;
+  onOpenModel?: () => void;
+  attachmentPurpose?: 'current' | 'first';
 }) {
   const [sheetAction] = useState(() => new SheetAction());
   const select = (action: () => void) => sheetAction.select(onClose, action, Platform.OS === 'ios');
@@ -68,25 +70,27 @@ export function MoreOptionsSheet({
           <Text style={[styles.attachmentHint, { color: theme.textSecondary }]}>
             {pickersDisabled
               ? '已达单条消息附件上限，请先发送或移除部分附件。'
-              : `附件随当前指令发送，先进入待发送区，可继续补充文字。还可添加 ${attachmentSlots} 个。`}
+              : `附件随${attachmentPurpose === 'first' ? '首条' : '当前'}指令发送，先进入待发送区，可继续补充文字。还可添加 ${attachmentSlots} 个。`}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="选择会话模型"
-            onPress={() => select(onOpenModel)}
-            style={({ pressed }) => [styles.modelAction, { backgroundColor: pressed ? theme.surfaceMuted : 'transparent' }]}
-          >
-            <View style={styles.actionCopy}>
-              <Text style={[styles.actionTitle, { color: theme.text }]}>选择模型</Text>
-              <View style={styles.currentRow}>
-                {diverged ? <View style={[styles.dot, { backgroundColor: theme.accent }]} /> : null}
-                <Text numberOfLines={1} style={[styles.currentModel, { color: theme.textSecondary }]}>
-                  {catalog ? modelLabel(catalog, catalog.effective) : '查看当前会话与可用模型'}
-                </Text>
+          {onOpenModel ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="选择会话模型"
+              onPress={() => select(onOpenModel)}
+              style={({ pressed }) => [styles.modelAction, { backgroundColor: pressed ? theme.surfaceMuted : 'transparent' }]}
+            >
+              <View style={styles.actionCopy}>
+                <Text style={[styles.actionTitle, { color: theme.text }]}>选择模型</Text>
+                <View style={styles.currentRow}>
+                  {diverged ? <View style={[styles.dot, { backgroundColor: theme.accent }]} /> : null}
+                  <Text numberOfLines={1} style={[styles.currentModel, { color: theme.textSecondary }]}>
+                    {catalog ? modelLabel(catalog, catalog.effective) : '查看当前会话与可用模型'}
+                  </Text>
+                </View>
               </View>
-            </View>
-            {refreshing ? <ActivityIndicator color={theme.accent} size="small" /> : <Text style={[styles.chevron, { color: theme.textSecondary }]}>›</Text>}
-          </Pressable>
+              {refreshing ? <ActivityIndicator color={theme.accent} size="small" /> : <Text style={[styles.chevron, { color: theme.textSecondary }]}>›</Text>}
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>

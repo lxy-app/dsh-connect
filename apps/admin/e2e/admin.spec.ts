@@ -253,6 +253,10 @@ test('integrates device tabs and preserves legacy deep links', async ({ page }) 
   await page.getByRole('tab', { name: '手机设备' }).click();
   await expect(page).toHaveURL(/\/devices\?tab=mobile$/);
   await expect(page.getByText('E2E iPhone', { exact: true })).toBeVisible();
+  await expect(page.getByText('登录设备', { exact: true })).toBeVisible();
+  await expect(page.getByText('添加手机', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /生成二维码/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /复制配对码|复制配对链接/ })).toHaveCount(0);
 
   await page.goto('/pairing');
   await expect(page).toHaveURL(/\/devices$/);

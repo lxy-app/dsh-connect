@@ -9,8 +9,7 @@ info:
     token. Event recovery is delegated to Connector via
     session.follow(cursor,followId). Successful App follows are cleaned up with
     session.unfollow(sessionId,followId). Authenticated Connectors may also send
-    desktop-scoped `request` envelopes (mobile.access.list / mobile.access.decide /
-    pair.updateGrants / interaction.audience);
+    desktop-scoped `request` envelopes (pair.updateGrants / interaction.audience);
     Server answers with `result` or `error` using the same requestId. Server never
     reads DSH session files.
 defaultContentType: application/json
@@ -56,7 +55,7 @@ channels:
   mobileEvents:
     description: |
       Mobile endpoint GET /v1/mobile/events/ws?deviceId={deviceId}&workspaceId={workspaceId}&sessionId={sessionId}&cursor={cursor}.
-      Requires a paired phone access token (Authorization header; browser clients may
+      Requires a mobile login access token (Authorization header; browser clients may
       use the short-lived `accessToken` query parameter) and an active read grant for
       the workspace. The Server starts a compact session.follow and relays only
       display-safe frames: `assistant.stream` deltas, compact `session.snapshot`,

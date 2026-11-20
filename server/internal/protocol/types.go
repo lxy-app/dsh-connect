@@ -79,8 +79,6 @@ const (
 const EventKindAttachmentReady = "attachment.ready"
 
 const (
-	ConnectorMethodMobileAccessList    = "mobile.access.list"
-	ConnectorMethodMobileAccessDecide  = "mobile.access.decide"
 	ConnectorMethodPairUpdateGrants    = "pair.updateGrants"
 	ConnectorMethodInteractionAudience = "interaction.audience"
 )
@@ -258,7 +256,7 @@ type MobileUser struct {
 	Role        string `json:"role"`
 }
 
-// MobileDevice is the public projection of a paired phone.
+// MobileDevice is the public projection of a mobile login device.
 type MobileDevice struct {
 	MobileDeviceID string     `json:"mobileDeviceId"`
 	UserID         string     `json:"userId"`
@@ -272,28 +270,16 @@ type MobileDevice struct {
 	RevokedAt      *time.Time `json:"revokedAt,omitempty"`
 }
 
-type MobilePairingCodeRequest struct {
-	UserID string `json:"userId,omitempty"`
-}
-
-type MobilePairingCodeResponse struct {
-	Code       string    `json:"code"`
-	ExpiresAt  time.Time `json:"expiresAt"`
-	ServerURL  string    `json:"serverUrl"`
-	PairingURL string    `json:"pairingUrl"`
-	UserID     string    `json:"userId"`
-}
-
-type MobilePairRequest struct {
-	Code       string `json:"code"`
+type MobileLoginRequest struct {
+	Email      string `json:"email"`
+	Password   string `json:"password"`
 	DeviceName string `json:"deviceName"`
 	Platform   string `json:"platform"`
 	AppVersion string `json:"appVersion"`
 }
 
-// MobileSessionResponse is returned by both pairing and refresh. Plaintext
-// access and refresh tokens are only present in this response and are never
-// persisted.
+// MobileSessionResponse is returned by login and refresh. Plaintext access and
+// refresh tokens are only present in this response and are never persisted.
 type MobileSessionResponse struct {
 	MobileDeviceID        string     `json:"mobileDeviceId"`
 	User                  MobileUser `json:"user"`
@@ -323,13 +309,14 @@ type DeviceListResponse struct {
 // MobileWorkspaceSummary is the minimum a phone needs to identify a workspace.
 // The desktop filesystem path stays on the desktop.
 type MobileWorkspaceSummary struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Scopes []string `json:"scopes,omitempty"`
 }
 
-// InteractionAudienceResponse tells the Connector whether a granted phone is
-// actively polling for interactions, so it can hand the prompt to that phone
-// first instead of racing two UIs.
+// InteractionAudienceResponse tells the Connector whether an authorized user's
+// phone is actively polling for interactions, so it can hand the prompt to that
+// phone first instead of racing two UIs.
 type InteractionAudienceResponse struct {
 	Watching bool `json:"watching"`
 }
@@ -341,26 +328,8 @@ type ConnectorUpdateGrants struct {
 	Scopes     []string    `json:"scopes"`
 }
 
-// MobileAccessGrant is the desktop-approved access scope for one phone.
-type MobileAccessGrant struct {
-	GrantID          string                   `json:"grantId"`
-	MobileDeviceID   string                   `json:"mobileDeviceId,omitempty"`
-	MobileDeviceName string                   `json:"mobileDeviceName,omitempty"`
-	MobileUserName   string                   `json:"mobileUserName,omitempty"`
-	MobilePlatform   string                   `json:"mobilePlatform,omitempty"`
-	DeviceID         string                   `json:"deviceId"`
-	DeviceName       string                   `json:"deviceName,omitempty"`
-	Workspaces       []MobileWorkspaceSummary `json:"workspaces"`
-	Scopes           []string                 `json:"scopes"`
-	Status           string                   `json:"status"`
-	CreatedAt        time.Time                `json:"createdAt"`
-	UpdatedAt        time.Time                `json:"updatedAt"`
-	DecidedAt        *time.Time               `json:"decidedAt,omitempty"`
-}
-
-// MobileDesktopAccess is one desktop as seen from a paired phone. Available
-// workspaces come from the desktop authorization; Grant is null until the phone
-// asks for access.
+// MobileDesktopAccess is one desktop in the user's effective policy. Available
+// workspaces and scopes are intersected with the Connector's current grants.
 type MobileDesktopAccess struct {
 	DeviceID            string                   `json:"deviceId"`
 	DeviceName          string                   `json:"deviceName"`
@@ -368,38 +337,13 @@ type MobileDesktopAccess struct {
 	Online              bool                     `json:"online"`
 	AvailableWorkspaces []MobileWorkspaceSummary `json:"availableWorkspaces"`
 	AvailableScopes     []string                 `json:"availableScopes"`
-	Grant               *MobileAccessGrant       `json:"grant,omitempty"`
 }
 
 type MobileAccessOverviewResponse struct {
 	Desktops []MobileDesktopAccess `json:"desktops"`
 }
 
-// MobileAccessRequest asks the desktop user to approve a subset of the
-// desktop's already authorized workspaces and scopes.
-type MobileAccessRequest struct {
-	DeviceID   string   `json:"deviceId"`
-	Workspaces []string `json:"workspaces"`
-	Scopes     []string `json:"scopes"`
-}
-
-// ConnectorMobileAccessDecision is submitted by the desktop Connector. It never
-// travels over the mobile REST surface.
-type ConnectorMobileAccessDecision struct {
-	MobileDeviceID string   `json:"mobileDeviceId"`
-	Action         string   `json:"action"`
-	Workspaces     []string `json:"workspaces,omitempty"`
-	Scopes         []string `json:"scopes,omitempty"`
-}
-
-type ConnectorMobileAccessListResponse struct {
-	Grants              []MobileAccessGrant      `json:"grants"`
-	AvailableWorkspaces []MobileWorkspaceSummary `json:"availableWorkspaces"`
-	AvailableScopes     []string                 `json:"availableScopes"`
-}
-
 type MobileWorkspaceView struct {
-	GrantID    string                 `json:"grantId"`
 	DeviceID   string                 `json:"deviceId"`
 	DeviceName string                 `json:"deviceName"`
 	Workspace  MobileWorkspaceSummary `json:"workspace"`

@@ -2,7 +2,6 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -17,7 +16,6 @@ import {
   describeMobileApiError,
   getMobileAccessOverview,
   getMobileSessions,
-  revokeMobileAccess,
 } from '@/lib/mobile-api';
 import { InteractionsScreen } from '@/features/interactions/interactions-screen';
 import { useInteractions } from '@/providers/interactions-provider';
@@ -50,7 +48,6 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busyGrantId, setBusyGrantId] = useState<string | null>(null);
 
   const load = useCallback(
     async (mode: 'initial' | 'refresh' | 'silent' = 'silent') => {
@@ -90,17 +87,13 @@ export function HomeScreen() {
           deviceId: desktop.deviceId,
           deviceName: desktop.deviceName,
           online: desktop.online,
-          scopes: desktop.grant.scopes,
+          scopes: workspace.scopes ?? [],
         });
       }
     }
     return result;
   }, [overview]);
 
-
-  const openRequestAccess = (deviceId?: string) => {
-    router.push(deviceId ? { pathname: '/access', params: { deviceId } } : '/access');
-  };
 
   const openSession = useCallback((sessionItem: MobileSession, replace = false) => {
     rememberSession(sessionItem);
@@ -124,50 +117,6 @@ export function HomeScreen() {
     const target = lastSession && sessionList.sessions.find((item) => item.sessionId === lastSession.sessionId && item.deviceId === lastSession.deviceId);
     openSession(target ?? sessionList.sessions[0], true);
   }, [lastSession, loading, openSession, sessionList, tab]);
-
-  const revokeGrant = useCallback(
-    (grantId: string) => {
-      Alert.alert('撤销这台手机的访问？', '撤销后，这台手机需要重新向桌面申请，并由你再次在 Connector 中确认。', [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '撤销',
-          style: 'destructive',
-          onPress: () => {
-            setBusyGrantId(grantId);
-            void authorized((serverUrl, token) => revokeMobileAccess(serverUrl, token, grantId))
-              .then(() => load('refresh'))
-              .catch((cause: unknown) => {
-                Alert.alert('撤销失败', describeMobileApiError(cause));
-              })
-              .finally(() => setBusyGrantId(null));
-          },
-        },
-      ]);
-    },
-    [authorized, load],
-  );
-
-  const cancelRequest = useCallback(
-    (grantId: string) => {
-      Alert.alert('取消这次访问申请？', '取消后可以重新提交申请。', [
-        { text: '保留', style: 'cancel' },
-        {
-          text: '取消申请',
-          style: 'destructive',
-          onPress: () => {
-            setBusyGrantId(grantId);
-            void authorized((serverUrl, token) => revokeMobileAccess(serverUrl, token, grantId))
-              .then(() => load('refresh'))
-              .catch((cause: unknown) => {
-                Alert.alert('取消失败', describeMobileApiError(cause));
-              })
-              .finally(() => setBusyGrantId(null));
-          },
-        },
-      ]);
-    },
-    [authorized, load],
-  );
 
   if (!session) return null;
 
@@ -202,7 +151,7 @@ export function HomeScreen() {
         {loading && !overview ? (
           <View style={styles.loading}>
             <ActivityIndicator color={theme.accent} />
-            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>正在同步授权与会话…</Text>
+            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>正在同步权限与会话…</Text>
           </View>
         ) : tab === 'sessions' ? (
           <SessionsTab
@@ -212,7 +161,6 @@ export function HomeScreen() {
             workspaceFilter={workspaceFilter}
             onClearFilter={() => setWorkspaceFilter(null)}
             onOpenSession={openSession}
-            onRequestAccess={() => openRequestAccess()}
             refreshing={refreshing}
             onRefresh={() => void load('refresh')}
             loading={loading}
@@ -222,16 +170,12 @@ export function HomeScreen() {
         ) : tab === 'devices' ? (
           <DevicesTab
             desktops={overview?.desktops ?? []}
-            onRequestAccess={openRequestAccess}
-            onCancelRequest={cancelRequest}
             onOpenSessions={() => {
               setWorkspaceFilter(null);
               setTab('sessions');
             }}
-            onRevokeGrant={revokeGrant}
             refreshing={refreshing}
             onRefresh={() => void load('refresh')}
-            busyGrantId={busyGrantId}
           />
         ) : (
           <ProfileTab

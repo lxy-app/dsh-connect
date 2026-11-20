@@ -3,8 +3,12 @@ import test from 'node:test';
 
 import {
   createMobileSession,
+  describeMobileApiError,
+  getMobileAccessOverview,
   getMobileSessionModel,
   getMobileTranscript,
+  getMobileWorkspaces,
+  loginMobileDevice,
   MobileApiError,
   selectMobileSessionModel,
 } from './mobile-api';
@@ -224,4 +228,112 @@ test('mobile model selection posts the complete stable request without exposing 
   });
   assert.equal(requestBody.includes('mobile-token'), false);
   assert.equal(result.selected.reasoningEffort, 'high');
+});
+
+test('mobile login posts credentials without a bearer token or pairing code', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let requestedUrl = '';
+  let method = '';
+  let authorization: string | null = null;
+  let requestBody = '';
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = String(input);
+    method = init?.method ?? '';
+    authorization = new Headers(init?.headers).get('Authorization');
+    requestBody = String(init?.body ?? '');
+    return new Response(JSON.stringify({
+      mobileDeviceId: 'mob-1',
+      user: { id: 'usr-1', email: 'owner@example.com', displayName: 'Owner', role: 'owner' },
+      accessToken: 'access-1',
+      accessTokenExpiresAt: '2026-11-20T13:00:00.000Z',
+      refreshToken: 'refresh-1',
+      refreshTokenExpiresAt: '2026-12-20T13:00:00.000Z',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const session = await loginMobileDevice({
+    serverUrl: 'https://connect.example.com/',
+    email: ' Owner@Example.COM ',
+    password: ' pass word ',
+    deviceName: 'HarmonyOS Phone',
+    platform: 'android',
+    appVersion: '0.1.0',
+  });
+
+  const body = JSON.parse(requestBody) as Record<string, unknown>;
+  assert.equal(requestedUrl, 'https://connect.example.com/v1/mobile/auth/login');
+  assert.equal(method, 'POST');
+  assert.equal(authorization, null);
+  assert.deepEqual(body, {
+    email: 'Owner@Example.COM',
+    password: ' pass word ',
+    deviceName: 'HarmonyOS Phone',
+    platform: 'android',
+    appVersion: '0.1.0',
+  });
+  assert.equal('code' in body, false);
+  assert.equal(session.mobileDeviceId, 'mob-1');
+  assert.equal(session.refreshToken, 'refresh-1');
+});
+
+test('user access policies become a read-only active permission view', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    desktops: [{
+      deviceId: 'dev-1',
+      deviceName: 'Workstation',
+      connectorVersion: '1.0.0',
+      online: true,
+      availableWorkspaces: [
+        { id: 'ws-read', name: 'Read only', scopes: ['read'] },
+        { id: 'ws-write', name: 'Writable', scopes: ['read', 'prompt'] },
+      ],
+      availableScopes: ['read', 'prompt'],
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+  const overview = await getMobileAccessOverview('https://connect.example.com', 'mobile-token');
+
+  assert.deepEqual(overview.desktops[0]?.grant, {
+    deviceId: 'dev-1',
+    workspaces: [
+      { id: 'ws-read', name: 'Read only', scopes: ['read'] },
+      { id: 'ws-write', name: 'Writable', scopes: ['read', 'prompt'] },
+    ],
+    scopes: ['read', 'prompt'],
+    status: 'active',
+  });
+});
+
+test('workspace responses do not require a device grant id', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    workspaces: [{
+      deviceId: 'dev-1',
+      deviceName: 'Workstation',
+      workspace: { id: 'ws-1', name: 'Project' },
+      scopes: ['read'],
+      online: true,
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+  const result = await getMobileWorkspaces('https://connect.example.com', 'mobile-token');
+
+  assert.deepEqual(result.workspaces, [{
+    deviceId: 'dev-1',
+    deviceName: 'Workstation',
+    workspace: { id: 'ws-1', name: 'Project' },
+    scopes: ['read'],
+    online: true,
+  }]);
+});
+
+test('rate limited login has a specific retry message', () => {
+  assert.equal(
+    describeMobileApiError(new MobileApiError('rate_limited', 'too many attempts', 429, true)),
+    '登录尝试过多，请稍后重试。',
+  );
 });

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dsh-connect.local/schemas/v1/mobile.schema.json",
-  "title": "DSH Connect mobile pairing DTOs v1",
+  "title": "DSH Connect mobile authentication and authorization DTOs v1",
   "$defs": {
     "MobileUser": {
       "type": "object",
@@ -98,68 +98,26 @@
       },
       "additionalProperties": false
     },
-    "MobilePairingCodeRequest": {
-      "type": "object",
-      "properties": {
-        "userId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "description": "Target user. Required for bootstrap-token callers; other callers default to themselves."
-        }
-      },
-      "additionalProperties": false
-    },
-    "MobilePairingCodeResponse": {
+    "MobileLoginRequest": {
       "type": "object",
       "required": [
-        "code",
-        "expiresAt",
-        "serverUrl",
-        "pairingUrl",
-        "userId"
-      ],
-      "properties": {
-        "code": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "description": "Returned once; only its SHA-256 hash is persisted."
-        },
-        "expiresAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "serverUrl": {
-          "type": "string",
-          "format": "uri"
-        },
-        "pairingUrl": {
-          "type": "string",
-          "format": "uri",
-          "pattern": "^dshconnect://pair\\?",
-          "description": "Deep link encoded as a QR code for the DSH Connect app."
-        },
-        "userId": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "additionalProperties": false
-    },
-    "MobilePairRequest": {
-      "type": "object",
-      "required": [
-        "code",
+        "email",
+        "password",
         "deviceName",
         "platform",
         "appVersion"
       ],
       "properties": {
-        "code": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "password": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 1024,
+          "description": "Used only for this login request and never persisted."
         },
         "deviceName": {
           "type": "string",
@@ -279,58 +237,6 @@
         "name": {
           "type": "string",
           "minLength": 1
-        }
-      },
-      "additionalProperties": false
-    },
-    "MobileAccessGrant": {
-      "type": "object",
-      "required": [
-        "grantId",
-        "deviceId",
-        "workspaces",
-        "scopes",
-        "status",
-        "createdAt",
-        "updatedAt"
-      ],
-      "properties": {
-        "grantId": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mobileDeviceId": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mobileDeviceName": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mobileUserName": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mobilePlatform": {
-          "type": "string",
-          "enum": [
-            "ios",
-            "android"
-          ]
-        },
-        "deviceId": {
-          "type": "string",
-          "minLength": 1
-        },
-        "deviceName": {
-          "type": "string",
-          "minLength": 1
-        },
-        "workspaces": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/MobileWorkspaceSummary"
-          }
         },
         "scopes": {
           "type": "array",
@@ -339,30 +245,11 @@
             "enum": [
               "read",
               "prompt",
+              "approve",
               "cancel"
             ]
-          }
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "pending",
-            "active",
-            "denied",
-            "revoked"
-          ]
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "decidedAt": {
-          "type": "string",
-          "format": "date-time"
+          },
+          "description": "Effective user-policy scopes for this workspace when returned in a desktop access overview."
         }
       },
       "additionalProperties": false
@@ -405,12 +292,10 @@
             "enum": [
               "read",
               "prompt",
-              "cancel"
+              "cancel",
+              "approve"
             ]
           }
-        },
-        "grant": {
-          "$ref": "#/$defs/MobileAccessGrant"
         }
       },
       "additionalProperties": false
@@ -430,47 +315,9 @@
       },
       "additionalProperties": false
     },
-    "MobileAccessRequest": {
-      "type": "object",
-      "required": [
-        "deviceId",
-        "workspaces",
-        "scopes"
-      ],
-      "properties": {
-        "deviceId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
-        "workspaces": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          }
-        },
-        "scopes": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "enum": [
-              "read",
-              "prompt",
-              "cancel"
-            ]
-          }
-        }
-      },
-      "additionalProperties": false
-    },
     "MobileWorkspaceView": {
       "type": "object",
       "required": [
-        "grantId",
         "deviceId",
         "deviceName",
         "workspace",
@@ -478,10 +325,6 @@
         "online"
       ],
       "properties": {
-        "grantId": {
-          "type": "string",
-          "minLength": 1
-        },
         "deviceId": {
           "type": "string",
           "minLength": 1
@@ -500,7 +343,8 @@
             "enum": [
               "read",
               "prompt",
-              "cancel"
+              "cancel",
+              "approve"
             ]
           }
         },
@@ -605,6 +449,7 @@
             "enum": [
               "read",
               "prompt",
+              "approve",
               "cancel"
             ]
           }

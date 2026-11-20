@@ -27,6 +27,24 @@ test('Desktop panel can still change its own grants after pairing', async () => 
   assert.match(source, /pair\.updateGrants/);
 });
 
+test('Desktop panel no longer exposes per-phone access management', async () => {
+  const [clientSource, hostSource, runtimeSource] = await Promise.all([
+    readFile(new URL('../../dist/client.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../dist/index.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../dist/lib/runtime.js', import.meta.url), 'utf8'),
+  ]);
+  for (const source of [clientSource, hostSource, runtimeSource]) {
+    assert.doesNotMatch(source, /mobile\.access\.(?:list|decide)/);
+  }
+  for (const token of ['mobileAccess', 'accessSection', 'allowAccess', 'revokeAccess']) {
+    assert.ok(!clientSource.includes(token), `removed phone access UI remains in client bundle: ${token}`);
+  }
+  // Desktop grants, including the explicit remote-approval scope, remain editable.
+  assert.match(clientSource, /pair\.updateGrants/);
+  assert.match(clientSource, /approve: 'Remote approvals'/);
+  assert.match(runtimeSource, /interaction\.audience/);
+});
+
 test('Desktop grant editor supports bounded search, selected-only review and global select all', async () => {
   const source = await readFile(new URL('../../dist/client.js', import.meta.url), 'utf8');
   for (const token of [

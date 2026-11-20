@@ -86,7 +86,7 @@ func TestEventHubClosesOnlyRevokedMobileIdentities(t *testing.T) {
 		t.Fatal("admin Subscribe() failed")
 	}
 
-	hub.CloseMobileForDevice("mob-1", "dev-1")
+	hub.CloseDevice("dev-1")
 	select {
 	case <-phone.done:
 		if phone.reason.Code != protocol.CodeUnauthorized {

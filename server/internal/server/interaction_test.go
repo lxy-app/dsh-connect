@@ -27,22 +27,9 @@ func interactionEvent(t *testing.T, deviceID, sessionID string, data protocol.In
 	}
 }
 
-func approveMobileAccess(t *testing.T, environment *adminEnvironment, connector pairedConnector, phone protocol.MobileSessionResponse, scopes []string) {
+func allowMobileInteractionAccess(t *testing.T, environment *adminEnvironment, connector pairedConnector, phone protocol.MobileSessionResponse, scopes []string) {
 	t.Helper()
 	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, scopes)
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
-		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": scopes,
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("access request status=%d body=%s", status, body)
-	}
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessList, map[string]any{})
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessDecide, map[string]any{
-		"mobileDeviceId": phone.MobileDeviceID,
-		"action":         "allow",
-		"workspaces":     []string{"ws-1"},
-		"scopes":         scopes,
-	})
 }
 
 func listInteractions(t *testing.T, environment *adminEnvironment, phone protocol.MobileSessionResponse) protocol.MobileInteractionListResponse {
@@ -73,10 +60,10 @@ func waitForInteractions(t *testing.T, environment *adminEnvironment, phone prot
 
 func TestInteractionRelayRoundTrip(t *testing.T) {
 	environment := newAdminEnvironment(t)
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnectorWithScopes(t, environment.testEnvironment, []string{"read", "prompt", "approve", "cancel"})
-	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Approval iPhone")
-	approveMobileAccess(t, environment, connector, phone, []string{"read", "approve"})
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Approval iPhone")
+	secondPhone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Approval iPhone B")
+	allowMobileInteractionAccess(t, environment, connector, phone, []string{"read", "approve"})
 
 	now := nowUTC()
 	writeTestFrame(t, connector.connection, interactionEvent(t, connector.deviceID, "sess-1", protocol.InteractionRequestData{
@@ -93,6 +80,9 @@ func TestInteractionRelayRoundTrip(t *testing.T) {
 	}))
 
 	pending := waitForInteractions(t, environment, phone, 1)
+	if secondPending := waitForInteractions(t, environment, secondPhone, 1); len(secondPending.Interactions) != 1 {
+		t.Fatalf("same-user second phone did not inherit approve policy: %+v", secondPending.Interactions)
+	}
 	item := pending.Interactions[0]
 	if item.InteractionID != "int_test_1" || item.Kind != protocol.InteractionKindApproval || item.DeviceID != connector.deviceID || item.SessionID != "sess-1" || item.Title != "bash" {
 		t.Fatalf("unexpected interaction projection: %+v", item)
@@ -114,14 +104,14 @@ func TestInteractionRelayRoundTrip(t *testing.T) {
 		t.Fatalf("connector command: %v", err)
 	}
 	waitForInteractions(t, environment, phone, 0)
+	waitForInteractions(t, environment, secondPhone, 0)
 }
 
-func TestInteractionDecisionRequiresApproveGrant(t *testing.T) {
+func TestInteractionDecisionRequiresApprovePolicy(t *testing.T) {
 	environment := newAdminEnvironment(t)
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnectorWithScopes(t, environment.testEnvironment, []string{"read", "prompt", "approve", "cancel"})
-	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Read-only iPhone")
-	approveMobileAccess(t, environment, connector, phone, []string{"read"})
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Read-only iPhone")
+	allowMobileInteractionAccess(t, environment, connector, phone, []string{"read"})
 
 	now := nowUTC()
 	writeTestFrame(t, connector.connection, interactionEvent(t, connector.deviceID, "sess-1", protocol.InteractionRequestData{
@@ -195,10 +185,9 @@ func TestConnectorCanEnableApproveWithoutRepairing(t *testing.T) {
 
 func TestConnectorInteractionAudienceFollowsPhonePolling(t *testing.T) {
 	environment := newAdminEnvironment(t)
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnectorWithScopes(t, environment.testEnvironment, []string{"read", "prompt", "approve", "cancel"})
-	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Watching iPhone")
-	approveMobileAccess(t, environment, connector, phone, []string{"read", "approve"})
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Watching iPhone")
+	allowMobileInteractionAccess(t, environment, connector, phone, []string{"read", "approve"})
 
 	audience := func() protocol.InteractionAudienceResponse {
 		t.Helper()

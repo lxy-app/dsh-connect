@@ -293,32 +293,20 @@ func (s *Server) handleMobileInteractions(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "valid sessionId required", false))
 		return
 	}
-	grants, err := s.store.MobileAccessGrantsForMobile(r.Context(), actor.Device.Device.MobileDeviceID)
+	accessible, err := s.mobileUserDesktops(r.Context(), actor.User.ID)
 	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
-		return
-	}
-	access, err := s.policyAccessForUser(r.Context(), actor.User.ID)
-	if err != nil {
-		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not resolve user desktop access", true))
 		return
 	}
 	type grantKey struct{ deviceID, workspaceID string }
-	allowed := make(map[grantKey]struct{}, len(grants))
-	for _, grant := range grants {
-		if grant.Status != "active" || !hasScope(grant.Scopes, "approve") {
-			continue
-		}
-		for _, workspace := range grant.Workspaces {
-			if access.allows(grant.DeviceID, workspace.ID, "approve") {
-				allowed[grantKey{deviceID: grant.DeviceID, workspaceID: workspace.ID}] = struct{}{}
-			}
-		}
-	}
+	allowed := make(map[grantKey]struct{})
 	deviceNames := map[string]string{}
-	if devices, deviceErr := s.store.Devices(r.Context()); deviceErr == nil {
-		for _, device := range devices {
-			deviceNames[device.Device.DeviceID] = device.Device.DeviceName
+	for _, desktop := range accessible {
+		deviceNames[desktop.device.DeviceID] = desktop.device.DeviceName
+		for _, workspace := range desktop.workspaces {
+			if hasScope(workspace.scopes, "approve") {
+				allowed[grantKey{deviceID: desktop.device.DeviceID, workspaceID: workspace.summary.ID}] = struct{}{}
+			}
 		}
 	}
 	items := s.interactions.list(nowUTC())
@@ -370,34 +358,48 @@ func (s *Server) connectorInteractionAudience(ctx context.Context, deviceID stri
 	if !s.interactions.RemoteEnabled() {
 		return protocol.InteractionAudienceResponse{Watching: false}, nil
 	}
-	grants, err := s.store.MobileAccessGrantsForDevice(ctx, deviceID)
+	desktop, err := s.store.Device(ctx, deviceID)
 	if err != nil {
-		return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load mobile access grants", true))
+		return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load desktop device", true))
 	}
-	candidates := make([]string, 0, len(grants))
+	if desktop.Device.Status == "revoked" || desktop.Device.Status == "waiting_desktop_authorization" ||
+		!hasScope(desktop.Device.Scopes, "approve") || !hasWorkspace(desktop.Device.Workspaces, input.WorkspaceID) {
+		return protocol.InteractionAudienceResponse{Watching: false}, nil
+	}
+	mobileDevices, err := s.store.MobileDevices(ctx)
+	if err != nil {
+		return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load mobile login devices", true))
+	}
+	candidates := make([]string, 0, len(mobileDevices))
 	accessByUser := make(map[string]policyAccess)
-	for _, grant := range grants {
-		if grant.Status != "active" || !hasScope(grant.Scopes, "approve") {
+	activeUsers := make(map[string]bool)
+	for _, mobile := range mobileDevices {
+		if mobile.Device.Status != "active" {
 			continue
 		}
-		access, loaded := accessByUser[grant.UserID]
+		userID := mobile.Device.UserID
+		active, loaded := activeUsers[userID]
 		if !loaded {
-			var accessErr error
-			access, accessErr = s.policyAccessForUser(ctx, grant.UserID)
-			if accessErr != nil {
+			owner, ownerErr := s.store.UserByID(ctx, userID)
+			if ownerErr != nil {
+				return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not load mobile device owner", true))
+			}
+			active = owner.Status == "active"
+			activeUsers[userID] = active
+		}
+		if !active {
+			continue
+		}
+		access, loaded := accessByUser[userID]
+		if !loaded {
+			access, err = s.policyAccessForUser(ctx, userID)
+			if err != nil {
 				return protocol.InteractionAudienceResponse{}, errorPtr(protocol.NewError(protocol.CodeInternalError, "could not resolve user access policy", true))
 			}
-			accessByUser[grant.UserID] = access
+			accessByUser[userID] = access
 		}
-		allowed := false
-		for _, workspace := range grant.Workspaces {
-			if workspace.ID == input.WorkspaceID && access.allows(deviceID, input.WorkspaceID, "approve") {
-				allowed = true
-				break
-			}
-		}
-		if allowed {
-			candidates = append(candidates, grant.MobileDeviceID)
+		if access.allows(deviceID, input.WorkspaceID, "approve") {
+			candidates = append(candidates, mobile.Device.MobileDeviceID)
 		}
 	}
 	return protocol.InteractionAudienceResponse{

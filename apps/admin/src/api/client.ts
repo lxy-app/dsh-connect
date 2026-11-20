@@ -213,14 +213,6 @@ export interface PairingCodeState {
   deviceId?: string;
 }
 
-export interface MobilePairingCode {
-  code: string;
-  expiresAt: string;
-  serverUrl: string;
-  pairingUrl: string;
-  userId: string;
-}
-
 export interface MobileDevice {
   mobileDeviceId: string;
   userId: string;
@@ -551,13 +543,6 @@ export const adminApi = {
   async pairingCodes(signal?: AbortSignal): Promise<PairingCodeState[]> {
     const response = await request<{ codes: PairingCodeState[] }>('/v1/admin/pairing-codes', { signal });
     return response.codes ?? [];
-  },
-
-  createMobilePairingCode(userId?: string): Promise<MobilePairingCode> {
-    return request<MobilePairingCode>('/v1/admin/mobile/pairing-codes', {
-      method: 'POST',
-      body: userId ? { userId } : {},
-    });
   },
 
   async mobileDevices(signal?: AbortSignal): Promise<MobileDevice[]> {

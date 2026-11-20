@@ -54,36 +54,9 @@ func TestMobilePromptCarriesUploadedAttachments(t *testing.T) {
 	environment := newAttachmentEnvironment(t, func(config *Config) {
 		config.AttachmentsMode = attachmentsModeReadWrite
 	})
-	ownerToken, ownerID := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Uplink iPhone")
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Uplink iPhone")
 	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read", "prompt"})
-
-	// The desktop must approve the requested scopes before a prompt can be sent.
-	requestGrant := func() protocol.MobileAccessGrant {
-		t.Helper()
-		status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
-			"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read", "prompt"},
-		})
-		if status != http.StatusCreated {
-			t.Fatalf("access request status=%d body=%s", status, body)
-		}
-		var requested protocol.MobileAccessGrant
-		decodeTestJSON(t, body, &requested)
-		decided := connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessDecide, map[string]any{
-			"mobileDeviceId": phone.MobileDeviceID,
-			"action":         "allow",
-			"workspaces":     []string{"ws-1"},
-			"scopes":         []string{"read", "prompt"},
-		})
-		var grant protocol.MobileAccessGrant
-		if err := json.Unmarshal(decided, &grant); err != nil {
-			t.Fatalf("decode grant: %v", err)
-		}
-		return grant
-	}
-	_ = requestGrant()
-	_ = ownerID
 
 	png := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("p", 40))
 	text := []byte("export const value = 1;\n")
@@ -182,18 +155,17 @@ func TestMobileAttachmentUploadRefusals(t *testing.T) {
 		config.AttachmentsMode = attachmentsModeReadWrite
 		config.MaxAttachmentBytes = 64
 	})
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Refusal iPhone")
-	grantMobileRead(t, environment, connector, phone)
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Refusal iPhone")
+	allowMobileRead(t, environment, connector, phone)
 
-	// A read-only grant cannot stage uploads, because it cannot prompt either.
+	// A read-only policy cannot stage uploads, because it cannot prompt either.
 	response, body := uploadPhoneAttachment(t, environment.http.URL, phone.AccessToken, "sess-1", connector.deviceID, "ws-1", "a.png", []byte("x"))
 	if response.StatusCode != http.StatusForbidden {
 		t.Fatalf("read-only upload status=%d body=%s", response.StatusCode, body)
 	}
 
-	// Another workspace is outside the grant.
+	// Another workspace is outside the user policy.
 	response, body = uploadPhoneAttachment(t, environment.http.URL, phone.AccessToken, "sess-2", connector.deviceID, "ws-2", "a.png", []byte("x"))
 	if response.StatusCode != http.StatusForbidden {
 		t.Fatalf("foreign workspace upload status=%d body=%s", response.StatusCode, body)
@@ -218,17 +190,13 @@ func TestMobilePromptAttachmentOwnership(t *testing.T) {
 	environment := newAttachmentEnvironment(t, func(config *Config) {
 		config.AttachmentsMode = attachmentsModeReadWrite
 	})
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	phoneA := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Phone A")
-	phoneB := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Phone B")
-	for _, phone := range []protocol.MobileSessionResponse{phoneA, phoneB} {
-		allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read", "prompt"})
-		createActiveGrantForTest(t, environment, phone, connector, []string{"read", "prompt"})
-	}
+	phoneA := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Phone A")
+	phoneB := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Phone B")
+	allowUserAccess(t, environment, phoneA.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read", "prompt"})
 
-	// Both phones have active prompt grants. The second phone still cannot cite
-	// the first phone's upload because the staged row carries its mobile owner.
+	// Both phones inherit prompt permission, but the second phone still cannot
+	// cite the first phone's upload because the staged row carries its mobile owner.
 	now := nowUTC()
 	if err := environment.server.store.CreateUploadedAttachment(t.Context(), store.SessionAttachmentRecord{
 		ID: "atu_foreign_owner_bytes", DeviceID: connector.deviceID, MobileDeviceID: phoneA.MobileDeviceID,
@@ -302,21 +270,10 @@ func TestConnectorUploadDownloadServesOwnedBytes(t *testing.T) {
 	environment := newAttachmentEnvironment(t, func(config *Config) {
 		config.AttachmentsMode = attachmentsModeReadWrite
 	})
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
 	other := pairConnector(t, environment.testEnvironment)
-	phone := pairMobile(t, environment, issueMobilePairingCode(t, environment, ownerToken, "").Code, "Download iPhone")
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Download iPhone")
 	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read", "prompt"})
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
-		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read", "prompt"},
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("access request status=%d body=%s", status, body)
-	}
-	connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessDecide, map[string]any{
-		"mobileDeviceId": phone.MobileDeviceID, "action": "allow",
-		"workspaces": []string{"ws-1"}, "scopes": []string{"read", "prompt"},
-	})
 
 	payload := []byte("\x89PNG\r\n\x1a\n staged-png")
 	response, uploaded := uploadPhoneAttachment(t, environment.http.URL, phone.AccessToken, "sess-1", connector.deviceID, "ws-1", "staged.png", payload)

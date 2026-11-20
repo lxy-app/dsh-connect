@@ -46,7 +46,6 @@ func main() {
 		DatabaseURL:             os.Getenv("DSH_CONNECT_DATABASE_URL"),
 		ServerURL:               serverURL,
 		AdminOrigin:             os.Getenv("DSH_CONNECT_ADMIN_ORIGIN"),
-		MobilePairingCodeTTL:    envDuration("DSH_CONNECT_MOBILE_PAIRING_TTL", 5*time.Minute),
 		MobileAccessTokenTTL:    envDuration("DSH_CONNECT_MOBILE_ACCESS_TTL", 15*time.Minute),
 		MobileRefreshTokenTTL:   envDuration("DSH_CONNECT_MOBILE_REFRESH_TTL", 30*24*time.Hour),
 		AttachmentsMode:         envOrDefault("DSH_CONNECT_ATTACHMENTS", "read"),

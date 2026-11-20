@@ -24,13 +24,11 @@ export type WorkspaceEntry = MobileWorkspaceSummary & {
 export function WorkspacesTab({
   workspaces,
   onOpenWorkspace,
-  onRequestAccess,
   refreshing,
   onRefresh,
 }: {
   workspaces: WorkspaceEntry[];
   onOpenWorkspace: (workspace: WorkspaceEntry) => void;
-  onRequestAccess: () => void;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
@@ -57,9 +55,7 @@ export function WorkspacesTab({
       {workspaces.length === 0 ? (
         <EmptyState
           title="还没有可访问的工作区"
-          description="桌面 Connector 中批准这台手机后，属于你的工作区会出现在这里。"
-          actionLabel="申请访问授权"
-          onAction={onRequestAccess}
+          description="当前账号访问策略没有可访问的工作区，请联系管理员配置后下拉刷新。"
         />
       ) : (
         devices.map((group) => (

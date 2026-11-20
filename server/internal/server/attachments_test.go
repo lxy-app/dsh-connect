@@ -139,11 +139,9 @@ func newAttachmentEnvironment(t *testing.T, change ...func(*Config)) *adminEnvir
 // accepts the upload, then serves them with digest revalidation.
 func TestMobileAttachmentLearnFetchUploadDownload(t *testing.T) {
 	environment := newAttachmentEnvironment(t)
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	mobileCode := issueMobilePairingCode(t, environment, ownerToken, "")
-	phone := pairMobile(t, environment, mobileCode.Code, "Attachment iPhone")
-	grantID := grantMobileRead(t, environment, connector, phone)
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Attachment iPhone")
+	policy := allowMobileRead(t, environment, connector, phone)
 
 	const attachmentID = "att_b7Qk2m9xT4pL0rVc8sN1"
 	fileBytes := []byte("\x89PNG\r\n\x1a\n" + "fake-png-body")
@@ -241,10 +239,10 @@ func TestMobileAttachmentLearnFetchUploadDownload(t *testing.T) {
 		t.Fatalf("revalidation status=%d, want 304", response.StatusCode)
 	}
 
-	// Revoking the grant closes the same URL immediately.
-	status, body = testRequest(t, http.MethodDelete, environment.http.URL+"/v1/mobile/access/"+grantID, phone.AccessToken, nil)
-	if status != http.StatusNoContent {
-		t.Fatalf("revoke status=%d body=%s", status, body)
+	// Disabling the user policy closes the same URL immediately.
+	disabled := false
+	if _, err := environment.server.store.UpdateAccessPolicy(context.Background(), policy.PolicyID, policy.Revision, store.AccessPolicyUpdate{Enabled: &disabled}); err != nil {
+		t.Fatalf("disable policy: %v", err)
 	}
 	response, revoked := getAttachment(t, environment.http.URL, phone.AccessToken, attachmentID, "")
 	if response.StatusCode != http.StatusForbidden {
@@ -252,33 +250,10 @@ func TestMobileAttachmentLearnFetchUploadDownload(t *testing.T) {
 	}
 }
 
-// grantMobileRead requests read access from the phone and approves it on the
-// desktop, returning the grant id.
-func grantMobileRead(t *testing.T, environment *adminEnvironment, connector pairedConnector, phone protocol.MobileSessionResponse) string {
+// allowMobileRead gives the phone's user read access through the user policy.
+func allowMobileRead(t *testing.T, environment *adminEnvironment, connector pairedConnector, phone protocol.MobileSessionResponse) store.AccessPolicyRecord {
 	t.Helper()
-	allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
-	status, body := testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/access/requests", phone.AccessToken, map[string]any{
-		"deviceId": connector.deviceID, "workspaces": []string{"ws-1"}, "scopes": []string{"read"},
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("access request status=%d body=%s", status, body)
-	}
-	var requested protocol.MobileAccessGrant
-	decodeTestJSON(t, body, &requested)
-	decided := connectorRequest(t, connector.connection, protocol.ConnectorMethodMobileAccessDecide, map[string]any{
-		"mobileDeviceId": phone.MobileDeviceID,
-		"action":         "allow",
-		"workspaces":     []string{"ws-1"},
-		"scopes":         []string{"read"},
-	})
-	var grant protocol.MobileAccessGrant
-	if err := json.Unmarshal(decided, &grant); err != nil {
-		t.Fatalf("decode grant: %v", err)
-	}
-	if grant.Status != "active" {
-		t.Fatalf("grant not active: %+v", grant)
-	}
-	return grant.GrantID
+	return allowUserAccess(t, environment, phone.User.ID, connector.deviceID, []string{"ws-1"}, []string{"read"})
 }
 
 // TestMobileAttachmentRejectsUnknownWrongDeviceAndBadDigest covers the refusal
@@ -287,11 +262,9 @@ func TestMobileAttachmentRejectsUnknownWrongDeviceAndBadDigest(t *testing.T) {
 	environment := newAttachmentEnvironment(t, func(config *Config) {
 		config.MaxAttachmentBytes = 32
 	})
-	ownerToken, _ := environment.login(t, testOwnerEmail, testOwnerPassword)
 	connector := pairConnector(t, environment.testEnvironment)
-	mobileCode := issueMobilePairingCode(t, environment, ownerToken, "")
-	phone := pairMobile(t, environment, mobileCode.Code, "Reject iPhone")
-	grantMobileRead(t, environment, connector, phone)
+	phone := loginMobile(t, environment, testOwnerEmail, testOwnerPassword, "Reject iPhone")
+	allowMobileRead(t, environment, connector, phone)
 
 	const attachmentID = "att_a1b2c3d4e5f6g7h8"
 	fileBytes := []byte("payload-bytes")
@@ -348,7 +321,7 @@ func TestMobileAttachmentRejectsUnknownWrongDeviceAndBadDigest(t *testing.T) {
 		t.Fatalf("oversized declaration status=%d body=%s", response.StatusCode, oversizedDeclaration)
 	}
 
-	// An id the Server never learned stays a 404 even with a valid grant.
+	// An id the Server never learned stays a 404 even with a valid policy.
 	response, unknown := getAttachment(t, environment.http.URL, phone.AccessToken, "att_zzzzzzzzzzzzzzzz", "")
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown attachment status=%d body=%s", response.StatusCode, unknown)

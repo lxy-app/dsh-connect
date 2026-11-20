@@ -7,7 +7,7 @@
 ## 已实现
 
 - 持久化 npm bundle，Host 命名导出 `apply/inject`。
-- DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权；配对完成后仍可在“桌面授权范围”中随时增减工作区和动作（`pair.updateGrants`，无需重新配对），以及**手机访问授权**（批准/拒绝/撤销手机申请的工作区与动作）。工作区授权支持三态全选、名称/路径搜索、“仅看已选”和固定高度列表内滚动；搜索与筛选不改变已有选择，全选始终作用于全部工作区，空工作区或空动作不能保存。面板品牌色使用石墨/银白令牌，按宿主实际背景亮度切换明暗主题和主按钮对比前景色，不继承宿主的高饱和品牌色。
+- DSH 侧边栏桌面面板：Server 配置保存、一次性配对码、桌面名称、指纹核对、工作区多选和动作授权；配对完成后仍可在“桌面授权范围”中随时增减工作区和动作（`pair.updateGrants`，无需重新配对）。手机权限由后端用户策略与这里开放的桌面范围取交集，不再提供逐手机申请审批卡片。工作区授权支持三态全选、名称/路径搜索、“仅看已选”和固定高度列表内滚动；搜索与筛选不改变已有选择，全选始终作用于全部工作区，空工作区或空动作不能保存。面板品牌色使用石墨/银白令牌，按宿主实际背景亮度切换明暗主题和主按钮对比前景色，不继承宿主的高饱和品牌色。
 - `/dsh-connect` 自定义 unary RPC，仅 owner peer 可调用；会话流不经过该 RPC。
 - 单条主动出站 Connector WSS，心跳、指数退避、设备令牌重连和固定背压上限。
 - `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 保留 user/assistant 对话文本，并把 `tool/call` + `tool/result` 投影成单行步骤（`toolName`、脱敏摘要、状态、耗时、turn）；工具参数、命令输出、推理内容以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页未显式指定 cut 时省略 `throughSeq`，由 Host `events()` 在观察到的日志末尾读取并返回精确 `cursor`；list 的 cached/sequenced projection 只用于列表投影和运行状态，不再作为历史水位，超出体积预算时优先保留最新消息。
@@ -16,7 +16,7 @@
 - `session.model.catalog` 组合 `modelCatalog + projections`，只读目录不唤醒冷 Agent；`session.model.select` 重新校验 provider/model/reasoningEffort 后直接调用公开 `agent.model.select`，prompt 与切换按 sessionId 串行，迁移未完成时失败关闭。
 - follow opening snapshot、持久事件去重/空洞检测、assistant stream 独立坐标；移动端 follow 使用 `compact` 省略大快照，assistant stream 归一化为 `start/delta/end` 文本增量；最后一个 App 事件连接关闭后显式 unfollow。
 - 插件卸载/断连时取消 Host 调用和旧 follow；恢复以 DSH snapshot 为准。
-- 通过同一条已认证出站 WSS 发送 `request` 信封（`mobile.access.list` / `mobile.access.decide`），桌面面板据此读取和决定手机授权；手机访问范围不写进本地凭据。
+- 通过同一条已认证出站 WSS 发送 `request` 信封：`pair.updateGrants` 更新桌面自身授权范围，`interaction.audience` 查询具备用户级 `approve` 权限且正在轮询的手机。
 
 ## 安全边界
 
@@ -99,8 +99,6 @@ Host `ctx.provide('dshConnectConnector')` 供 Host 内集成使用，Web 面板�
 | `pair.cancel` | 取消待确认配对 |
 | `connection.connect` | 使用已配对凭据重连 |
 | `connection.disconnect` | 主动断开，不删除 DSH 会话 |
-| `mobile.access.list` | 经 Server 读取本桌面的手机访问申请与 active grant |
-| `mobile.access.decide` | 桌面用户 allow/deny/revoke 手机访问；范围必须是本桌面已授权集合的子集 |
 
 ## 调试客户端
 

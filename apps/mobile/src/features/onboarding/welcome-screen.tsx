@@ -7,7 +7,7 @@ import { AppMark } from '@/components/app-mark';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 
-const CAPABILITIES = ['扫码配对', 'Keychain / Keystore', 'Token 轮换', '桌面授权'];
+const CAPABILITIES = ['账号登录', 'Keychain / Keystore', 'Token 轮换', '用户权限'];
 
 export function WelcomeScreen() {
   const theme = useAppTheme();
@@ -39,11 +39,11 @@ export function WelcomeScreen() {
             <View style={styles.statusHeadingRow}>
               <View style={[styles.statusDot, { backgroundColor: theme.statusNeutral }]} />
               <Text style={[styles.statusTitle, { color: theme.text }]}>
-                {status === 'loading' ? '正在恢复配对' : '尚未连接 Server'}
+                {status === 'loading' ? '正在恢复登录' : '尚未连接 Server'}
               </Text>
             </View>
             <Text style={[styles.statusDescription, { color: theme.textSecondary }]}>
-              扫码或输入管理后台生成的一次性配对码，把本机连接到你的 DSH Server。配对后还需要由桌面 Connector 批准工作区访问。
+              使用用户邮箱和密码登录 DSH Server。登录后可直接获得账号访问策略中的桌面、工作区和操作权限。
             </Text>
 
             {notice ? (
@@ -56,8 +56,8 @@ export function WelcomeScreen() {
             ) : null}
 
             <ActionButton
-              accessibilityHint="扫描或输入手机配对码"
-              label={status === 'loading' ? '正在准备…' : '连接 Server'}
+              accessibilityHint="输入 Server 地址和用户账号密码"
+              label={status === 'loading' ? '正在准备…' : '登录'}
               loading={status === 'loading'}
               onPress={() => router.navigate('/connect')}
             />
@@ -78,14 +78,14 @@ export function WelcomeScreen() {
 
           <View style={[styles.nextStepCard, { backgroundColor: theme.surfaceMuted, borderColor: theme.border }]}>
             <Text style={[styles.nextStepLabel, { color: theme.textSecondary }]}>下一步</Text>
-            <Text style={[styles.nextStepTitle, { color: theme.text }]}>生成手机配对码</Text>
+            <Text style={[styles.nextStepTitle, { color: theme.text }]}>使用用户账号登录</Text>
             <Text style={[styles.nextStepDescription, { color: theme.textSecondary }]}>
-              在 Web 管理后台为当前用户生成手机配对二维码，再回到 App 扫描。配对码短期有效且只能使用一次。
+              输入 Server 地址以及管理后台中的用户邮箱和密码。密码只用于登录，不会保存在本机。
             </Text>
           </View>
 
           <Text style={[styles.footnote, { color: theme.textSecondary }]}>
-            手机配对只证明设备身份；没有桌面授权时，App 不会显示任何工作区或会话。
+            没有配置用户访问策略时，App 不会显示任何工作区或会话。请联系管理员为账号授权。
           </Text>
         </View>
       </ScrollView>

@@ -42,7 +42,7 @@ export function ProfileTab({
   };
 
   const confirmDisconnect = () => {
-    Alert.alert('断开这台手机？', '本机安全存储中的凭据会被删除，桌面授权也会随之撤销。下次使用需要重新配对。', [
+    Alert.alert('断开这台手机？', '本机安全存储中的登录凭据会被删除，下次使用需要重新登录。账号访问策略不受影响。', [
       { text: '取消', style: 'cancel' },
       {
         text: '断开',
@@ -64,7 +64,7 @@ export function ProfileTab({
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>我的</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          DSH Connect for iOS · v{Constants.expoConfig?.version ?? '0.1.0'}
+          DSH Connect Mobile · v{Constants.expoConfig?.version ?? '0.1.0'}
         </Text>
       </View>
 
@@ -86,7 +86,7 @@ export function ProfileTab({
       <Section title="连接">
         <Row label="Server" value={displayServer(session.serverUrl)} />
         <Row label="本机" value={session.deviceName} />
-        <Row label="配对用户" value={session.user.displayName} />
+        <Row label="登录用户" value={session.user.displayName} />
         <Row label="设备 ID" value={session.mobileDeviceId} mono />
       </Section>
 
@@ -94,7 +94,7 @@ export function ProfileTab({
         <Row label="桌面" value={`${desktopCount} 台`} />
         <Row label="工作区" value={`${workspaceCount} 个`} />
         <Text style={[styles.help, { color: theme.textSecondary }]}>
-          授权由桌面 Connector 决定。桌面撤销访问或吊销本机后，相关工作区与会话会立即不可见。
+          桌面、工作区和操作权限由账号访问策略决定。策略变更后，下拉刷新即可同步。
         </Text>
       </Section>
 
@@ -134,7 +134,7 @@ export function ProfileTab({
       </Section>
 
       <View style={styles.actions}>
-        <ActionButton label="重新配对" onPress={onRepair} variant="secondary" />
+        <ActionButton label="切换账号" onPress={onRepair} variant="secondary" />
         <ActionButton
           label={disconnecting ? '正在断开…' : '断开连接'}
           loading={disconnecting}
