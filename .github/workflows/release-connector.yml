@@ -1,0 +1,132 @@
+name: Release Connector
+
+on:
+  push:
+    tags:
+      - 'connector-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version used only for the npm pack dry-run (must match package.json)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+
+concurrency:
+  group: release-connector
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Test and Pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      stable: ${{ steps.version.outputs.stable }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve and validate version
+        id: version
+        run: bash scripts/ci/release-version.sh connector "$MANUAL_VERSION"
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+
+      - name: Match package.json version
+        working-directory: connector/dsh-plugin
+        run: node -e 'const pkg = require("./package.json"); if (pkg.version !== process.env.EXPECTED_VERSION) { throw new Error("package.json version " + pkg.version + " does not match " + process.env.EXPECTED_VERSION); }'
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Require a successful CI Gate on this commit
+        run: bash scripts/ci/verify-ci-gate.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: connector/dsh-plugin/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix connector/dsh-plugin ci --no-audit --no-fund
+
+      - name: Test Connector
+        run: make test-connector
+
+      - name: Verify npm package without publishing
+        working-directory: connector/dsh-plugin
+        run: npm pack --dry-run
+
+      - name: Record dry-run result
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo 'Dry-run only: no npm package was published.' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish npm Package
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js for npm publishing
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: connector/dsh-plugin/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix connector/dsh-plugin ci --no-audit --no-fund
+
+      - name: Prevent default channel rollback
+        run: |
+          if ! current="$(npm view '@lxyapp/dsh-connect' "dist-tags.${NPM_DIST_TAG}")"; then
+            echo 'Could not read the current npm distribution tag.' >&2
+            exit 1
+          fi
+          node scripts/ci/require-newer-version.mjs "$RELEASE_VERSION" "$current"
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+          NPM_DIST_TAG: ${{ needs.verify.outputs.stable == 'true' && 'latest' || 'rc' }}
+
+      - name: Publish package with provenance
+        working-directory: connector/dsh-plugin
+        run: npm publish --access public --tag "$NPM_DIST_TAG" --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_DIST_TAG: ${{ needs.verify.outputs.stable == 'true' && 'latest' || 'rc' }}
+
+      - name: Verify registry version
+        working-directory: connector/dsh-plugin
+        run: |
+          for attempt in $(seq 1 12); do
+            published="$(npm view "@lxyapp/dsh-connect@${RELEASE_VERSION}" version || true)"
+            if [[ "$published" == "$RELEASE_VERSION" ]]; then
+              echo "Verified @lxyapp/dsh-connect@${RELEASE_VERSION} on npm." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [[ "$attempt" -eq 12 ]]; then
+              echo 'npm registry did not return the published version within 60 seconds.' >&2
+              exit 1
+            fi
+            sleep 5
+          done
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}

@@ -1,0 +1,183 @@
+name: Release Server
+
+on:
+  push:
+    tags:
+      - 'server-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version used only for the local image dry-run (for example 0.1.5)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+
+concurrency:
+  group: release-server
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Build and Smoke Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      stable: ${{ steps.version.outputs.stable }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve and validate version
+        id: version
+        run: bash scripts/ci/release-version.sh server "$MANUAL_VERSION"
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+
+      - name: Require a successful CI Gate on this commit
+        run: bash scripts/ci/verify-ci-gate.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build release candidate image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: lxyapp/dsh-connect:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Smoke test release candidate
+        run: bash scripts/ci/docker-smoke.sh
+        env:
+          DSH_CONNECT_SMOKE_BUILD: '0'
+          IMAGE: lxyapp/dsh-connect:${{ steps.version.outputs.version }}
+          PLATFORM: linux/amd64
+          BUILDPLATFORM: linux/amd64
+
+      - name: Record dry-run result
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo 'Dry-run only: no image was pushed and no GitHub Release was created.' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish Docker Image
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js for version checks
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Prevent stable channel rollback
+        if: needs.verify.outputs.stable == 'true'
+        run: |
+          current="$(docker buildx imagetools inspect lxyapp/dsh-connect:latest --format '{{json .Image}}' | jq -r '((.config.Labels // {})["org.opencontainers.image.version"] // empty)')"
+          if [[ -z "$current" ]]; then
+            echo 'The legacy latest image has no OCI version label; release approval must confirm the baseline.'
+          else
+            node scripts/ci/require-newer-version.mjs "$RELEASE_VERSION" "$current"
+          fi
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+
+      - name: Build image for publication
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: lxyapp/dsh-connect:${{ needs.verify.outputs.version }}
+          cache-from: type=gha,scope=server
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.verify.outputs.version }}
+
+      - name: Smoke test the exact image to publish
+        run: bash scripts/ci/docker-smoke.sh
+        env:
+          DSH_CONNECT_SMOKE_BUILD: '0'
+          IMAGE: lxyapp/dsh-connect:${{ needs.verify.outputs.version }}
+          PLATFORM: linux/amd64
+          BUILDPLATFORM: linux/amd64
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push the tested local image
+        run: |
+          repository=lxyapp/dsh-connect
+          version_image="$repository:$RELEASE_VERSION"
+          image_id="$(docker image inspect --format '{{.Id}}' "$version_image")"
+          sha_image="$repository:sha-$GITHUB_SHA"
+          docker tag "$version_image" "$sha_image"
+          if [[ "$RELEASE_STABLE" == 'true' ]]; then
+            docker tag "$version_image" "$repository:latest"
+          fi
+
+          docker push "$version_image"
+          docker push "$sha_image"
+          if [[ "$RELEASE_STABLE" == 'true' ]]; then
+            docker push "$repository:latest"
+          fi
+
+          published_reference="$(docker image inspect --format '{{index .RepoDigests 0}}' "$version_image")"
+          if [[ "$published_reference" != *@sha256:* ]]; then
+            echo 'Could not determine the published image digest.' >&2
+            exit 1
+          fi
+          {
+            echo 'Published the smoke-tested local image:'
+            echo
+            echo "- Version: \`$RELEASE_VERSION\`"
+            echo "- Local image ID: \`$image_id\`"
+            echo "- Published reference: \`$published_reference\`"
+            echo "- Stable \`latest\` updated: \`$RELEASE_STABLE\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+          RELEASE_STABLE: ${{ needs.verify.outputs.stable }}
+
+      - name: Create GitHub Release
+        run: |
+          release_args=(--title "Server $RELEASE_VERSION" --generate-notes)
+          if [[ "$RELEASE_STABLE" != 'true' ]]; then
+            release_args+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" "${release_args[@]}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+          RELEASE_STABLE: ${{ needs.verify.outputs.stable }}
