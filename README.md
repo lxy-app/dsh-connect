@@ -1,5 +1,7 @@
 # DSH Connect
 
+[![CI](https://github.com/lxy-app/dsh-connect/actions/workflows/ci.yml/badge.svg)](https://github.com/lxy-app/dsh-connect/actions/workflows/ci.yml)
+
 DSH Connect 让你在手机上继续桌面的 DeepSeek Harness（DSH）会话。离开电脑后，可以查看 Agent 的进度、发送下一条指令，或在需要确认时处理审批和提问。Agent 在桌面执行，Connector 主动连接自托管的 Server，桌面无需开放入站端口。
 
 管理员在 Web 后台配对设备、管理访问策略和查看审计。桌面用户决定每部手机可以访问哪些工作区，以及能否读取、发送指令、停止执行或处理审批。
@@ -250,6 +252,8 @@ Server 测试由 `internal/dbtest` 选择数据库，同一套用例分别运行
 
 真实 DSH 插件生命周期与真实 Agent 闭环需要按 [实施路线](docs/04-implementation-roadmap.md) 单独验收；在未执行该验收前，不宣称 P0 通过门槛已达成。
 
+GitHub Actions 会按变更范围运行上述检查、生产构建和容器 Smoke Test，并通过 `CI Gate` 提供统一必需状态检查。Server/Admin 镜像与 Connector npm 包使用独立组件标签发布，Website 仅支持审批后的手动部署；详细流程、Secrets 和回退边界见 [CI/CD 与发布运维](docs/11-ci-cd.md)。
+
 ## 核心架构
 
 ```text
@@ -295,6 +299,7 @@ dsh-connect/
 | [04-implementation-roadmap.md](docs/04-implementation-roadmap.md) | 阶段、验收标准、测试重点与风险 |
 | [05-p0-verification.md](docs/05-p0-verification.md) | P0 已实现范围、自动化结果与真实 DSH 验收清单 |
 | [06-mobile-attachments-design.md](docs/06-mobile-attachments-design.md) | 移动端文件与图片展示：来源、契约、字节通道、安全与分阶段实施 |
+| [11-ci-cd.md](docs/11-ci-cd.md) | GitHub Actions 质量门禁、组件发布、Website 部署与运维边界 |
 | [server/README.md](server/README.md) | Server 配置、PostgreSQL/SQLite + ent 迁移与管理 API |
 | [apps/admin/README.md](apps/admin/README.md) | 管理后台开发、页面与权限模型 |
 | [apps/mobile/README.md](apps/mobile/README.md) | iOS/Android Expo 工程、Development Build、模块与安全边界 |
