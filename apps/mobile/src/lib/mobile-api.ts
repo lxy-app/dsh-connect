@@ -1,6 +1,6 @@
 import type {
-  MobileAccessGrant,
   MobileAccessOverview,
+  MobileDesktopAccess,
   MobileAttachment,
   MobileDevice,
   MobileInteraction,
@@ -46,9 +46,10 @@ export class MobileApiError extends Error {
   }
 }
 
-type PairDeviceInput = {
+type LoginDeviceInput = {
   serverUrl: string;
-  code: string;
+  email: string;
+  password: string;
   deviceName: string;
   platform: MobilePlatform;
   appVersion: string;
@@ -107,16 +108,12 @@ export function describeMobileApiError(error: unknown): string {
       return '无法连接 Server，请检查地址、网络和 TLS 配置。';
     case 'timeout':
       return '连接 Server 超时，请检查网络后重试。';
-    case 'pairing_code_invalid':
-      return '配对码无效。请确认使用的是管理后台“手机配对”生成的二维码或配对码，而不是“桌面配对”码。';
-    case 'pairing_code_used':
-      return '配对码已被使用，请让管理员重新生成。';
-    case 'pairing_code_expired':
-      return '配对码已过期，请让管理员重新生成。';
+    case 'rate_limited':
+      return '登录尝试过多，请稍后重试。';
     case 'unauthorized':
-      return '凭据无效或已过期，请重新配对。';
+      return '登录凭据无效或已过期，请重新登录。';
     case 'forbidden':
-      return '没有执行此操作的权限，或桌面尚未授权这台手机。';
+      return '没有执行此操作的权限，或账号访问策略未允许该桌面或工作区。';
     case 'not_found':
       if (error.message === 'attachment upload is disabled') {
         return '服务端已关闭附件上传，请管理员将附件模式设为 readwrite。';
@@ -140,9 +137,9 @@ export function describeMobileApiError(error: unknown): string {
       return '桌面 Connector 版本较旧，未提供这项能力。请重启 DSH 桌面以加载最新 Connector，或更新 DSH Connect 插件。';
     case 'workspace_forbidden':
     case 'workspace_mismatch':
-      return '这个会话不在当前手机被授权的工作区内。请到设备页检查授权范围。';
+      return '这个会话不在当前账号被授权的工作区内。请检查账号访问策略。';
     case 'permission_denied':
-      return '桌面 Connector 没有授予这项动作。请让桌面补充授权后重试。';
+      return '桌面 Connector 当前未开放这项动作。请联系管理员检查账号访问策略。';
     case 'invalid_request':
       return '请求信息不完整或格式不正确。';
     case 'invalid_response':
@@ -156,12 +153,13 @@ export function describeMobileApiError(error: unknown): string {
   }
 }
 
-export async function pairMobileDevice(input: PairDeviceInput): Promise<MobileSessionResponse> {
+export async function loginMobileDevice(input: LoginDeviceInput): Promise<MobileSessionResponse> {
   const serverUrl = normalizeServerUrl(input.serverUrl);
-  const payload = await requestJSON(serverUrl, '/v1/mobile/pair', {
+  const payload = await requestJSON(serverUrl, '/v1/mobile/auth/login', {
     method: 'POST',
     body: {
-      code: input.code.trim(),
+      email: input.email.trim(),
+      password: input.password,
       deviceName: input.deviceName,
       platform: input.platform,
       appVersion: input.appVersion,
@@ -208,30 +206,6 @@ export async function getMobileAccessOverview(
     accessToken,
   });
   return parseAccessOverview(payload);
-}
-
-export async function requestMobileAccess(
-  serverUrl: string,
-  accessToken: string,
-  input: { deviceId: string; workspaces: string[]; scopes: string[] },
-): Promise<MobileAccessGrant> {
-  const payload = await requestJSON(serverUrl, '/v1/mobile/access/requests', {
-    method: 'POST',
-    accessToken,
-    body: input,
-  });
-  return parseAccessGrant(payload);
-}
-
-export async function revokeMobileAccess(
-  serverUrl: string,
-  accessToken: string,
-  grantId: string,
-): Promise<void> {
-  await request(serverUrl, `/v1/mobile/access/${encodeURIComponent(grantId)}`, {
-    method: 'DELETE',
-    accessToken,
-  });
 }
 
 export async function getMobileInteractions(
@@ -665,39 +639,26 @@ function parseAccessOverview(value: unknown): MobileAccessOverview {
   return { desktops: value.desktops.map(parseDesktopAccess) };
 }
 
-function parseDesktopAccess(value: unknown) {
+function parseDesktopAccess(value: unknown): MobileDesktopAccess {
   if (!isRecord(value)) throw invalidResponse();
+  const deviceId = requiredString(value.deviceId);
+  const availableWorkspaces = parseWorkspaceSummaries(value.availableWorkspaces);
+  const availableScopes = parseStringArray(value.availableScopes);
   return {
-    deviceId: requiredString(value.deviceId),
+    deviceId,
     deviceName: requiredString(value.deviceName),
     connectorVersion: requiredString(value.connectorVersion),
     online: value.online === true,
-    availableWorkspaces: parseWorkspaceSummaries(value.availableWorkspaces),
-    availableScopes: parseStringArray(value.availableScopes),
-    ...(isRecord(value.grant) ? { grant: parseAccessGrant(value.grant) } : {}),
-  };
-}
-
-function parseAccessGrant(value: unknown): MobileAccessGrant {
-  if (!isRecord(value)) throw invalidResponse();
-  const status = value.status;
-  if (status !== 'pending' && status !== 'active' && status !== 'denied' && status !== 'revoked') {
-    throw invalidResponse();
-  }
-  return {
-    grantId: requiredString(value.grantId),
-    ...(typeof value.mobileDeviceId === 'string' ? { mobileDeviceId: value.mobileDeviceId } : {}),
-    ...(typeof value.mobileDeviceName === 'string' ? { mobileDeviceName: value.mobileDeviceName } : {}),
-    ...(typeof value.mobileUserName === 'string' ? { mobileUserName: value.mobileUserName } : {}),
-    ...(typeof value.mobilePlatform === 'string' ? { mobilePlatform: value.mobilePlatform } : {}),
-    deviceId: requiredString(value.deviceId),
-    ...(typeof value.deviceName === 'string' ? { deviceName: value.deviceName } : {}),
-    workspaces: parseWorkspaceSummaries(value.workspaces),
-    scopes: parseStringArray(value.scopes),
-    status,
-    createdAt: requiredDate(value.createdAt),
-    updatedAt: requiredDate(value.updatedAt),
-    ...(typeof value.decidedAt === 'string' ? { decidedAt: requiredDate(value.decidedAt) } : {}),
+    availableWorkspaces,
+    availableScopes,
+    // The Server authorizes the signed-in user. Keep a read-only active view
+    // for existing screens without recreating per-device grant semantics.
+    grant: {
+      deviceId,
+      workspaces: availableWorkspaces,
+      scopes: availableScopes,
+      status: 'active',
+    },
   };
 }
 
@@ -707,7 +668,6 @@ function parseWorkspaceList(value: unknown): MobileWorkspaceList {
     workspaces: value.workspaces.map((entry) => {
       if (!isRecord(entry)) throw invalidResponse();
       return {
-        grantId: requiredString(entry.grantId),
         deviceId: requiredString(entry.deviceId),
         deviceName: requiredString(entry.deviceName),
         workspace: parseWorkspaceSummary(entry.workspace),
@@ -968,7 +928,11 @@ function parseWorkspaceSummaries(value: unknown): MobileWorkspaceSummary[] {
 
 function parseWorkspaceSummary(value: unknown): MobileWorkspaceSummary {
   if (!isRecord(value)) throw invalidResponse();
-  return { id: requiredString(value.id), name: requiredString(value.name) };
+  return {
+    id: requiredString(value.id),
+    name: requiredString(value.name),
+    ...(Array.isArray(value.scopes) ? { scopes: parseStringArray(value.scopes) } : {}),
+  };
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -999,7 +963,7 @@ function requiredDate(value: unknown): string {
 }
 
 function invalidResponse(): MobileApiError {
-  return new MobileApiError('invalid_response', 'Server 返回的配对响应无效。', 200);
+  return new MobileApiError('invalid_response', 'Server 返回的移动会话响应无效。', 200);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

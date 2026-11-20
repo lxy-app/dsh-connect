@@ -86,14 +86,18 @@ export function SessionDrawer({
     () => sessions.filter((session) => session.deviceId === desktop?.deviceId),
     [desktop?.deviceId, sessions],
   );
-  const canCreate = Boolean(
-    desktop?.online
-    && desktop.grant?.scopes.includes('read')
-    && desktop.grant.scopes.includes('prompt'),
-  );
-  const createInWorkspace = (workspaceId: string) => {
-    if (!desktop || !canCreate) return;
-    onCreateSession(desktop.deviceId, workspaceId);
+  const canCreateInWorkspace = (id: string) => {
+    const workspace = desktop?.grant?.workspaces.find((item) => item.id === id);
+    return Boolean(
+      desktop?.online
+      && workspace?.scopes?.includes('read')
+      && workspace.scopes.includes('prompt'),
+    );
+  };
+  const selectedCanCreate = canCreateInWorkspace(workspaceId);
+  const createInWorkspace = (id: string) => {
+    if (!desktop || !canCreateInWorkspace(id)) return;
+    onCreateSession(desktop.deviceId, id);
   };
 
   const selectDevice = (next: MobileDesktopAccess) => {
@@ -161,18 +165,18 @@ export function SessionDrawer({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="新建会话"
-              accessibilityState={{ disabled: !canCreate }}
-              disabled={!canCreate}
+              accessibilityState={{ disabled: !selectedCanCreate }}
+              disabled={!selectedCanCreate}
               onPress={() => createInWorkspace(workspaceId)}
               style={({ pressed }) => [
                 styles.newButton,
-                { borderColor: canCreate ? theme.accent : theme.border, backgroundColor: canCreate ? theme.accent : theme.surfaceMuted },
+                { borderColor: selectedCanCreate ? theme.accent : theme.border, backgroundColor: selectedCanCreate ? theme.accent : theme.surfaceMuted },
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={[styles.newIcon, { color: canCreate ? theme.onAccent : theme.textSecondary }]}>＋</Text>
-              <Text style={[styles.newText, { color: canCreate ? theme.onAccent : theme.textSecondary }]}>新建会话</Text>
-              <Text numberOfLines={1} style={[styles.newWorkspace, { color: canCreate ? theme.onAccent : theme.textSecondary }]}>· {workspaces.find((item) => item.id === workspaceId)?.name ?? ''}</Text>
+              <Text style={[styles.newIcon, { color: selectedCanCreate ? theme.onAccent : theme.textSecondary }]}>＋</Text>
+              <Text style={[styles.newText, { color: selectedCanCreate ? theme.onAccent : theme.textSecondary }]}>新建会话</Text>
+              <Text numberOfLines={1} style={[styles.newWorkspace, { color: selectedCanCreate ? theme.onAccent : theme.textSecondary }]}>· {workspaces.find((item) => item.id === workspaceId)?.name ?? ''}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -195,6 +199,7 @@ export function SessionDrawer({
             {workspaces.map((workspace) => {
               const items = deviceSessions.filter((session) => session.workspaceId === workspace.id);
               const open = expandedWorkspace === workspace.id;
+              const canCreate = canCreateInWorkspace(workspace.id);
               const shown = open ? items.slice(0, sessionLimit) : [];
               const remaining = Math.max(0, items.length - shown.length);
               return (

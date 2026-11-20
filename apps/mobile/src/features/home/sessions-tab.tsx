@@ -31,7 +31,6 @@ export function SessionsTab({
   workspaceFilter,
   onClearFilter,
   onOpenSession,
-  onRequestAccess,
   refreshing,
   onRefresh,
   loading,
@@ -42,7 +41,6 @@ export function SessionsTab({
   workspaceFilter: WorkspaceFilter | null;
   onClearFilter: () => void;
   onOpenSession: (session: MobileSession) => void;
-  onRequestAccess: () => void;
   refreshing: boolean;
   onRefresh: () => void;
   loading: boolean;
@@ -81,7 +79,7 @@ export function SessionsTab({
           <Text style={[styles.title, { color: theme.text }]}>会话</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             {workspaceCount === 0
-              ? '还没有获得桌面授权'
+              ? '账号暂无可访问的工作区'
               : `${sessions.length} 个会话${running > 0 ? ` · ${running} 个运行中` : ''}`}
           </Text>
         </View>
@@ -101,11 +99,9 @@ export function SessionsTab({
 
       {workspaceCount === 0 ? (
         <EmptyState
-          title="先获得桌面访问授权"
-          description="手机配对只证明设备身份。请向桌面 Connector 申请工作区访问，批准后即可在这里查看会话。"
-          actionLabel="申请访问授权"
-          onAction={onRequestAccess}
-          secondary="授权由桌面用户确认，Server 不会替你做决定。"
+          title="账号暂无工作区权限"
+          description="当前账号访问策略没有可访问的桌面或工作区。请联系管理员配置后下拉刷新。"
+          secondary="桌面、工作区和操作权限由 Server 按用户账号统一下发。"
         />
       ) : (
         <>

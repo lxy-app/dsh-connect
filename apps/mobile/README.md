@@ -4,16 +4,15 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 
 ## 当前状态
 
-已建立工程、Expo Router、明暗主题、原生首页，并完成真实手机配对、桌面访问授权与会话查看：
+已建立工程、Expo Router、明暗主题、原生首页，并完成真实用户登录、用户级桌面访问授权与会话查看：
 
-- 扫描管理后台生成的 `dshconnect://pair?...` 二维码。
-- 手动输入 Server 地址和一次性配对码。
-- 调用 `/v1/mobile/pair` 获取独立手机身份与 Access/Refresh Token。
+- 手动输入 Server 地址、用户邮箱和密码；密码不持久化。
+- 调用 `/v1/mobile/auth/login` 获取独立登录设备身份与 Access/Refresh Token。
 - 使用系统 Keychain / Keystore 保存凭据。
 - 启动时校验 `/v1/mobile/me`，Access Token 即将过期时自动轮换；API 调用遇到 401 时自动刷新一次并重试。
-- 在“设备”页查看桌面与已开放工作区，提交访问申请；在桌面 DSH Connector 面板中由用户本人批准。
+- 在“设备”页只读查看账号有效桌面、工作区与动作；权限由后端用户策略和桌面当前开放范围共同决定。
 - “工作区”已迁入会话左侧抽屉，按桌面分组；每个工作区默认展开 5 条会话，支持查看更多与收起。“会话”入口恢复最近选中的聊天，聊天页保留底部导航。
-- 聊天页右上角、抽屉“新建会话”和工作区旁 `+` 均可创建真实会话。新建页默认沿用当前设备/工作区，要求在线桌面及 `read + prompt` 授权；`POST /v1/mobile/sessions` 与首条 prompt 使用两个稳定 requestId，失败重试不会重复创建或发送，成功后进入聊天并立即接续等待状态与流式响应。
+- 聊天页右上角、抽屉“新建会话”和工作区旁 `+` 均可创建真实会话。新建页默认沿用当前设备/工作区，要求在线桌面及 `read + prompt` 授权；首条指令支持文字、图片/文件草稿和系统/火山 ASR 转写，转写只回填不自动提交。创建成功后才向该 Session 上传附件，任一附件未就绪都会阻止首条 prompt；`POST /v1/mobile/sessions` 与首条 prompt 使用两个稳定 requestId，失败重试复用已创建会话和已上传附件，不重复创建或发送，成功后进入聊天并立即接续等待状态与流式响应。
 - 会话详情从 `/v1/mobile/sessions/{id}/messages` 读取稳定 transcript，空闲时每 3 秒轮询、等待响应时每 1.8 秒轮询；界面按 DSH turn 聚合为一张卡片：头部显示「深度求索中 / 已完成」与用时，折叠区里是单行工具步骤（名称 + 脱敏摘要 + 状态 + 耗时）和中间叙述，最终回复始终在折叠区外，朗读与时间每轮只出现一次。工具参数、命令输出、推理内容和注入的 runtime/time/skill context 不下发到手机。超长最终回复默认折叠为 14 行并可展开；会话运行期间通过 `/v1/mobile/events/ws` 接收 assistant 文本增量并实时追加，WSS 断开时自动回退到轮询，支持加载更早消息、手动刷新、发送/排队/执行等待状态和慢响应提示。新指令使用独立的等待回复气泡或新 Turn 卡片，不会把上一轮已完成回复重新标记为运行中；用户气泡与后续回复卡片之间保留固定间距。
 - assistant 回复按 Markdown 渲染：标题、列表、粗体/斜体/删除线、行内代码、代码块、引用、表格、任务列表、链接和交付图片；流式增量也按 Markdown 实时呈现。普通链接只允许 http(s)/mailto 并由系统浏览器打开，交付图片使用内部不透明附件引用并在正文中等比显示。长消息折叠时显示纯文本摘要，展开后恢复完整排版。
 - 在 `prompt` 授权下发送排队提示词，在 `cancel` 授权下停止当前 Turn；按住说话支持火山 Agent Plan Seed ASR 2.0 双向/单向 WebSocket 转写与系统 ASR，回复朗读和自动播报支持 Agent Plan Seed TTS 2.0 与系统 TTS。Agent Plan 密钥只通过 Keychain / Keystore 加密保存，云端错误会明确提示，不用格式检查或系统语音冒充云端调用成功。
@@ -31,7 +30,7 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 
 App 在前台轮询待处理项时，桌面会优先把审批交给手机（默认 6 秒窗口）；窗口内未作答则撤回手机卡片并改由桌面原生审批，因此两端不会同时出现两张卡。
 
-远程审批依赖桌面先把 `approve` 写进设备授权（DSH Connect 面板“启用远程审批”）。已 active 的 grant 不支持原地升级：在“访问授权”页点“调整授权范围”撤销后重新勾选并提交，再由桌面确认。桌面未开放 `approve` 时，页面会用黄色提示说明。Server 的 bootstrap 会话 API 仍然不向移动 Token 开放；App 只使用受 grant 约束的 `/v1/mobile/*` API。
+远程审批要求用户策略与桌面当前设备授权都包含 `approve`（DSH Connect 面板“启用远程审批”）。账号缺少该权限时，页面会提示联系管理员，不再提供逐手机申请或撤销入口。Server 的 bootstrap 会话 API 仍然不向移动 Token 开放；App 只使用受用户策略约束的 `/v1/mobile/*` API。
 
 ## 技术基线
 
@@ -41,7 +40,7 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - `expo-secure-store`：保存手机 Access/Refresh Token，以及语音和外观偏好，使用 Keychain / Keystore。
 - `expo-system-ui`：支持 Android 明暗外观，并在主题切换时同步原生根视图背景色。
 - `expo-local-authentication`：后续用于应用解锁和敏感操作确认。
-- `expo-camera`：扫描配对二维码，不启用 Android 录音权限。
+- `expo-camera`：目前保留既有原生依赖与配置，扫码配对 UI 已移除；依赖清理由独立原生改动处理。
 - `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。
 - `expo-file-system`：在缓存目录写入 TTS MP3 / PCM；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
 - `expo-sqlite`：后续保存草稿、游标和可重建缓存。
@@ -56,7 +55,7 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - 成功、警告、危险等语义色独立于品牌色，不随本次中性配色调整。
 - `app.json` 的 Android 自适应图标、浅色/深色启动图和通知色使用同一套中性色；启动图由 `assets/logo-candidates/build-icon-assets.py` 生成。修改原生图标或启动配置后需要重新 prebuild 和原生构建。
 
-相机权限只在打开扫码界面时请求；SecureStore 不需要额外权限，也不会在启动时注册推送。
+扫码配对界面已移除，登录不会请求相机权限；SecureStore 不需要额外权限，也不会在启动时注册推送。
 
 ## 环境要求
 
@@ -79,43 +78,29 @@ npm install --registry=https://registry.npmjs.org
 
 新增或升级 Expo 原生模块时，始终使用 `npx expo install <package>`，让 CLI 选择与 SDK 58 匹配的版本。
 
-## 手机配对流程
+## 手机用户登录流程
 
-1. 打开 Web 管理后台 → **手机配对**，选择目标用户并生成手机配对二维码。二维码内容形如 `dshconnect://pair?code=…&server=…&v=1`。
+1. 管理员在 Web 管理后台创建用户，并在 **访问策略** 中为用户分配桌面、工作区和动作。无策略默认没有桌面权限。
+2. 在 App 首页点击“登录”，填写 Server 地址、用户邮箱和密码。密码只用于本次登录，不会写入 SecureStore、路由参数或日志。
+3. App 调用 `/v1/mobile/auth/login`，成功后把 Access/Refresh Token 写入 SecureStore，密码随即从登录页状态清除。
+4. 后续启动读取本机凭据并调用 `/v1/mobile/me` 验证；Access Token 临近过期时调用 `/v1/mobile/auth/refresh`，服务端同时轮换两枚 Token。启动恢复与页面请求共用单飞刷新任务，网络错误或超时会保留本机凭据供稍后重试。
+5. “退出登录”删除本机凭据，并尽力调用 `/v1/mobile/auth/logout` 吊销当前登录设备。管理员也可在 `/v1/admin/mobile-devices/{id}/revoke` 强制吊销。
 
-   也可以直接调用管理 API：
+## 用户级访问授权与会话
 
-   ```sh
-   curl -sS -X POST "$DSH_CONNECT_SERVER_URL/v1/admin/mobile/pairing-codes" \
-     -H "Authorization: Bearer $DSH_CONNECT_BOOTSTRAP_TOKEN" \
-     -H 'Content-Type: application/json' \
-     -d '{"userId":"usr_xxx"}'
-   ```
+手机登录本身不会自动获得桌面权限。有效权限为：
 
-   注意：**桌面配对码不能用于手机配对**，两者使用不同接口和不同数据表。
+```text
+该用户所有 enabled 访问策略的并集
+∩ 桌面 Connector 当前开放的 Workspaces / Scopes
+```
 
-2. 在 App 首页点击“连接 Server”，选择“扫描配对二维码”；也可以手动填写管理后台显示的 Server 地址和手机配对码。
+1. App **设备** 页只读展示 `/v1/mobile/access` 返回的有效桌面、工作区和动作；同一用户的所有手机结果相同。
+2. 工作区和会话直接出现在 **工作区** 与 **会话**，不再有逐手机 `pending/active/denied/revoked` 申请流程。
+3. 会话详情展示 user/assistant/tool 消息；`read`、`prompt`、`cancel` 分别控制查看、发送和停止。`approve` 控制远程审批。
+4. 修改后端用户策略或桌面 Connector 开放范围会立即收紧权限并关闭相关事件流；吊销单台手机只影响该设备凭据，不影响同账号其他手机。
 
-3. App 调用 `/v1/mobile/pair`，成功后把 Access/Refresh Token 写入 SecureStore。
-
-4. 后续启动会读取本机凭据并调用 `/v1/mobile/me` 验证；Access Token 临近过期时调用 `/v1/mobile/auth/refresh`，服务端会同时轮换两枚 Token。启动恢复与页面请求共用按设备凭据隔离的单飞刷新任务，轮换结果先写入 SecureStore 再发布给页面，避免一次性 Refresh Token 被并发消费；网络错误或超时会保留本机凭据供稍后重试。
-
-5. “断开连接”会删除本机凭据，并尽力调用 `/v1/mobile/auth/logout` 吊销服务端手机。管理员也可在 `/v1/admin/mobile-devices/{id}/revoke` 强制吊销。
-
-## 访问授权与会话
-
-手机配对只证明设备身份，不会自动获得桌面权限。
-
-1. App **设备** 页展示桌面 Connector 已开放的工作区与动作（来自 `/v1/mobile/access`）。
-2. 选择工作区与动作后提交 `/v1/mobile/access/requests`，状态为 `pending`。
-3. 打开桌面 DSH → DSH Connect 面板 → **手机访问授权**，核对手机名与请求范围，选择允许的工作区/动作后确认；也可以拒绝。
-4. 回到 App 下拉刷新，`active` grant 的工作区会出现在 **工作区**，会话会出现在 **会话**。
-5. 会话详情展示 user/assistant/tool 消息；`read`、`prompt`、`cancel` 分别控制查看、发送和停止。没有对应 scope 时输入框会变为只读提示，但仍可查看会话模型；只有 `prompt` 可以切换模型。
-6. **我的 → 断开连接** 或设备页的撤销会立即回收授权；桌面端撤销同样即时生效。
-
-授权校验是双重的：Server 校验 grant（手机、桌面、工作区、scope），Connector 再校验会话真实所属工作区。App 不缓存会话正文，每次向桌面拉取。
-
-`dshconnect://pair?...` 同时注册为 `/pair` 深链路由；如果系统相机已经打开 App，也可以在 App 内再次扫描同一二维码。
+授权校验是双重的：Server 校验用户有效策略与桌面当前范围，Connector 再校验会话真实所属工作区。App 不缓存会话正文，每次向桌面拉取。
 
 ### 真机连接注意
 
@@ -127,21 +112,14 @@ npm install --registry=https://registry.npmjs.org
   ```
 
 - 开发期允许 HTTP，但 App 会显示“明文连接”警告；生产环境必须使用 HTTPS。
-- iOS 模拟器没有可用相机，可用深链验证连接页（系统会再确认一次“打开”）：
-
-  ```sh
-  xcrun simctl openurl booted \
-    'dshconnect://pair?v=1&server=http%3A%2F%2F127.0.0.1%3A8787&code=TEST-CODE'
-  ```
-
 - `.env.example` 中的 `EXPO_PUBLIC_DSH_CONNECT_SERVER_URL` 只作为开发期的默认 Server 预填值，所有 `EXPO_PUBLIC_*` 都不允许存放 Token 或密钥。
 - iOS 16+ 的 `Device.deviceName` 可能只返回通用 “iPhone”；此时 App 使用机型名作为手机名称。
 
 ### 凭据边界
 
-- 明文 Access/Refresh Token 只存在于配对/刷新响应和 App 内存、SecureStore 中，数据库只保存 hash。
+- 明文 Access/Refresh Token 只存在于登录/刷新响应和 App 内存、SecureStore 中，数据库只保存 hash。
 - 本机清除凭据不会删除桌面 DSH 会话。
-- iOS Keychain 在卸载重装后可能仍保留旧条目；遇到异常态可重新配对，管理员也可吊销旧手机。
+- iOS Keychain 在卸载重装后可能仍保留旧条目；遇到异常态可重新登录，管理员也可吊销旧手机。
 
 ## 语音与火山 Agent Plan
 
@@ -224,13 +202,13 @@ npx expo export --platform web # 验证 Expo Router 服务端/静态导出不会
 ```text
 apps/mobile/
 ├── src/
-│   ├── app/               # Expo Router 页面、连接页与 pair 深链
+│   ├── app/               # Expo Router 页面与用户登录路由
 │   ├── components/        # 按钮、品牌标识等非路由 UI
 │   ├── constants/         # 明暗主题
-│   ├── features/pairing/  # 连接页、扫码界面、二维码解析
+│   ├── features/pairing/  # 用户登录页
 │   ├── hooks/             # 跨平台 hooks
 │   ├── lib/               # Mobile API、SecureStore 会话
-│   ├── providers/         # 配对状态、启动校验与 Token 刷新
+│   ├── providers/         # 登录状态、启动校验与 Token 刷新
 │   └── types/             # 本壳私有类型；公共移动协议在 apps/mobile-shared/types/
 ├── assets/                # 应用图标和启动资源
 ├── app.json               # Expo 与原生能力配置

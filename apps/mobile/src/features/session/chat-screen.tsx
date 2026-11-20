@@ -1,5 +1,5 @@
 import { requestRecordingPermissionsAsync, setAudioModeAsync, useAudioStream } from 'expo-audio';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
@@ -248,8 +248,14 @@ function ChatScreenContent() {
   useEffect(() => {
     audioStreamStopRef.current = () => audioStream?.stop();
   }, [audioStream]);
+  const voiceEventsActive = useRef(true);
+  useFocusEffect(useCallback(() => {
+    voiceEventsActive.current = true;
+    return () => { voiceEventsActive.current = false; };
+  }, []));
 
   useSpeechRecognitionEvent('start', () => {
+    if (!voiceEventsActive.current) return;
     if (voiceSettings.asrProvider !== 'system' || systemVoiceGuard.isClosing()) return;
     if (voiceStopRequested.current) {
       markSystemVoiceClosing();
@@ -263,12 +269,14 @@ function ChatScreenContent() {
     setVoiceStopping(false);
   });
   useSpeechRecognitionEvent('result', (event) => {
+    if (!voiceEventsActive.current) return;
     if (voiceSettings.asrProvider !== 'system' || systemVoiceGuard.isClosing()) return;
     const text = event.results[0]?.transcript?.trim() ?? '';
     if (!text) return;
     voiceTextRef.current = text;
   });
   useSpeechRecognitionEvent('end', () => {
+    if (!voiceEventsActive.current) return;
     if (voiceSettings.asrProvider !== 'system') return;
     if (systemVoiceGuard.consumeTerminalEnd()) {
       // Native events have no session ID. Consume the cancelled/failed session's
@@ -282,6 +290,7 @@ function ChatScreenContent() {
     if (text) setDraft((current) => `${current.trim() ? `${current.trim()}\n` : ''}${text}`);
   });
   useSpeechRecognitionEvent('error', (event) => {
+    if (!voiceEventsActive.current) return;
     if (voiceSettings.asrProvider !== 'system') return;
     if (event.error === 'aborted') {
       if (!systemVoiceGuard.isClosing()) {

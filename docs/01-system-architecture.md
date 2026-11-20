@@ -174,9 +174,9 @@ code_generated
 
 异常状态包括：`code_expired`、`code_used`、`server_untrusted`、`version_incompatible`、`authorization_rejected`、`offline`。
 
-### 8.3 手机配对
+### 8.3 手机用户登录
 
-手机配对只证明手机属于某用户。桌面和工作区访问仍需用户角色、设备授权和动作 scope 共同决定。
+手机使用用户邮箱和密码登录，Server 签发独立的移动 Access/Refresh Token。设备身份只负责凭据生命周期、吊销和审计；桌面、工作区与动作权限由该用户的启用策略和 Connector 当前开放范围共同决定，同一用户的所有手机继承相同权限。
 
 ## 9. 协议设计
 

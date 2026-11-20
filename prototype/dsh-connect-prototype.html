@@ -78,6 +78,20 @@
 .new-session-spinner{width:14px;height:14px;border:2px solid #fff6;border-top-color:#fff;border-radius:50%;animation:newSessionSpin .7s linear infinite}
 @keyframes newSessionSpin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.new-session-spinner{animation:none}}
+/* New-session composer mirrors chat: the same voice gesture and attachment drafts, with explicit create/send. */
+.new-session-prompt{position:relative}
+.new-session-compose{min-height:112px;align-items:flex-start!important;border-radius:12px!important;background:transparent!important}
+.new-session-compose.voice-mode{align-items:center!important}
+.new-session-compose textarea{height:100px!important;max-height:150px!important;padding:8px 2px!important}
+.new-session-prompt>.attachment-draft{padding:10px 10px 2px;border-bottom:1px solid var(--border)}
+.new-session-prompt.voice-active .new-session-compose{opacity:0}
+.new-session-prompt.voice-active>.attachment-draft{opacity:0;pointer-events:none}
+.new-session-prompt .voice-feedback{position:absolute;z-index:4;left:0;right:0;bottom:30px;height:174px;margin:0;padding:44px 20px 32px;display:flex;flex-direction:column;align-items:center;border:0;border-radius:18px 18px 0 0;background:radial-gradient(ellipse 85% 100% at 50% 100%,var(--brand-soft) 0%,transparent 76%);box-shadow:none;pointer-events:none;overflow:hidden}
+.new-session-prompt .voice-wave{height:34px;gap:6px;margin:20px 0 0;color:var(--brand)}
+.new-session-prompt .voice-wave i{width:4px;height:6px;background:currentColor}
+.new-session-prompt .voice-wave i:nth-child(2n){height:12px}
+.new-session-prompt .voice-wave i:nth-child(3n){height:20px}
+.new-session-prompt .voice-feedback.cancel-armed .voice-release-copy,.new-session-prompt .voice-feedback.cancel-armed .voice-wave{color:var(--red)}
 /* Session model switcher: entry lives in the composer "more" sheet, details in a bottom sheet. */
 .model-sheet{width:100%;max-height:80%;display:flex;flex-direction:column;background:var(--surface);border-radius:24px 24px 38px 38px;box-shadow:0 -15px 50px #0002;padding-top:10px}
 .model-sheet-head{padding:14px 20px 6px}
@@ -579,6 +593,7 @@ function modelTrace(sel=currentModel()){const found=findModel(sel.provider,sel.m
 let moreSheetOpen=false;
 function moreSheetHtml(){
   if(!moreSheetOpen)return '';
+  const isNewSession=mobilePage==='new';
   return `<div class="sheet-layer" data-action="close-more"><div class="more-sheet" role="dialog" aria-modal="true" aria-label="更多输入选项">
     <div class="more-handle"></div>
     <div class="more-grid">
@@ -586,11 +601,11 @@ function moreSheetHtml(){
       <button class="more-tile" data-action="open-media-picker" title="选择照片或视频">${icon('image',20)}<span>照片 / 视频</span></button>
       <button class="more-tile" data-action="open-file-picker" title="添加文件">${icon('paperclip',20)}<span>添加文件</span></button>
     </div>
-    <div class="more-list">
+    ${isNewSession?'':`<div class="more-list">
       <button class="more-row" data-action="more-model"><span class="more-row-icon">${icon('chip',15)}</span><span class="more-row-title">选择模型</span>${modelIsChanged()?'<span class="more-dot" aria-hidden="true"></span>':''}<span class="more-row-value">${esc(modelTrace())}</span><span class="more-row-chevron">${icon('chevron',13)}</span></button>
       <button class="more-row" data-action="more-voice"><span class="more-row-icon">${icon('volume',15)}</span><span class="more-row-title">语音与播报</span><span class="more-row-value">${ttsConfig.connected?'已连接':'未连接'}</span><span class="more-row-chevron">${icon('chevron',13)}</span></button>
-    </div>
-    <div class="more-note">图片与文件随当前指令发送 · 单文件不超过 20 MB</div>
+    </div>`}
+    <div class="more-note">${isNewSession?'图片与文件随首条指令发送':'图片与文件随当前指令发送'} · 单文件不超过 20 MB</div>
   </div></div>`;
 }
 /* M3 attachment uplink prototype. All picks, progress and retries are simulated locally. */
@@ -611,7 +626,7 @@ const attachmentFiles=[
   {sampleId:'file-retry',kind:'file',name:'弱网复现日志.txt',bytes:12288,mime:'text/plain',type:'TXT',failOnce:true,demoNote:'可演示失败重试'},
   {sampleId:'file-large',kind:'file',name:'release-package.zip',bytes:25804800,mime:'application/zip',type:'ZIP',disabled:true}
 ];
-function currentAttachmentSessionId(){return (selectedSession||sessions[0]||{}).id||'s1'}
+function currentAttachmentSessionId(){return mobilePage==='new'?'new-session':((selectedSession||sessions[0]||{}).id||'s1')}
 function ensureAttachmentDraftOwner(){const id=currentAttachmentSessionId();if(attachmentDraftOwner!==id){attachmentDraftOwner=id;draftAttachments=[];pickerSelection=[];attachmentPicker='';attachmentPreview=null}}
 function formatAttachmentBytes(bytes){if(bytes>=1048576)return (bytes/1048576).toFixed(bytes>=10485760?1:2)+' MB';return Math.max(1,Math.round(bytes/1024))+' KB'}
 function closeAttachmentPicker(){attachmentPicker='';pickerSelection=[]}
@@ -622,7 +637,7 @@ function addDraftAttachments(items){
     if(draftAttachments.length>=6){limited++;return}
     draftAttachments.push({...item,id:'att_draft_'+Date.now()+'_'+(++attachmentSerial),status:'ready'});added++;
   });
-  closeAttachmentPicker();moreSheetOpen=false;renderMobile();
+  closeAttachmentPicker();moreSheetOpen=false;if(mobilePage==='new')newSessionError='';renderMobile();
   if(added)toast(`已添加 ${added} 个附件，可补充文字后一起发送`);
   else if(duplicate)toast('所选附件已在草稿中');
   else if(limited)toast('每条消息最多添加 6 个附件');
@@ -713,7 +728,8 @@ function chat(){
   const voiceActive=voiceStatus!=='idle';
   return `<div class="chat-head"><button class="icon-btn" data-action="open-session-drawer" title="设备、工作区与会话" aria-label="打开会话侧边栏">${icon('menu')}</button><div class="chat-title"><div class="chat-name">${esc(s.title)}</div><div class="chat-state">● ${esc(s.device)} · ${esc(s.workspace)}</div></div><button class="icon-btn" data-action="new" title="新建会话" aria-label="新建会话">${icon('plus',18)}</button></div><div class="chat-messages" id="chatMessages"><div class="date">今天 21:58</div>${messages.map(messageHtml).join('')}</div><div class="composer ${voiceActive?'voice-active':''}">${attachmentDraftHtml()}<div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="compose-box voice-compose ${voiceMode?'voice-mode':'text-mode'} ${chatDraft.trim()||draftAttachments.length?'has-draft':''} ${draftAttachments.length?'has-attachments':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="按住说话，松手发送，上移取消" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'?'disabled':''}><span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span></button><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button>`:`<textarea id="draft" rows="1" aria-label="输入消息" placeholder="发消息或按住说话…">${esc(chatDraft)}</textarea><button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项">${icon('plus',20)}</button><button class="send" data-action="send" title="发送" aria-label="发送">${icon('send',16)}</button>`}</div></div>`
 }
-function voiceFeedbackHtml(){if(voiceStatus==='idle')return '';const processing=voiceStatus==='processing';return `<div class="voice-release-copy">${processing?'正在识别并发送…':voiceCancelArmed?'松开取消':'松手发送，上移取消'}</div><div class="voice-wave" aria-hidden="true">${Array.from({length:25},(_,i)=>`<i style="--i:${i}"></i>`).join('')}</div>`}
+function voiceHoldText(){return voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?(mobilePage==='new'?'松手转写':'松手发送'):'按住说话'}
+function voiceFeedbackHtml(){if(voiceStatus==='idle')return '';const processing=voiceStatus==='processing';const releaseCopy=mobilePage==='new'?'松手转写，上移取消':'松手发送，上移取消';return `<div class="voice-release-copy">${processing?(mobilePage==='new'?'正在识别并转写…':'正在识别并发送…'):voiceCancelArmed?'松开取消':releaseCopy}</div><div class="voice-wave" aria-hidden="true">${Array.from({length:25},(_,i)=>`<i style="--i:${i}"></i>`).join('')}</div>`}
 function elapsedLabel(ms){const total=Math.max(0,Math.floor(ms/1000));const m=Math.floor(total/60);const s=total%60;return m>0?`${m} 分 ${s} 秒`:`${s} 秒`}
 let turnTimer=null;
 function startTurnTimer(){
@@ -815,8 +831,10 @@ function newSession(){
   const availableDevices=mobileVisibleDevices();
   const device=availableDevices.find(d=>d.name===currentDevice)||availableDevices[0];
   if(!device)return `<div class="phone-scroll"><div class="detail-head"><button class="icon-btn" data-page="devices">${icon('back',17)}</button><div class="detail-title">新建会话</div></div><div class="info-card" style="margin-top:16px;padding:24px;text-align:center">当前用户的访问策略中没有可用桌面。</div></div>`;
+  ensureAttachmentDraftOwner();
   const online=device.online;
-  const canCreate=online&&!creatingSession;
+  const voiceActive=voiceStatus!=='idle';
+  const canCreate=online&&!creatingSession&&!voiceActive;
   return `<div class="new-session-screen">
     <div class="detail-head new-session-head"><button class="icon-btn" data-page="chat" aria-label="返回会话" ${creatingSession?'disabled':''}>${icon('back',17)}</button><div class="detail-title">新建会话</div>${badge('原型','brand-badge')}</div>
     <div class="phone-scroll new-session-scroll">
@@ -828,7 +846,7 @@ function newSession(){
       </div>
       ${online?'':`<div class="warning new-session-warning">${icon('info',15)}<span>这台桌面当前离线。你仍可填写指令，恢复在线后才能创建并发送。</span></div>`}
       <div class="section-label">首条指令</div>
-      <div class="new-session-prompt ${newSessionError?'invalid':''}"><textarea id="newPrompt" maxlength="500" placeholder="描述你希望 DSH 完成的任务…" aria-describedby="newPromptHint" ${creatingSession?'disabled':''}>${esc(newSessionDraft)}</textarea><div class="new-session-prompt-meta"><span>创建后立即发送</span><span id="newPromptCount">${newSessionDraft.length} / 500</span></div></div>
+      <div class="new-session-prompt ${newSessionError?'invalid':''} ${voiceActive?'voice-active':''}">${attachmentDraftHtml()}<div id="voiceFeedback" class="voice-feedback ${voiceActive?voiceStatus:'hidden'} ${voiceCancelArmed?'cancel-armed':''}" role="status" aria-live="polite">${voiceFeedbackHtml()}</div><div class="new-session-compose voice-compose ${voiceMode?'voice-mode':'text-mode'} ${newSessionDraft.trim()||draftAttachments.length?'has-draft':''} ${draftAttachments.length?'has-attachments':''}"><button class="voice-switch ${voiceMode?'on':''}" data-action="toggle-voice-mode" title="${voiceMode?'切换为键盘输入':'切换为语音输入'}" aria-label="${voiceMode?'切换为键盘输入':'切换为语音输入'}" ${voiceEnabled&&!creatingSession?'':'disabled'}>${icon(voiceMode?'dots':'voiceGlyph',19)}</button>${voiceMode?`<button class="hold-to-talk ${voiceStatus}" data-action="hold-to-talk" aria-label="${mobilePage==='new'?'按住说话，松手转写，上移取消':'按住说话，松手发送，上移取消'}" aria-pressed="${voiceStatus==='listening'}" ${voiceStatus==='processing'||creatingSession?'disabled':''}><span>${voiceHoldText()}</span></button>`:`<textarea id="newPrompt" maxlength="500" placeholder="描述任务，或添加图片、使用语音输入…" aria-describedby="newPromptHint" ${creatingSession?'disabled':''}>${esc(newSessionDraft)}</textarea>`}<button class="voice-switch compose-plus" data-action="open-more" title="更多输入选项" aria-label="更多输入选项" ${creatingSession?'disabled':''}>${icon('plus',20)}</button></div><div class="new-session-prompt-meta"><span>${voiceMode?'语音转写后仍可编辑':'创建后立即发送 · 支持图文'}</span><span id="newPromptCount">${newSessionDraft.length} / 500</span></div></div>
       <div id="newPromptHint" class="new-session-hint ${newSessionError?'error':''}" ${newSessionError?'role="alert"':''}>${newSessionError?esc(newSessionError):'建议写清任务目标、范围和验收标准。'}</div>
       <div class="section-label">执行配置</div>
       <div class="info-card"><div class="info-row"><span>Agent Preset</span><span>默认开发代理</span></div><div class="info-row"><span>模型</span><span>跟随桌面默认</span></div></div>
@@ -838,37 +856,32 @@ function newSession(){
   </div>`
 }
 function createSession(){
-  if(creatingSession)return;
+  if(creatingSession||voiceStatus!=='idle')return;
   const input=document.getElementById('newPrompt');
   if(input)newSessionDraft=input.value;
   const text=newSessionDraft.trim();
   const device=mobileVisibleDevices().find(d=>d.name===currentDevice)||mobileVisibleDevices()[0];
-  if(!text){newSessionError='请输入首条指令，再创建会话。';renderMobile();document.getElementById('newPrompt')?.focus();return}
+  if(!text&&!draftAttachments.length){newSessionError='请输入首条指令、添加附件，或使用语音输入。';renderMobile();document.getElementById('newPrompt')?.focus();return}
   if(!device.online){toast('设备离线，恢复在线后才能创建');return}
   creatingSession=true;
   newSessionError='';
   renderMobile();
   setTimeout(()=>{
-    const title=text.replace(/\s+/g,' ');
-    const s={id:'s'+Date.now(),title:title.length>24?title.slice(0,24)+'…':title,device:currentDevice,workspace:currentWorkspace,status:'active',preview:'首条指令已发送，等待桌面 Agent 响应…',time:'刚刚'};
-    const createdMessages=[{role:'user',text,time:'刚刚'}];
+    const titleSource=text||(draftAttachments.length===1?draftAttachments[0].name:`${draftAttachments.length} 个附件的任务`);
+    const title=titleSource.replace(/\s+/g,' ');
+    const s={id:'s'+Date.now(),title:title.length>24?title.slice(0,24)+'…':title,device:currentDevice,workspace:currentWorkspace,status:'active',preview:draftAttachments.length?'会话已创建，正在上传首条指令的附件…':'首条指令已发送，等待桌面 Agent 响应…',time:'刚刚'};
+    const createdMessages=[];
     sessions.unshift(s);
     sessionMessages[s.id]=createdMessages;
     messages=createdMessages;
     selectedSession=s;
+    attachmentDraftOwner=s.id;
     drawerExpandedWorkspace=s.workspace;
     drawerSessionLimit=5;
     newSessionDraft='';
     creatingSession=false;
     mobilePage='chat';
-    renderMobile();
-    toast('新会话已创建，首条指令已发送（模拟）');
-    setTimeout(()=>{
-      const reply={role:'assistant',text:'收到。我会在当前工作区中处理这个任务，并在需要审批或有新的进展时通知你。',time:'刚刚'};
-      sessionMessages[s.id].push(reply);
-      s.preview=reply.text;
-      if(selectedSession?.id===s.id&&mobilePage==='chat'){messages=sessionMessages[s.id];renderMobile()}
-    },800);
+    sendChatMessage(text);
   },650);
 }
 function sheetHtml(){if(!sheet)return '';const approve=sheet==='approval';return `<div class="sheet-layer" data-action="close-sheet"><div class="sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><div class="sheet-icon">${icon(approve?'shield':'logout',27)}</div><div class="sheet-title">${approve?'使用 Face ID 确认':'解除这台设备的配对？'}</div><div class="sheet-copy">${approve?'你正在允许 MacBook Pro 执行一次集成测试。此授权不会应用到其他命令。':'解除后将阻止新的远程指令。桌面上的现有会话和正在运行的任务不会被删除。'}</div><div class="button-row"><button class="btn" data-action="close-sheet">再想想</button><button class="btn ${approve?'primary':'danger'}" data-action="${approve?'confirm-allow':'confirm-revoke'}">${approve?'验证并允许':'确认解除'}</button></div></div></div>`}
@@ -1093,14 +1106,17 @@ function syncChatDraft(){const draft=document.getElementById('draft');if(draft)c
 function readTtsForm(){const provider=document.getElementById('ttsProvider');if(!provider)return;const next={provider:provider.value,endpoint:document.getElementById('ttsEndpoint').value.trim(),apiKey:document.getElementById('ttsApiKey').value,model:document.getElementById('ttsModel').value.trim(),voice:document.getElementById('ttsVoice').value,speed:document.getElementById('ttsSpeed').value};const changed=['provider','endpoint','apiKey','model'].some(key=>next[key]!==ttsConfig[key]);ttsConfig={...ttsConfig,...next,connected:changed?false:ttsConfig.connected,saved:changed?false:ttsConfig.saved}}
 function updateVoiceUi(){
   const hold=document.querySelector('[data-action="hold-to-talk"]');
-  if(hold){hold.className=`hold-to-talk ${voiceStatus}`;hold.disabled=voiceStatus==='processing';hold.setAttribute('aria-pressed',String(voiceStatus==='listening'));hold.innerHTML=`<span>${voiceStatus==='processing'?'正在识别…':voiceStatus==='listening'?'松手发送':'按住说话'}</span>`}
+  if(hold){hold.className=`hold-to-talk ${voiceStatus}`;hold.disabled=voiceStatus==='processing';hold.setAttribute('aria-pressed',String(voiceStatus==='listening'));hold.innerHTML=`<span>${voiceHoldText()}</span>`}
   const feedback=document.getElementById('voiceFeedback');
   if(feedback){feedback.className=`voice-feedback ${voiceStatus==='idle'?'hidden':voiceStatus} ${voiceCancelArmed?'cancel-armed':''}`;feedback.innerHTML=voiceFeedbackHtml()}
   document.querySelector('.composer')?.classList.toggle('voice-active',voiceStatus!=='idle');
+  document.querySelector('.new-session-prompt')?.classList.toggle('voice-active',voiceStatus!=='idle');
+  const create=document.querySelector('.new-session-submit');
+  if(create){const device=mobileVisibleDevices().find(d=>d.name===currentDevice)||mobileVisibleDevices()[0];create.disabled=voiceStatus!=='idle'||creatingSession||!device?.online}
 }
 function resetVoiceGesture(){voicePointerId=null;voiceStartY=0;voiceCancelArmed=false}
 function startVoiceInput(){
-  if(!voiceEnabled||voiceStatus!=='idle'||!['chat','sessions'].includes(mobilePage))return;
+  if(!voiceEnabled||voiceStatus!=='idle'||!['chat','sessions','new'].includes(mobilePage))return;
   voiceStatus='listening';voiceTranscript='';voiceElapsed=0;voiceStartedAt=Date.now();voiceCancelArmed=false;clearInterval(voiceTimer);updateVoiceUi();
   const demo='继续完善移动端原型，并检查语音输入和模型服务配置。';
   voiceTimer=setInterval(()=>{voiceElapsed=Date.now()-voiceStartedAt;const count=Math.max(0,Math.min(demo.length,Math.floor((voiceElapsed-250)/65)));voiceTranscript=demo.slice(0,count)},100);
@@ -1109,12 +1125,20 @@ function finishVoiceInput(){
   if(voiceStatus!=='listening')return;
   clearInterval(voiceTimer);voiceTimer=null;voiceElapsed=Date.now()-voiceStartedAt;voiceStatus='processing';voiceTranscript='继续完善移动端原型，并检查语音输入和模型服务配置。';resetVoiceGesture();updateVoiceUi();
   const text=voiceTranscript;
-  setTimeout(()=>{if(voiceStatus!=='processing')return;voiceStatus='idle';voiceMode=false;voiceTranscript='';if(['chat','sessions'].includes(mobilePage))sendChatMessage(text)},650);
+  setTimeout(()=>{
+    if(voiceStatus!=='processing')return;
+    voiceStatus='idle';voiceMode=false;voiceTranscript='';
+    if(mobilePage==='new'){
+      const separator=newSessionDraft.trim()&&!newSessionDraft.endsWith('\n')?'\n':'';
+      newSessionDraft=(newSessionDraft+separator+text).slice(0,500);newSessionError='';renderMobile();
+      document.getElementById('newPrompt')?.focus();toast('语音已转写，可编辑后创建并发送');
+    }else if(['chat','sessions'].includes(mobilePage))sendChatMessage(text)
+  },650);
 }
 function cancelVoiceInput(){
   if(!['listening','processing'].includes(voiceStatus))return;
   clearInterval(voiceTimer);voiceTimer=null;voiceStatus='idle';voiceMode=false;voiceTranscript='';voiceElapsed=0;resetVoiceGesture();
-  if(['chat','sessions'].includes(mobilePage))renderMobile();toast('已取消语音输入');
+  if(['chat','sessions','new'].includes(mobilePage))renderMobile();toast('已取消语音输入');
 }
 document.addEventListener('pointerdown',e=>{const hold=e.target.closest('[data-action="hold-to-talk"]');if(!hold||hold.disabled||voiceStatus!=='idle')return;e.preventDefault();voicePointerId=e.pointerId;voiceStartY=e.clientY;try{hold.setPointerCapture(e.pointerId)}catch(err){}startVoiceInput()});
 document.addEventListener('pointermove',e=>{if(voiceStatus!=='listening'||e.pointerId!==voicePointerId)return;const cancel=e.clientY<voiceStartY-56;if(cancel!==voiceCancelArmed){voiceCancelArmed=cancel;updateVoiceUi()}});

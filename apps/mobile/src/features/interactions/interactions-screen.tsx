@@ -22,9 +22,8 @@ import type { MobileDesktopAccess, MobileInteraction } from '@shared/types/mobil
 import { InteractionCard } from './interaction-card';
 
 /**
- * Desktops that granted this phone access but withheld the `approve` action.
- * Those desktops can never deliver a prompt, so an empty inbox must not claim
- * "nothing to do" while the phone is structurally unable to answer.
+ * Desktops whose effective user permissions omit `approve`. Those desktops
+ * cannot deliver an actionable approval to this account.
  */
 function withheldApprovals(desktops: readonly MobileDesktopAccess[]): MobileDesktopAccess[] {
   return desktops.filter(
@@ -123,10 +122,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
         showsVerticalScrollIndicator={false}
       >
         {withoutApproval.length > 0 ? (
-          <ApprovalScopeNotice
-            desktops={withoutApproval}
-            onOpenAccess={() => router.push('/access')}
-          />
+          <ApprovalScopeNotice desktops={withoutApproval} />
         ) : null}
 
         {interactions.length === 0 ? (
@@ -161,33 +157,16 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
   );
 }
 
-/**
- * Explains a structurally empty inbox: the desktop granted this phone access
- * but withheld `approve`, so no prompt can ever arrive until the grant is
- * re-requested with that action.
- */
-function ApprovalScopeNotice({
-  desktops,
-  onOpenAccess,
-}: {
-  desktops: MobileDesktopAccess[];
-  onOpenAccess: () => void;
-}) {
+/** Explains that the account policy does not include remote approval. */
+function ApprovalScopeNotice({ desktops }: { desktops: MobileDesktopAccess[] }) {
   const theme = useAppTheme();
   const names = desktops.map((desktop) => desktop.deviceName).filter(Boolean).join('、') || '这台桌面';
   return (
     <View style={[styles.notice, { backgroundColor: theme.warningSoft, borderColor: theme.warning }]}>
-      <Text style={[styles.noticeTitle, { color: theme.warning }]}>本机未获远程审批授权</Text>
+      <Text style={[styles.noticeTitle, { color: theme.warning }]}>账号未获远程审批权限</Text>
       <Text style={[styles.noticeBody, { color: theme.textSecondary }]}>
-        {names} 只授权了查看等动作，没有勾选「远程审批」。桌面弹出审批时手机不会收到副本：需要先在访问页撤销，再重新申请并勾选「远程审批」，最后由桌面确认。
+        {names} 的账号访问策略未包含「远程审批」。桌面弹出审批时手机不会收到副本，请联系管理员调整策略。
       </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onOpenAccess}
-        style={({ pressed }) => [styles.noticeAction, { backgroundColor: theme.accent }, pressed && styles.pressed]}
-      >
-        <Text style={[styles.noticeActionText, { color: theme.onAccent }]}>去开启远程审批</Text>
-      </Pressable>
     </View>
   );
 }
