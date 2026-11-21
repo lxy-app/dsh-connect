@@ -5,6 +5,12 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 DEVECO=${DEVECO_STUDIO_HOME:-/Applications/DevEco-Studio.app/Contents}
 NODE="$DEVECO/tools/node/bin/node"
 OHPM="$DEVECO/tools/ohpm/bin/pm-cli.js"
+MODE=${1:-debug}
+
+if [ "$MODE" != debug ] && [ "$MODE" != release ]; then
+  echo "仅支持 debug 或 release。" >&2
+  exit 1
+fi
 
 if [ ! -x "$ROOT/node_modules/.bin/expo-harmony" ]; then
   echo "依赖未安装，请先在 apps/mobile-harmony 执行 npm ci --legacy-peer-deps。" >&2
@@ -17,7 +23,7 @@ fi
 
 cd "$ROOT"
 bash scripts/patch-upstream.sh
-EXPO_HARMONY=1 EXPO_METRO_TARGET=harmony NODE_ENV=development \
+EXPO_HARMONY=1 EXPO_METRO_TARGET=harmony EXPO_HARMONY_BUILD_TYPE="$MODE" NODE_ENV=development \
   "$ROOT/node_modules/.bin/expo-harmony" prebuild --no-install
 
 cd "$ROOT/harmony"

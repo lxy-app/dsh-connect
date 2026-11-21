@@ -16,6 +16,23 @@ if [ ! -d "$ROOT/harmony" ]; then
   exit 1
 fi
 
+# publishHarmonyNativeRuntime 要求 autolinking manifest 与 Hvigor buildMode 一致。
+# 直接切换 debug/release 时重新 prebuild，避免复用另一变体的原生快照。
+AUTOLINKING_MANIFEST="$ROOT/.expo/harmony/autolinking.json"
+CURRENT_MODE=$(node - "$AUTOLINKING_MANIFEST" <<'NODE'
+const fs = require('fs');
+try {
+  process.stdout.write(JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).buildType || '');
+} catch {
+  process.stdout.write('');
+}
+NODE
+)
+if [ "$CURRENT_MODE" != "$MODE" ]; then
+  echo "原生工程 autolink 模式为 ${CURRENT_MODE:-缺失}，正在切换为 $MODE。"
+  bash "$ROOT/scripts/setup-native.sh" "$MODE"
+fi
+
 bash "$ROOT/scripts/patch-upstream.sh"
 cd "$ROOT/harmony"
 DEVECO_SDK_HOME=${DEVECO_SDK_HOME:-$DEVECO/sdk} \

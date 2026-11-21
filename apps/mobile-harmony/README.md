@@ -85,6 +85,14 @@ harmony/entry/build/default/outputs/default/entry-default-signed.hap
 
 未设置签名文件时可以构建 unsigned HAP，但不能宣称真机安装通过。签名文件、口令、证书和私钥均不得提交。
 
+构建 Release 时执行：
+
+```bash
+npm run build:hap -- release
+```
+
+Debug / Release 使用不同的 autolinking 快照；构建脚本检测变体切换时会自动重新执行 `setup:native`，也可单独运行 `npm run setup:native -- release`。
+
 安装到已连接设备：
 
 ```bash
