@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -21,12 +21,18 @@ import type { MobileDesktopAccess, MobileSession } from '@shared/types/mobile';
 export function SessionDrawer({
   visible,
   currentSessionId,
+  currentDeviceId,
+  currentWorkspaceId,
+  inline = false,
   onClose,
   onCreateSession,
   onOpenSession,
 }: {
   visible: boolean;
   currentSessionId?: string;
+  currentDeviceId?: string;
+  currentWorkspaceId?: string;
+  inline?: boolean;
   onClose: () => void;
   onCreateSession: (deviceId: string, workspaceId: string) => void;
   onOpenSession: (session: MobileSession) => void;
@@ -44,6 +50,8 @@ export function SessionDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [slide] = useState(() => new Animated.Value(0));
+  const identityRef = useRef({ currentSessionId, currentDeviceId, currentWorkspaceId });
+  identityRef.current = { currentSessionId, currentDeviceId, currentWorkspaceId };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,10 +64,13 @@ export function SessionDrawer({
       setDesktops(available);
       setSessions(list.sessions);
       setError(null);
-      const current = list.sessions.find((item) => item.sessionId === currentSessionId);
-      const nextDevice = current?.deviceId ?? available[0]?.deviceId ?? '';
+      const identity = identityRef.current;
+      const current = list.sessions.find((item) => item.sessionId === identity.currentSessionId);
+      const nextDevice = current?.deviceId ?? identity.currentDeviceId ?? available[0]?.deviceId ?? '';
       const nextDesktop = available.find((desktop) => desktop.deviceId === nextDevice) ?? available[0];
-      const nextWorkspace = current?.workspaceId ?? nextDesktop?.grant?.workspaces[0]?.id ?? '';
+      const nextWorkspace = current?.workspaceId
+        ?? (nextDesktop?.deviceId === identity.currentDeviceId ? identity.currentWorkspaceId : undefined)
+        ?? nextDesktop?.grant?.workspaces[0]?.id ?? '';
       setDeviceId(nextDesktop?.deviceId ?? '');
       setWorkspaceId(nextWorkspace);
       setExpandedWorkspace(nextWorkspace);
@@ -69,15 +80,31 @@ export function SessionDrawer({
     } finally {
       setLoading(false);
     }
-  }, [authorized, currentSessionId]);
+  }, [authorized]);
 
   useEffect(() => {
     if (!visible) return;
-    slide.setValue(0);
-    Animated.timing(slide, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    slide.setValue(inline ? 1 : 0);
+    if (!inline) Animated.timing(slide, { toValue: 1, duration: 180, useNativeDriver: true }).start();
     const timer = setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
-  }, [load, slide, visible]);
+  }, [inline, load, slide, visible]);
+
+  useEffect(() => {
+    if (currentSessionId) {
+      const current = sessions.find((session) => session.sessionId === currentSessionId);
+      if (!current) return;
+      setDeviceId(current.deviceId);
+      setWorkspaceId(current.workspaceId);
+      setExpandedWorkspace(current.workspaceId);
+      return;
+    }
+    if (!currentDeviceId) return;
+    setDeviceId(currentDeviceId);
+    if (!currentWorkspaceId) return;
+    setWorkspaceId(currentWorkspaceId);
+    setExpandedWorkspace(currentWorkspaceId);
+  }, [currentDeviceId, currentSessionId, currentWorkspaceId, sessions]);
 
   const desktop = desktops.find((item) => item.deviceId === deviceId) ?? desktops[0];
   const workspaces = desktop?.grant?.workspaces ?? [];
@@ -109,19 +136,17 @@ export function SessionDrawer({
     setDeviceMenu(false);
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.layer}>
-        <Pressable accessibilityLabel="关闭会话侧边栏" onPress={onClose} style={[styles.backdrop, { backgroundColor: '#00000066' }]} />
-        <Animated.View
+  const drawer = (
+    <Animated.View
           style={[
             styles.drawer,
+            inline && styles.inlineDrawer,
             {
               backgroundColor: theme.surface,
               borderColor: theme.border,
-              paddingTop: insets.top,
-              paddingBottom: insets.bottom,
-              transform: [{ translateX }],
+              paddingTop: inline ? 0 : insets.top,
+              paddingBottom: inline ? 0 : insets.bottom,
+              transform: [{ translateX: inline ? 0 : translateX }],
             },
           ]}
         >
@@ -170,13 +195,13 @@ export function SessionDrawer({
               onPress={() => createInWorkspace(workspaceId)}
               style={({ pressed }) => [
                 styles.newButton,
-                { borderColor: selectedCanCreate ? theme.accent : theme.border, backgroundColor: selectedCanCreate ? theme.accent : theme.surfaceMuted },
+                { borderColor: theme.border, backgroundColor: selectedCanCreate ? theme.surface : theme.surfaceMuted },
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={[styles.newIcon, { color: selectedCanCreate ? theme.onAccent : theme.textSecondary }]}>＋</Text>
-              <Text style={[styles.newText, { color: selectedCanCreate ? theme.onAccent : theme.textSecondary }]}>新建会话</Text>
-              <Text numberOfLines={1} style={[styles.newWorkspace, { color: selectedCanCreate ? theme.onAccent : theme.textSecondary }]}>· {workspaces.find((item) => item.id === workspaceId)?.name ?? ''}</Text>
+              <Text style={[styles.newIcon, { color: selectedCanCreate ? theme.text : theme.textSecondary }]}>＋</Text>
+              <Text style={[styles.newText, { color: selectedCanCreate ? theme.text : theme.textSecondary }]}>新建会话</Text>
+              <Text numberOfLines={1} style={[styles.newWorkspace, { color: theme.textSecondary }]}>· {workspaces.find((item) => item.id === workspaceId)?.name ?? ''}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -193,7 +218,7 @@ export function SessionDrawer({
 
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.sectionHead}>
-              <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>工作区</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>工作区</Text>
               <Text style={[styles.sectionMeta, { color: theme.textSecondary }]}>{workspaces.length} 个 · 展开查看会话</Text>
             </View>
             {workspaces.map((workspace) => {
@@ -244,9 +269,9 @@ export function SessionDrawer({
                           <View style={[styles.sessionDot, { backgroundColor: session.status === 'running' ? theme.accent : theme.success }]} />
                           <View style={styles.sessionText}>
                             <Text numberOfLines={1} style={[styles.sessionTitle, { color: theme.text }]}>{session.title}</Text>
-                            <Text numberOfLines={1} style={[styles.sessionMeta, { color: theme.textSecondary }]}>{session.status === 'running' ? '运行中' : '空闲'} · {formatRelative(session.updatedAt)}</Text>
+                            <Text numberOfLines={1} style={[styles.sessionMeta, { color: theme.textSecondary }]}>{session.status === 'running' ? '运行中' : '空闲'}</Text>
                           </View>
-                          <Text style={[styles.chevron, { color: theme.textSecondary }]}>›</Text>
+                          <Text style={[styles.sessionTime, { color: theme.textSecondary }]}>{formatRelative(session.updatedAt)}</Text>
                         </Pressable>
                       ))}
                       {remaining > 0 ? (
@@ -270,7 +295,14 @@ export function SessionDrawer({
             <View style={[styles.smallDot, { backgroundColor: desktop?.online ? theme.success : theme.textSecondary }]} />
             <Text style={[styles.footerText, { color: theme.textSecondary }]}>{desktop?.online ? '设备在线' : '设备离线'} · 每个工作区默认展示 5 条会话</Text>
           </View>
-        </Animated.View>
+    </Animated.View>
+  );
+  if (inline) return drawer;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.layer}>
+        <Pressable accessibilityLabel="关闭会话侧边栏" onPress={onClose} style={[styles.backdrop, { backgroundColor: '#00000066' }]} />
+        {drawer}
       </View>
     </Modal>
   );
@@ -280,6 +312,7 @@ const styles = StyleSheet.create({
   layer: { flex: 1, flexDirection: 'row' },
   backdrop: { ...StyleSheet.absoluteFill },
   drawer: { width: '86%', maxWidth: 340, borderRightWidth: 1, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 20, elevation: 12 },
+  inlineDrawer: { flex: 1, minHeight: 0, width: '100%', maxWidth: '100%', borderRightWidth: 0, shadowOpacity: 0, elevation: 0 },
   deviceWrap: { paddingHorizontal: 14, paddingTop: 15, paddingBottom: 9, position: 'relative', zIndex: 3 },
   deviceButton: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 5 },
   deviceIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
@@ -321,6 +354,7 @@ const styles = StyleSheet.create({
   sessionText: { flex: 1, minWidth: 0 },
   sessionTitle: { fontSize: Typography.body, lineHeight: 20, fontWeight: '600' },
   sessionMeta: { fontSize: Typography.caption, lineHeight: 18, marginTop: 3 },
+  sessionTime: { flexShrink: 0, marginLeft: 4, fontSize: Typography.caption, lineHeight: 18 },
   moreButton: { marginLeft: 28, paddingHorizontal: 9, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   moreText: { fontSize: Typography.secondary, lineHeight: 20 },
   empty: { padding: 16, fontSize: Typography.secondary, lineHeight: 20, textAlign: 'center' },

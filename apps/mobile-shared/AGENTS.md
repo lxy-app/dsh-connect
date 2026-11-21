@@ -15,6 +15,13 @@
 - 不引用某个 App 的 `src/`、assets、路由文件或 `node_modules`。
 - 不保存 token、签名、密钥或设备私有数据。
 
+## 目录约定
+
+- `components/`：只依赖 `react` / `react-native` 的展示型组件；图标、主题、路由、安全区和原生能力通过 props 注入。
+- `hooks/`：只依赖 React 与 React Native 的通用 Hook，例如基于 `useWindowDimensions` 的响应式布局。
+- `lib/`：协议与纯 TypeScript 逻辑；`responsive-layout.ts` 只接收窗口宽高，不读取设备型号或平台。
+- 共享 TSX 的 `react` / `react-native` 类型声明由调用方 `tsconfig.json` 的 `paths` 映射到各自锁定版本；不要因此给本目录新增 npm 工程或 lockfile。
+
 ## 引用与验证
 
 - 业务方使用 `@shared/*`；目录内部优先使用相对导入，避免依赖调用方别名。

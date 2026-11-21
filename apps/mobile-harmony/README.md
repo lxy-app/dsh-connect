@@ -116,6 +116,14 @@ apps/mobile-harmony/
 
 通用业务代码放在 `apps/mobile-shared/`。平台差异不要写进共享目录；主线也不要为了鸿蒙修改 SDK 版本。
 
+## Pad 自适应
+
+- `harmony.orientation: default` 允许系统旋转；布局由 `@shared/hooks/use-responsive-layout` 按当前窗口宽高计算，不按设备型号判断。竖向窗口宽度达到 744、横向窗口宽度达到 1024 才进入 expanded，窄分屏仍保持 compact。
+- compact 保留底部 Tab 和模态会话抽屉；expanded 使用 76 dp 导航 rail、300/324 dp 常驻会话主栏和独立详情。会话与新建页支持主从布局，会话主栏位于按会话身份重建的 Provider 外；会话详情切换使用 `router.setParams` 保留 route key，同会话重复点击直接忽略，只有从新建页进入已有会话才跳转路由。
+- 消息阅读区限制为 760 dp，新建表单为 680 dp；模型和更多输入弹层在 expanded 下居中并限宽 520 dp。设备卡片双列展示，个人页限制阅读宽度，待办复用导航 rail；待办详情主从未在本轮开启。
+- `AdaptivePage` 保持同一棵 detail 组件树，旋转时不给布局或页面添加 key，避免清空草稿、附件和模型状态。该行为仍需在鸿蒙 Pad 真机上验证旋转、分屏、安全区、键盘和语音。
+- 2026-11-21 已在鸿蒙 Pad 的签名 Release HAP 上验证：覆盖安装后保留登录态，横屏 expanded 导航 rail、已有会话详情与本地图标正常渲染。导航栏与聊天按钮的本地 PNG 使用 React Native `Image`，避免 SDK 55 的 `expo-image` 初始化崩溃；远程附件图片不在本次修复与验收范围内。
+
 ## 当前边界
 
 - 原生 Stack 在本基线上出现白屏，因此使用 Slot；恢复前必须真机验证。

@@ -37,6 +37,7 @@ Docs: https://docs.expo.dev/eas/index.md
 ## Shared code and sibling shells
 
 - 本工程是 SDK 58 的 iOS/Android 主线；鸿蒙壳位于 `apps/mobile-harmony/`，独立 SDK 55 + RNOH 基线，不要为对齐而修改本工程版本。
+- 共享响应式 UI 只依赖 React / React Native；本壳 `tsconfig.json` 将共享 TSX 的 React 声明映射到 SDK 58 对应版本，RN 使用 `types_generated/index.d.ts`。`metro.config.js` 的 `resolveRequest` 仅对精确运行时入口返回真实实现，不能让 Metro 进入 `@types/*`。窗口尺寸策略不得读取设备型号，主线 compact 路径不因鸿蒙 Pad 适配而改变。
 - 通用类型、纯 TS 业务逻辑和可复用 UI 放 `apps/mobile-shared/`，通过 `@shared/*` 引用；目录规则见其 `AGENTS.md`。
 - 共享目录不得直接依赖带原生实现的 Expo 模块；平台能力由调用方或适配层注入。
 - `metro.config.js` 只额外监听并映射 `../mobile-shared`；不要改成监听整个仓库。共享代码改动还需运行鸿蒙壳 `npm --prefix apps/mobile-harmony run check`。

@@ -18,6 +18,14 @@
 - 当前原生 Stack 在已验证基线上会导致白屏，根布局使用 Expo Router `Slot`；恢复 Stack 前必须真机验证。
 - `expo-speech-recognition` 没有鸿蒙移植，只能使用 `src/shims/` 的明确降级或另接火山 ASR；不要假装系统 ASR 已可用。
 
+## Pad 自适应
+
+- 统一使用 `@shared/hooks/use-responsive-layout`，依据当前应用窗口而非设备型号：竖向窗口宽 ≥744、横向窗口宽 ≥1024 才进入 expanded；窄分屏保持 compact。
+- `AdaptivePage` 必须保持同一棵 detail 组件树，不得按布局设置 key；会话主栏放在按会话身份重建的 `SessionModelProvider` 外。Pad 切换当前会话使用 `router.setParams` 保留 route key，同会话重复点击直接 no-op；参数合并时必须清除旧 `awaitingReply`，只有从新建页进入已有会话才跳转路由。
+- compact 保持底部 Tab 和模态会话抽屉；expanded 使用导航 rail、常驻会话主栏和居中限宽弹层。键盘、语音、附件和原生 shim 仍留在详情与壳内。
+- `harmony.orientation: default` 允许系统旋转；这不等于真机旋转已验收。修改后必须重新 `setup:native` 并构建 HAP。
+- 共享 TSX 的 React 声明在本壳 `tsconfig.json` 中映射到 SDK 55 对应版本，RN 使用 `types/index.d.ts`；不要复用主线 `types_generated` 严格声明。`metro.config.js` 的 `resolveRequest` 仅对精确的 React / React Native 运行时入口返回本壳实现，不能让运行时解析到 `@types/*`。
+
 ## 常用命令
 
 ```bash

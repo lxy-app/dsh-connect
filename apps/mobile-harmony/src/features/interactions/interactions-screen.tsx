@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AdaptivePage } from '@/components/adaptive-page';
 import { EmptyState } from '@/components/empty-state';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -90,7 +91,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
     });
   };
 
-  return (
+  const content = (
     <View style={[styles.page, { backgroundColor: theme.background, paddingTop: embedded ? 0 : insets.top }]}>
       {!embedded ? (
       <View style={styles.head}>
@@ -154,6 +155,12 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
         )}
       </ScrollView>
     </View>
+  );
+  if (embedded) return content;
+  return (
+    <AdaptivePage active="interactions" badge={interactions.length} onChange={(tab) => router.replace({ pathname: '/', params: { tab } })}>
+      {content}
+    </AdaptivePage>
   );
 }
 
