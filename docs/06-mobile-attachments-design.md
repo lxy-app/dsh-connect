@@ -973,9 +973,11 @@ App 选择（ImagePicker / DocumentPicker）
 
 1. **Connector 普通链接投影**：`rewriteAttachmentLinks` 同时处理 `![image](path)` 和 `[file](path)`，仅对路径精确匹配、非歧义的交付声明改写为 `dsh-attachment://<id>`。相对路径在 Connector 内按受权工作区根目录解析，且不得逃出该根目录；跳过 inline code span 中的示例链接。DSH Session Log 不变，桌面路径不离开 Connector。
 2. **中途窗口兼容**：transcript 是滑动窗口，页面可能缺少 `turn/start`，助手消息 turn 为 0。此时回退到"该消息之前已声明的候选文件"做匹配，仍然只做精确路径匹配，不借用后续 turn 的文件。
-3. **Mobile 正文链接分发**：`openLink` 先解析 `dsh-attachment://` URI，在当前消息 `attachments[]` 中查找并调用 `onOpenAttachment`，复用现有查看器；未匹配时提示"附件不可用"，不退化为系统浏览器。普通 `http/https/mailto` 行为不变。
-4. **原文件下载**：新增 `downloadOriginalFile`，走 `GET /v1/mobile/attachments/{id}` 获取原始字节（非 PDF 预览衍生文件），支持 202 有界重试、ETag/304 缓存重验、字节校验和原子落盘。缓存键与文档预览缓存隔离。
-5. **系统导出**：查看器顶部新增"下载"按钮。iOS/Android 使用 `expo-sharing` 调起系统分享/保存面板；鸿蒙使用 React Native `Share` API。App 私有缓存不等于用户可见的"已下载到本地"，必须经过系统导出。
+3. **正文工作区图片**：助手消息里的本地 `![alt](path)` 即使没有单独 `present`，也会被视为交付意图。Connector 仅接受 PNG/JPEG/WebP/GIF 本地路径，并继续执行工作区边界、敏感名称、符号链接和大小校验；外部 HTTP 图片、普通文件链接和代码示例不会因此变成附件。匹配成功后，独立成段的图片由两端 `MarkdownText` 直接内嵌显示。
+4. **Mobile 正文链接分发**：`openLink` 先解析 `dsh-attachment://` URI，在当前消息 `attachments[]` 中查找并调用 `onOpenAttachment`，复用现有查看器；未匹配时提示"附件不可用"，不退化为系统浏览器。普通 `http/https/mailto` 行为不变。
+5. **不支持格式的下载页**：HTML、ZIP 等没有应用内预览器的附件也必须打开统一查看器，显示"暂不支持应用内预览"并保留原文件下载按钮；不得在 `openAttachment` 中静默返回。附件卡同样可进入该下载页。
+6. **原文件下载**：新增 `downloadOriginalFile`，走 `GET /v1/mobile/attachments/{id}` 获取原始字节（非 PDF 预览衍生文件），支持 202 有界重试、ETag/304 缓存重验、字节校验和原子落盘。缓存键与文档预览缓存隔离。
+7. **系统导出**：查看器顶部新增"下载"按钮。iOS/Android 使用 `expo-sharing` 调起系统分享/保存面板；鸿蒙使用 React Native `Share` API。App 私有缓存不等于用户可见的"已下载到本地"，必须经过系统导出。
 
 ### 安全边界
 
@@ -986,7 +988,7 @@ App 选择（ImagePicker / DocumentPicker）
 
 ### 验证
 
-- Connector：类型检查通过，链接改写测试覆盖普通链接、angle-bracket、相对路径、混合图片+文件、code span 跳过、歧义拒绝和“窗口从中途开始”回退；全量 145 项测试通过。
+- Connector：类型检查通过，链接改写测试覆盖普通链接、angle-bracket、相对路径、混合图片+文件、code span 跳过、歧义拒绝、“窗口从中途开始”回退，以及未 `present` 的工作区 Markdown 图片；全量 147 项测试通过。
 - 真机日志：Connector 对真实会话的 `[wps-objectives-m1.html](prototypes/wps-objectives-m1.html)` 返回 `dsh-attachment://att_...`，确认相对路径与中途窗口两条链路均生效。
 - 主线 Mobile：ESLint、TypeScript、139 项单元测试、iOS/Android JS bundle 全部通过。
 - 鸿蒙：ESLint、TypeScript、130+3 项单元测试通过；签名 Release HAP 构建、安装和首屏启动通过。
