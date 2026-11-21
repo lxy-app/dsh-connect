@@ -947,10 +947,16 @@ export class HostSessionAdapter {
     for (const message of messages) {
       if (message.role !== 'assistant' || !message.text.includes('](')) continue;
       const turn = messageTurns.get(message) ?? 0;
-      if (turn <= 0) continue;
+      // A page can start in the middle of a turn, so its assistant message has
+      // no turn/start marker and is reported as turn 0. Fall back to the
+      // declarations already emitted at or before that message; never borrow a
+      // later turn's file to rewrite an older link.
+      const turnCandidates = turn > 0
+        ? candidates.filter((candidate) => candidate.turn === turn)
+        : candidates.filter((candidate) => candidate.turn <= 0 || candidate.seq <= message.seq);
       const rewritten = rewriteAttachmentLinks(
         message.text,
-        candidates.filter((candidate) => candidate.turn === turn),
+        turnCandidates,
         workspaceRoot,
       );
       if (rewritten !== message.text) Object.assign(message, { text: rewritten });

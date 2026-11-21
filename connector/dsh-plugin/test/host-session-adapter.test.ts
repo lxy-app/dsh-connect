@@ -634,6 +634,52 @@ test('transcript mounts a present delivery on the final assistant message of the
   assert.equal(JSON.stringify(result).includes('/work/a'), false);
 });
 
+test('transcript rewrites a relative link when the page starts mid-turn', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'deliverables/presented', seq: 10, time: 2_000, data: { turn: 6, files: [{ path: '/work/a/prototypes/wps-objectives-m1.html' }] } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 11, time: 3_000, data: { message: { id: 'a-mid', content: [{ type: 'text', text: '已更新：[wps-objectives-m1.html](prototypes/wps-objectives-m1.html)' }] } } } },
+    { type: 'event' as const, event: { type: 'turn/end', seq: 12, time: 4_000, data: {} } },
+  ];
+  const { adapter } = setup({
+    attachments: unusedAttachmentWiring,
+    controller: { async events() { return { cursor: 12, records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+
+  const assistant = result.messages.find((message) => message.id === 'a-mid');
+  const attachmentId = result.messages
+    .flatMap((message) => message.attachments ?? [])
+    .find((attachment) => attachment.name === 'wps-objectives-m1.html')?.attachmentId;
+  assert.ok(attachmentId);
+  assert.equal(assistant?.text, `已更新：[wps-objectives-m1.html](dsh-attachment://${attachmentId})`);
+});
+
+test('transcript rewrites a relative delivered-file link against the workspace root', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 1 } } },
+    { type: 'event' as const, event: { type: 'deliverables/presented', seq: 2, time: 2_000, data: { turn: 1, files: [{ path: '/work/a/prototypes/wps-objectives-m1.html' }] } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 3, time: 3_000, data: { message: { id: 'a1', content: [{ type: 'text', text: '已更新：[wps-objectives-m1.html](prototypes/wps-objectives-m1.html)' }] } } } },
+    { type: 'event' as const, event: { type: 'turn/end', seq: 4, time: 4_000, data: {} } },
+  ];
+  const { adapter } = setup({
+    attachments: unusedAttachmentWiring,
+    controller: { async events() { return { cursor: records.at(-1)?.event.seq ?? 0, records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+
+  const attachmentId = result.messages[0]?.attachments?.[0]?.attachmentId;
+  assert.equal(result.messages[0]?.text, `已更新：[wps-objectives-m1.html](dsh-attachment://${attachmentId})`);
+  assert.equal(JSON.stringify(result).includes('/work/a'), false);
+});
+
 test('transcript never mounts an empty turn delivery on the previous turn', async () => {
   const records = [
     { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 1 } } },
