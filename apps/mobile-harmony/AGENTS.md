@@ -25,9 +25,10 @@ npm ci --legacy-peer-deps   # 安装本壳锁定依赖
 npm run check               # ESLint + TypeScript
 npm start                   # 鸿蒙 Metro（自动设置 EXPO_HARMONY / EXPO_METRO_TARGET）
 npm run doctor              # DevEco / SDK / RNOH / Metro 环境诊断
-npm run setup:native        # 打补丁、CNG prebuild、ohpm install
+npm run setup:native        # 打补丁、CNG prebuild、ohpm install（默认 debug）
+npm run setup:native -- release  # 准备 Release autolinking 快照
 npm run build:hap           # 构建 debug 签名/未签名 HAP
-bash scripts/build-hap.sh release
+npm run build:hap -- release  # 构建 Release；变体切换时自动重新 setup:native
 ```
 
 `npm run setup:native` 前如需真机安装，设置本地签名文件：
@@ -42,7 +43,7 @@ export EXPO_HARMONY_SIGNING_CONFIG_FILE=/absolute/path/to/signing.json
 
 - `harmony/` 是 CNG 生成物，已忽略；不要手改后当作永久方案。可重复修改必须进入 `scripts/` 或 `patches/`。
 - `vendor/` 中的包记录上游版本和本地修改；不要把它们升级成与 RNOH 不匹配的版本。
-- `scripts/patch-upstream.sh` 负责 expo-image 的 SDK API 修正；重复执行必须幂等。
+- `scripts/patch-upstream.sh` 负责 expo-image 的 SDK API 修正与生成 Hvigor 脚本的 CLI 参数兼容；重复执行必须幂等。
 - 不用简单占位 CMake 目标覆盖真实 HAR 的原生构建规则。
 - 修改原生配置、权限或模块后，重新执行 `setup:native` 并构建 HAP。
 - 鸿蒙使用 hdc，不使用 adb；不同网段时可用 `hdc rport` 做开发调试转发，正式使用走 HTTPS/WSS。

@@ -1,6 +1,8 @@
 #!/bin/bash
-# 修正 @expo-harmony/expo-image 在当前 HarmonyOS SDK 中不可用的 deviceInfo.apiAvailable。
-# 同时处理 npm 侧的 HAR 与 ohpm 已解压副本；重复执行是幂等的。
+# 修正当前 expo-harmony 上游兼容问题：
+# 1. expo-image 使用当前 HarmonyOS SDK 不支持的 deviceInfo.apiAvailable。
+# 2. CNG 生成的 Hvigor 脚本向 export:embed 传入已不支持的 --json。
+# 同时处理 npm 侧的 HAR、ohpm 已解压副本与生成脚本；重复执行是幂等的。
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HAR="$ROOT/node_modules/@expo-harmony/expo-image/harmony/library.har"
@@ -20,6 +22,21 @@ console.log(`[patch] ${file}`);
 NODE
 }
 
+HVIGORFILE="$ROOT/harmony/hvigorfile.ts"
+if [ -f "$HVIGORFILE" ]; then
+  node - "$HVIGORFILE" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const source = fs.readFileSync(file, 'utf8');
+const before = "[cliPath, 'export:embed', ProjectRoot, '--json']";
+const after = "[cliPath, 'export:embed', ProjectRoot]";
+if (source.includes(after)) process.exit(0);
+if (!source.includes(before)) throw new Error(`未找到预期的 export:embed 调用：${file}`);
+fs.writeFileSync(file, source.replace(before, after));
+console.log(`[patch] ${file}`);
+NODE
+fi
+
 if [ -f "$EXTRACTED" ]; then
   patch_source "$EXTRACTED"
 fi
@@ -29,7 +46,8 @@ if [ ! -f "$HAR" ]; then
   exit 1
 fi
 
-if COPYFILE_DISABLE=1 tar xzf "$HAR" -O package/src/main/ets/ExpoImageUtils.ets 2>/dev/null | grep -q 'sdkApiVersion >= 24'; then
+# 在 pipefail 下不能用 grep -q：提前退出会让 tar 收到 SIGPIPE，导致已修补 HAR 被重复重打包。
+if COPYFILE_DISABLE=1 tar xzf "$HAR" -O package/src/main/ets/ExpoImageUtils.ets 2>/dev/null | grep 'sdkApiVersion >= 24' >/dev/null; then
   exit 0
 fi
 
