@@ -74,3 +74,32 @@ test('does not rewrite when there is no link destination', () => {
   const input = '普通文本，没有链接。';
   assert.equal(rewriteAttachmentLinks(input, [{ attachmentId: 'att_a', path: '/work/a/a.png' }]), input);
 });
+
+test('resolves relative destinations against the authorized workspace root', () => {
+  const result = rewriteAttachmentLinks(
+    '已更新：[wps-objectives-m1.html](prototypes/wps-objectives-m1.html)',
+    [{ attachmentId: 'att_proto', path: '/work/a/prototypes/wps-objectives-m1.html' }],
+    '/work/a',
+  );
+  assert.equal(result, '已更新：[wps-objectives-m1.html](dsh-attachment://att_proto)');
+});
+
+test('resolves ./ prefixed relative destinations', () => {
+  const result = rewriteAttachmentLinks(
+    '[说明](./docs/readme.md)',
+    [{ attachmentId: 'att_readme', path: '/work/a/docs/readme.md' }],
+    '/work/a',
+  );
+  assert.equal(result, '[说明](dsh-attachment://att_readme)');
+});
+
+test('does not escape the workspace or match by filename', () => {
+  const candidates = [{ attachmentId: 'att_secret', path: '/work/secret.txt' }];
+  const input = '[越界](../secret.txt)\n\n[同名](secret.txt)';
+  assert.equal(rewriteAttachmentLinks(input, candidates, '/work/a'), input);
+});
+
+test('keeps URLs and anchors untouched even with a workspace root', () => {
+  const input = '[网页](https://example.com/a) [锚点](#section)';
+  assert.equal(rewriteAttachmentLinks(input, [], '/work/a'), input);
+});

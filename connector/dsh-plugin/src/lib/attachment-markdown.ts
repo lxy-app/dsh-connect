@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import type { AttachmentCandidate } from './attachment-extract.js';
 
 export const ATTACHMENT_URI_PREFIX = 'dsh-attachment://';
@@ -6,14 +8,17 @@ type LinkCandidate = Pick<AttachmentCandidate, 'attachmentId' | 'path'>;
 
 /**
  * Rewrites Markdown image and ordinary file-link destinations that exactly
- * match a declared file in the same turn. Ambiguous duplicate declarations,
- * filename-only matches and unrelated links stay untouched. The replacement
- * happens in the mobile projection; the DSH session log is never modified and
- * the desktop path does not leave this Connector.
+ * match a declared file in the same turn. Relative destinations are resolved
+ * against the authorized workspace root inside the Connector; they never leave
+ * this process. Ambiguous duplicate declarations, filename-only matches and
+ * unrelated links stay untouched. The replacement happens in the mobile
+ * projection; the DSH session log is never modified and the desktop path does
+ * not leave this Connector.
  */
 export function rewriteAttachmentLinks(
   text: string,
   candidates: readonly LinkCandidate[],
+  workspaceRoot = '',
 ): string {
   if (!text.includes('](')) return text;
   const idsByPath = new Map<string, string | null>();
@@ -39,7 +44,7 @@ export function rewriteAttachmentLinks(
       cursor = linkStart + 1;
       continue;
     }
-    const attachmentId = idsByPath.get(destination.path);
+    const attachmentId = idsByPath.get(resolveLinkPath(destination.path, workspaceRoot));
     if (!attachmentId) {
       output += text.slice(cursor, destination.end);
       cursor = destination.end;
@@ -54,6 +59,24 @@ export function rewriteAttachmentLinks(
 
 /** Backwards-compatible alias for callers that only rewrite images. */
 export const rewriteAttachmentImageLinks = rewriteAttachmentLinks;
+
+/**
+ * Resolves a Markdown destination against the authorized workspace root.
+ * Only local file paths are considered; URLs, anchors and unknown schemes keep
+ * their original form and therefore never match a declaration.
+ */
+function resolveLinkPath(destination: string, workspaceRoot: string): string {
+  if (!destination || /^[a-z][a-z0-9+.-]*:/i.test(destination) || destination.startsWith('#')) {
+    return destination;
+  }
+  if (path.isAbsolute(destination)) return path.normalize(destination);
+  if (!workspaceRoot) return destination;
+  const root = path.resolve(workspaceRoot);
+  const resolved = path.resolve(root, destination);
+  // Relative links may never escape the authorized workspace root.
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) return destination;
+  return resolved;
+}
 
 /** Finds the next `[` that opens a Markdown link label, skipping code spans. */
 function findLinkStart(text: string, from: number): number {

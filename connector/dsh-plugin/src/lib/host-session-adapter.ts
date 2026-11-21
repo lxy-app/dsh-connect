@@ -951,6 +951,7 @@ export class HostSessionAdapter {
       const rewritten = rewriteAttachmentLinks(
         message.text,
         candidates.filter((candidate) => candidate.turn === turn),
+        workspaceRoot,
       );
       if (rewritten !== message.text) Object.assign(message, { text: rewritten });
     }
