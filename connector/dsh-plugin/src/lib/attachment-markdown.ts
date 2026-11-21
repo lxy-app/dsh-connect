@@ -44,7 +44,7 @@ export function rewriteAttachmentLinks(
       cursor = linkStart + 1;
       continue;
     }
-    const attachmentId = idsByPath.get(resolveLinkPath(destination.path, workspaceRoot));
+    const attachmentId = idsByPath.get(resolveAttachmentLinkPath(destination.path, workspaceRoot));
     if (!attachmentId) {
       output += text.slice(cursor, destination.end);
       cursor = destination.end;
@@ -57,6 +57,40 @@ export function rewriteAttachmentLinks(
   return output + text.slice(cursor);
 }
 
+/** Returns local Markdown image destinations, skipping inline code spans. */
+export function markdownImageDestinations(text: string): string[] {
+  if (!text.includes('![')) return [];
+  const destinations: string[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const labelStart = findLinkStart(text, cursor);
+    if (labelStart < 0) break;
+    if (text[labelStart - 1] !== '!') {
+      cursor = labelStart + 1;
+      continue;
+    }
+    const labelEnd = closingBracket(text, labelStart);
+    if (labelEnd < 0 || text[labelEnd + 1] !== '(') {
+      cursor = labelStart + 1;
+      continue;
+    }
+    const destination = linkDestination(text, labelEnd + 2);
+    if (!destination) {
+      cursor = labelStart + 1;
+      continue;
+    }
+    destinations.push(destination.path);
+    cursor = destination.end;
+  }
+  return destinations;
+}
+
+/** True only for local raster images the existing mobile image viewer decodes. */
+export function isLocalMarkdownImagePath(destination: string): boolean {
+  if (!destination || destination.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(destination)) return false;
+  return new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']).has(path.extname(destination).toLowerCase());
+}
+
 /** Backwards-compatible alias for callers that only rewrite images. */
 export const rewriteAttachmentImageLinks = rewriteAttachmentLinks;
 
@@ -65,7 +99,7 @@ export const rewriteAttachmentImageLinks = rewriteAttachmentLinks;
  * Only local file paths are considered; URLs, anchors and unknown schemes keep
  * their original form and therefore never match a declaration.
  */
-function resolveLinkPath(destination: string, workspaceRoot: string): string {
+export function resolveAttachmentLinkPath(destination: string, workspaceRoot: string): string {
   if (!destination || /^[a-z][a-z0-9+.-]*:/i.test(destination) || destination.startsWith('#')) {
     return destination;
   }

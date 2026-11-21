@@ -23,12 +23,17 @@ import type {
 } from '../types.js';
 import { errorCode, errorMessage, isRecord } from '../types.js';
 import { AttachmentIndex } from './attachment-index.js';
-import { rewriteAttachmentLinks } from './attachment-markdown.js';
-import { extractAttachmentCandidates, extractMessageAttachmentCandidates } from './attachment-extract.js';
+import {
+  isLocalMarkdownImagePath,
+  markdownImageDestinations,
+  resolveAttachmentLinkPath,
+  rewriteAttachmentLinks,
+} from './attachment-markdown.js';
+import { attachmentID, extractAttachmentCandidates, extractMessageAttachmentCandidates } from './attachment-extract.js';
 import type { AttachmentCandidate, MessageAttachmentCandidate } from './attachment-extract.js';
 import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
 import type { AttachmentByteReader, AttachmentUploader, MessageAttachmentByteReader } from './attachment-fetch.js';
-import { evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE, ATTACHMENT_ERROR_UNAVAILABLE } from './attachment-policy.js';
+import { displayName, evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE, ATTACHMENT_ERROR_UNAVAILABLE } from './attachment-policy.js';
 import { CursorJournal } from './cursor-journal.js';
 import { modelCatalogInput, modelSelectInput, pageInput, promptInput, sessionAddress } from './input-validation.js';
 import type {
@@ -889,6 +894,33 @@ export class HostSessionAdapter {
       sessionId,
       ...(wiring.toolAllowlist ? { toolAllowlist: wiring.toolAllowlist } : {}),
     });
+    // DSH also lets an assistant embed a workspace image without calling
+    // present. Treat that Markdown image itself as delivery intent, while the
+    // normal path policy below still enforces workspace containment, sensitive
+    // names, symlink rejection and size limits. External URLs never qualify.
+    const declaredPaths = new Set(
+      candidates.map((candidate) => resolveAttachmentLinkPath(candidate.path, workspaceRoot)),
+    );
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      const turn = messageTurns.get(message) ?? 0;
+      markdownImageDestinations(message.text).forEach((destination, index) => {
+        if (!isLocalMarkdownImagePath(destination)) return;
+        const resolved = resolveAttachmentLinkPath(destination, workspaceRoot);
+        if (declaredPaths.has(resolved)) return;
+        declaredPaths.add(resolved);
+        candidates.push({
+          attachmentId: attachmentID(sessionId, 'deliverable', message.seq, index),
+          seq: message.seq,
+          turn,
+          index,
+          source: 'deliverable',
+          path: resolved,
+          name: displayName(resolved),
+          occurredAt: message.occurredAt,
+        });
+      });
+    }
     const seen = new Set<string>();
     for (const candidate of candidates.slice(0, MAX_ATTACHMENTS_PER_TRANSCRIPT)) {
       if (seen.has(candidate.attachmentId)) continue;

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { rewriteAttachmentLinks } from '../src/lib/attachment-markdown.js';
+import {
+  isLocalMarkdownImagePath,
+  markdownImageDestinations,
+  rewriteAttachmentLinks,
+} from '../src/lib/attachment-markdown.js';
 
 test('rewrites an exact declared Markdown image path without changing its label', () => {
   const result = rewriteAttachmentLinks(
@@ -102,4 +106,23 @@ test('does not escape the workspace or match by filename', () => {
 test('keeps URLs and anchors untouched even with a workspace root', () => {
   const input = '[网页](https://example.com/a) [锚点](#section)';
   assert.equal(rewriteAttachmentLinks(input, [], '/work/a'), input);
+});
+
+test('extracts local Markdown images but not ordinary links, code or external images', () => {
+  const input = [
+    '![首屏](prototypes/desktop.png)',
+    '![移动端](<prototypes/mobile shot.webp>)',
+    '[普通文件](prototypes/not-image.png)',
+    '`![代码](prototypes/code.png)`',
+    '![外部](https://example.com/remote.png)',
+  ].join('\n\n');
+  assert.deepEqual(markdownImageDestinations(input), [
+    'prototypes/desktop.png',
+    'prototypes/mobile shot.webp',
+    'https://example.com/remote.png',
+  ]);
+  assert.equal(isLocalMarkdownImagePath('prototypes/desktop.png'), true);
+  assert.equal(isLocalMarkdownImagePath('prototypes/mobile shot.webp'), true);
+  assert.equal(isLocalMarkdownImagePath('https://example.com/remote.png'), false);
+  assert.equal(isLocalMarkdownImagePath('prototypes/readme.md'), false);
 });

@@ -658,6 +658,35 @@ test('transcript rewrites a relative link when the page starts mid-turn', async 
   assert.equal(assistant?.text, `已更新：[wps-objectives-m1.html](dsh-attachment://${attachmentId})`);
 });
 
+test('transcript declares and rewrites a workspace Markdown image without present', async () => {
+  const records = [
+    { type: 'event' as const, event: { type: 'turn/start', seq: 20, time: 2_000, data: { turn: 7 } } },
+    { type: 'event' as const, event: { type: 'assistant/message', seq: 21, time: 3_000, data: { message: { id: 'a-image', content: [{ type: 'text', text: '![首屏](prototypes/desktop.png)\n\n![外部](https://example.com/remote.png)' }] } } } },
+    { type: 'event' as const, event: { type: 'turn/end', seq: 22, time: 4_000, data: {} } },
+  ];
+  const { adapter } = setup({
+    attachments: unusedAttachmentWiring,
+    controller: { async events() { return { cursor: 22, records, hasMore: false }; } },
+  });
+
+  const result = await adapter.transcript(
+    { sessionId: 's1', workspaceId: 'ws-a' },
+    { signal: new AbortController().signal },
+  );
+
+  const assistant = result.messages.find((message) => message.id === 'a-image');
+  const attachment = result.messages
+    .flatMap((message) => message.attachments ?? [])
+    .find((item) => item.name === 'desktop.png');
+  assert.ok(attachment);
+  assert.equal(attachment.kind, 'image');
+  assert.equal(
+    assistant?.text,
+    `![首屏](dsh-attachment://${attachment.attachmentId})\n\n![外部](https://example.com/remote.png)`,
+  );
+  assert.equal(result.messages.flatMap((message) => message.attachments ?? []).length, 1);
+});
+
 test('transcript rewrites a relative delivered-file link against the workspace root', async () => {
   const records = [
     { type: 'event' as const, event: { type: 'turn/start', seq: 1, time: 1_000, data: { turn: 1 } } },
