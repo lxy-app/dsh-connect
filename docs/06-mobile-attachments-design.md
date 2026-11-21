@@ -971,10 +971,11 @@ App 选择（ImagePicker / DocumentPicker）
 
 ### 方案
 
-1. **Connector 普通链接投影**：`rewriteAttachmentLinks` 同时处理 `![image](path)` 和 `[file](path)`，仅对同 Turn、路径精确匹配、非歧义的交付声明改写为 `dsh-attachment://<id>`。跳过 inline code span 中的示例链接。DSH Session Log 不变，桌面路径不离开 Connector。
-2. **Mobile 正文链接分发**：`openLink` 先解析 `dsh-attachment://` URI，在当前消息 `attachments[]` 中查找并调用 `onOpenAttachment`，复用现有查看器；未匹配时提示"附件不可用"，不退化为系统浏览器。普通 `http/https/mailto` 行为不变。
-3. **原文件下载**：新增 `downloadOriginalFile`，走 `GET /v1/mobile/attachments/{id}` 获取原始字节（非 PDF 预览衍生文件），支持 202 有界重试、ETag/304 缓存重验、字节校验和原子落盘。缓存键与文档预览缓存隔离。
-4. **系统导出**：查看器顶部新增"下载"按钮。iOS/Android 使用 `expo-sharing` 调起系统分享/保存面板；鸿蒙使用 React Native `Share` API。App 私有缓存不等于用户可见的"已下载到本地"，必须经过系统导出。
+1. **Connector 普通链接投影**：`rewriteAttachmentLinks` 同时处理 `![image](path)` 和 `[file](path)`，仅对路径精确匹配、非歧义的交付声明改写为 `dsh-attachment://<id>`。相对路径在 Connector 内按受权工作区根目录解析，且不得逃出该根目录；跳过 inline code span 中的示例链接。DSH Session Log 不变，桌面路径不离开 Connector。
+2. **中途窗口兼容**：transcript 是滑动窗口，页面可能缺少 `turn/start`，助手消息 turn 为 0。此时回退到"该消息之前已声明的候选文件"做匹配，仍然只做精确路径匹配，不借用后续 turn 的文件。
+3. **Mobile 正文链接分发**：`openLink` 先解析 `dsh-attachment://` URI，在当前消息 `attachments[]` 中查找并调用 `onOpenAttachment`，复用现有查看器；未匹配时提示"附件不可用"，不退化为系统浏览器。普通 `http/https/mailto` 行为不变。
+4. **原文件下载**：新增 `downloadOriginalFile`，走 `GET /v1/mobile/attachments/{id}` 获取原始字节（非 PDF 预览衍生文件），支持 202 有界重试、ETag/304 缓存重验、字节校验和原子落盘。缓存键与文档预览缓存隔离。
+5. **系统导出**：查看器顶部新增"下载"按钮。iOS/Android 使用 `expo-sharing` 调起系统分享/保存面板；鸿蒙使用 React Native `Share` API。App 私有缓存不等于用户可见的"已下载到本地"，必须经过系统导出。
 
 ### 安全边界
 
@@ -985,7 +986,9 @@ App 选择（ImagePicker / DocumentPicker）
 
 ### 验证
 
-- Connector：类型检查通过，新增 8 项链接改写测试全部通过（普通链接、angle-bracket、混合图片+文件、code span 跳过、歧义拒绝）。
+- Connector：类型检查通过，链接改写测试覆盖普通链接、angle-bracket、相对路径、混合图片+文件、code span 跳过、歧义拒绝和“窗口从中途开始”回退；全量 145 项测试通过。
+- 真机日志：Connector 对真实会话的 `[wps-objectives-m1.html](prototypes/wps-objectives-m1.html)` 返回 `dsh-attachment://att_...`，确认相对路径与中途窗口两条链路均生效。
 - 主线 Mobile：ESLint、TypeScript、139 项单元测试、iOS/Android JS bundle 全部通过。
-- 鸿蒙：ESLint、TypeScript、130+3 项单元测试通过。HAP 构建因沙箱权限受限（`~/.ohpm` 不可写）未能完成，需在正常环境验证。
-- 真机验收：正文 DOCX 链接点击进入预览、下载原文件到系统目录、图片直渲、普通网页链接不变，均需设备验证。
+- 鸿蒙：ESLint、TypeScript、130+3 项单元测试通过；签名 Release HAP 构建、安装和首屏启动通过。
+- 下载与原文件导出：已通过 DOCX 附件卡验证（PDF 预览 + 系统分享面板显示原始文件名）；正文链接的最终点按交互仍需真机手动确认。
+- 注意：长消息超过 700 字时默认折叠为纯文本预览，需先点“展开全文”进入 Markdown 渲染，正文链接才可点击。
