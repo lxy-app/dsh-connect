@@ -23,7 +23,7 @@ import type {
 } from '../types.js';
 import { errorCode, errorMessage, isRecord } from '../types.js';
 import { AttachmentIndex } from './attachment-index.js';
-import { rewriteAttachmentImageLinks } from './attachment-markdown.js';
+import { rewriteAttachmentLinks } from './attachment-markdown.js';
 import { extractAttachmentCandidates, extractMessageAttachmentCandidates } from './attachment-extract.js';
 import type { AttachmentCandidate, MessageAttachmentCandidate } from './attachment-extract.js';
 import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
@@ -941,14 +941,14 @@ export class HostSessionAdapter {
       this.#mountAttachment(messages, messageTurns, candidate, attachment);
     }
 
-    // DSH writes delivered images as Markdown image links to desktop paths.
-    // Resolve only exact declarations from the same turn into opaque mobile
-    // references; never use a filename-only match or mutate the session log.
+    // DSH writes delivered files as Markdown links to desktop paths. Resolve
+    // only exact declarations from the same turn into opaque mobile references;
+    // never use a filename-only match or mutate the session log.
     for (const message of messages) {
-      if (message.role !== 'assistant' || !message.text.includes('![')) continue;
+      if (message.role !== 'assistant' || !message.text.includes('](')) continue;
       const turn = messageTurns.get(message) ?? 0;
       if (turn <= 0) continue;
-      const rewritten = rewriteAttachmentImageLinks(
+      const rewritten = rewriteAttachmentLinks(
         message.text,
         candidates.filter((candidate) => candidate.turn === turn),
       );
