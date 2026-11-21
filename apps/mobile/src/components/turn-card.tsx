@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AttachmentGrid, type AttachmentAuth } from '@/components/attachment-grid';
@@ -9,14 +9,20 @@ import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { markdownToPlainText } from '@/lib/markdown';
 import { attachmentPreviewKind } from '@/lib/attachment-preview';
-import type { TurnGroup } from '@shared/lib/turn-grouping';
+import {
+  processGroupOpen,
+  processGroupTitle,
+  toolStepLabel,
+  type TurnGroup,
+  type TurnProcessGroup,
+} from '@shared/lib/turn-grouping';
 import type { MobileAttachment, MobileMessage } from '@shared/types/mobile';
 
 const COLLAPSE_CHARS = 700;
 
 /**
- * One DSH turn: a header that folds the process away, the tool/narration steps
- * underneath it, and the visible reply outside the fold.
+ * A turn has a passive status row, not a global fold. Process groups own their
+ * disclosure state and every visible assistant response stays outside them.
  */
 export function TurnCard({
   group,
@@ -36,14 +42,8 @@ export function TurnCard({
   readAloudDisabled?: boolean;
 }) {
   const theme = useAppTheme();
-  const [open, setOpen] = useState(running);
-  const manual = useRef(false);
   const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    if (manual.current) return;
-    setOpen(running);
-  }, [running]);
+  const [groupOpen, setGroupOpen] = useState<Readonly<Record<string, boolean>>>({});
 
   const finalText = group.final?.text ?? '';
   const collapsible = finalText.length > COLLAPSE_CHARS;
@@ -72,49 +72,64 @@ export function TurnCard({
   }, [group.attachments, imageAttachments]);
 
   const elapsed = elapsedLabel(running ? now - group.startedAt : group.endedAt - group.startedAt);
-  const steps = group.steps;
-  const hasBody = steps.length > 0 || Boolean(group.final) || group.attachments.length > 0;
+  const parts = group.parts;
+  const latestProcessKey = useMemo(
+    () => [...parts].reverse().find((part) => part.kind === 'process')?.key,
+    [parts],
+  );
+  const hasBody = parts.length > 0 || Boolean(group.final) || group.attachments.length > 0;
   if (!hasBody && !liveText) return null;
+
+  const toggleGroup = (key: string) => {
+    setGroupOpen((current) => ({
+      ...current,
+      [key]: !processGroupOpen(current[key], running, key === latestProcessKey),
+    }));
+  };
 
   return (
     <View style={styles.card}>
       <View style={styles.headRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={running ? '收起执行过程' : open ? '收起执行过程' : '展开执行过程'}
-          accessibilityState={{ expanded: open }}
-          onPress={() => {
-            manual.current = true;
-            setOpen((current) => !current);
-          }}
-          hitSlop={8}
-          style={({ pressed }) => [styles.head, pressed && styles.pressed]}
-        >
+        <View style={styles.head}>
           {running ? <ActivityIndicator color={theme.textSecondary} size="small" /> : null}
           <Text style={[styles.title, { color: theme.textSecondary }]}>{running ? '深度求索中' : '已完成'}</Text>
-          <Text style={[styles.chevron, { color: theme.textSecondary, transform: [{ rotate: open ? '90deg' : '0deg' }] }]}>›</Text>
-        </Pressable>
+        </View>
         {group.final && finalText ? (
           <ReadAloudButton text={preview} playbackKey={`${playbackScope}:turn-${group.key}`} disabled={readAloudDisabled} style={styles.tts} />
         ) : null}
       </View>
 
-      {open ? (
-        <View style={styles.steps}>
-          {steps.map((step) => (
-            <StepRow key={`${step.seq}-${step.id}`} message={step} />
-          ))}
-          {liveText ? (
-            <View style={styles.live}>
-              <MarkdownText streaming text={liveText} />
+      {parts.length > 0 ? (
+        <View style={styles.parts}>
+          {parts.map((part) => part.kind === 'process' ? (
+            <ProcessGroupSection
+              key={part.key}
+              group={part.process}
+              open={processGroupOpen(groupOpen[part.key], running, part.key === latestProcessKey)}
+              onToggle={() => toggleGroup(part.key)}
+            />
+          ) : part.message.text.trim() ? (
+            <View key={part.key} style={styles.response}>
+              <MarkdownText
+                text={part.message.text}
+                attachments={group.attachments}
+                attachmentAuth={attachmentAuth}
+                onOpenAttachment={openAttachment}
+              />
             </View>
-          ) : null}
-          {steps.length === 0 && !liveText && !group.final ? (
-            <Text style={[styles.empty, { color: theme.textSecondary }]}>正在等待执行步骤…</Text>
-          ) : null}
-          <Text style={[styles.elapsed, { color: theme.textSecondary }]}>用时 {elapsed}</Text>
+          ) : null)}
         </View>
       ) : null}
+
+      {liveText ? (
+        <View style={styles.live}>
+          <MarkdownText streaming text={liveText} />
+        </View>
+      ) : null}
+      {parts.length === 0 && !liveText && !group.final ? (
+        <Text style={[styles.empty, { color: theme.textSecondary }]}>正在等待执行步骤…</Text>
+      ) : null}
+      <Text style={[styles.elapsed, { color: theme.textSecondary }]}>用时 {elapsed}</Text>
 
       {finalText || group.attachments.length > 0 ? (
         <View style={styles.final}>
@@ -162,6 +177,42 @@ export function TurnCard({
   );
 }
 
+function ProcessGroupSection({
+  group,
+  open,
+  onToggle,
+}: {
+  readonly group: TurnProcessGroup;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}) {
+  const theme = useAppTheme();
+  const title = processGroupTitle(group);
+  return (
+    <View style={styles.processGroup}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${open ? '收起' : '展开'}${title}`}
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        style={({ pressed }) => [styles.processHead, pressed && styles.pressed]}
+      >
+        <View style={[styles.dot, { backgroundColor: theme.accentSoft }]} />
+        <Text style={[styles.processTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.processCount, { color: theme.textSecondary }]}>{group.steps.length} 项</Text>
+        <Text style={[styles.chevron, { color: theme.textSecondary, transform: [{ rotate: open ? '90deg' : '0deg' }] }]}>›</Text>
+      </Pressable>
+      {open ? (
+        <View style={styles.groupSteps}>
+          {group.steps.map((step) => (
+            <StepRow key={`${step.seq}-${step.id}`} message={step} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function StepRow({ message }: { message: MobileMessage }) {
   const theme = useAppTheme();
   if (message.role !== 'tool') {
@@ -179,7 +230,7 @@ function StepRow({ message }: { message: MobileMessage }) {
     <View style={styles.stepRow}>
       <View style={[styles.dot, { backgroundColor: failed ? theme.danger : theme.accentSoft }]} />
       <Text style={[styles.stepLabel, { color: failed ? theme.danger : theme.text }]} numberOfLines={1}>
-        {stepLabel(message.toolName)}
+        {toolStepLabel(message.toolName)}
       </Text>
       {message.summary ? (
         <Text style={[styles.stepSummary, { color: theme.textSecondary }]} numberOfLines={1}>
@@ -189,17 +240,6 @@ function StepRow({ message }: { message: MobileMessage }) {
       {duration ? <Text style={[styles.stepTime, { color: theme.textSecondary }]}>{duration}</Text> : null}
     </View>
   );
-}
-
-function stepLabel(toolName?: string): string {
-  const name = (toolName ?? '').toLowerCase();
-  if (/bash|shell|exec|command|terminal|run/.test(name)) return '运行命令';
-  if (/read|view|open|cat|list/.test(name)) return '读取';
-  if (/write|edit|create|patch|apply/.test(name)) return '写入';
-  if (/grep|search|glob|find|query/.test(name)) return '检索';
-  if (/fetch|http|browse|web/.test(name)) return '访问';
-  if (/task|agent|subagent/.test(name)) return '调用';
-  return toolName || '步骤';
 }
 
 function elapsedLabel(ms: number): string {
@@ -215,7 +255,12 @@ const styles = StyleSheet.create({
   tts: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 4, borderRadius: 8 },
   title: { fontSize: Typography.control, fontWeight: '600' },
   chevron: { fontSize: 17, lineHeight: 18 },
-  steps: { paddingBottom: 4, gap: 6 },
+  parts: { gap: 4 },
+  processGroup: { paddingVertical: 2 },
+  processHead: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 30, alignSelf: 'flex-start' },
+  processTitle: { fontSize: Typography.body, fontWeight: '600' },
+  processCount: { fontSize: Typography.caption },
+  groupSteps: { paddingBottom: 4, gap: 6 },
   elapsed: { fontSize: Typography.caption, lineHeight: 18, marginTop: 2 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 24 },
   dot: { width: 6, height: 6, borderRadius: 3 },
@@ -223,6 +268,7 @@ const styles = StyleSheet.create({
   stepSummary: { flex: 1, fontSize: Typography.body },
   stepTime: { fontSize: Typography.caption, fontVariant: ['tabular-nums'] },
   narration: { fontSize: Typography.body, lineHeight: 22, paddingLeft: 13 },
+  response: { paddingVertical: 2 },
   live: { paddingTop: 2 },
   empty: { fontSize: Typography.body, paddingVertical: 4 },
   final: { paddingBottom: 2 },

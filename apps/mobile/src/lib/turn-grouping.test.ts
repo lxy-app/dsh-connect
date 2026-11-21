@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupTurns, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib/turn-grouping';
+import { groupTurns, processGroupOpen, processGroupTitle, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib/turn-grouping';
 import type { MobileMessage } from '@shared/types/mobile';
 
 function message(partial: Partial<MobileMessage> & Pick<MobileMessage, 'seq' | 'role'>): MobileMessage {
@@ -133,4 +133,59 @@ test('a centered time divider only appears after a five-minute gap', () => {
 test('a missing timestamp never renders a divider', () => {
   assert.equal(shouldShowTimeDivider(undefined, { startedAt: 0 }), false);
   assert.equal(shouldShowTimeDivider({ endedAt: 0 }, { startedAt: 1_000 }), true);
+});
+
+test('visible replies split process groups and remain outside their member lists', () => {
+  const [turn] = groupTurns([
+    message({ seq: 1, role: 'user', text: '开始', turn: 1 }),
+    message({ seq: 2, role: 'tool', toolName: 'read', summary: 'a.ts', turn: 1 }),
+    message({ seq: 3, role: 'tool', toolName: 'bash', summary: 'npm test', turn: 1 }),
+    message({ seq: 4, role: 'assistant', text: '先看到这条中间说明', turn: 1 }),
+    message({ seq: 5, role: 'tool', toolName: 'read', summary: 'b.ts', turn: 1 }),
+    message({ seq: 6, role: 'assistant', text: '最终回复', turn: 1 }),
+  ]);
+
+  assert.deepEqual(turn?.parts.map((part) => part.kind), ['process', 'response', 'process']);
+  const groups = turn?.parts.flatMap((part) => part.kind === 'process' ? [part.process] : []) ?? [];
+  assert.deepEqual(groups.map((process) => process.key), ['process-2', 'process-5']);
+  assert.deepEqual(groups.map((process) => process.steps.map((step) => step.seq)), [[2, 3], [5]]);
+  assert.equal(processGroupTitle(groups[0]!), '执行过程');
+  assert.equal(processGroupTitle(groups[1]!), '读取');
+  const response = turn?.parts.find((part) => part.kind === 'response');
+  assert.equal(response?.message.text, '先看到这条中间说明');
+  assert.equal(turn?.final?.text, '最终回复');
+});
+
+test('process group keys stay stable when more events arrive', () => {
+  const tool = message({ seq: 20, role: 'tool', toolName: 'read', turn: 1 });
+  const [before] = groupTurns([tool]);
+  const [after] = groupTurns([
+    tool,
+    message({ seq: 21, role: 'tool', toolName: 'bash', turn: 1 }),
+    message({ seq: 22, role: 'assistant', text: '完成', turn: 1 }),
+  ]);
+
+  assert.equal(before?.parts[0]?.key, 'process-20');
+  assert.equal(after?.parts[0]?.key, before?.parts[0]?.key);
+});
+
+test('only the latest running group opens by default and manual state wins', () => {
+  assert.equal(processGroupOpen(undefined, true, true), true);
+  assert.equal(processGroupOpen(undefined, true, false), false);
+  assert.equal(processGroupOpen(undefined, false, true), false);
+  assert.equal(processGroupOpen(false, true, true), false);
+  assert.equal(processGroupOpen(true, false, false), true);
+});
+
+test('an assistant response followed by a tool result is not promoted over that tool', () => {
+  const [turn] = groupTurns([
+    message({ seq: 2, role: 'tool', toolName: 'read', turn: 1 }),
+    message({ seq: 3, role: 'assistant', text: '我先检查', turn: 1 }),
+    message({ seq: 4, role: 'tool', toolName: 'bash', turn: 1 }),
+  ]);
+
+  assert.equal(turn?.final, undefined);
+  assert.deepEqual(turn?.parts.map((part) => part.key), ['process-2', 'response-3', 'process-4']);
+  const groups = turn?.parts.flatMap((part) => part.kind === 'process' ? [part.process] : []) ?? [];
+  assert.deepEqual(groups.map((process) => process.steps.map((step) => step.seq)), [[2], [4]]);
 });

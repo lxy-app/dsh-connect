@@ -4,12 +4,24 @@ import type { MobileAttachment, MobileMessage } from '../types/mobile';
  * One DSH turn as the chat should render it: the user's prompt, the folded
  * process (tool steps and intermediate narration) and the visible reply.
  */
+export type TurnProcessGroup = {
+  /** Stable identity from the first member's persistent event sequence. */
+  key: string;
+  steps: MobileMessage[];
+};
+
+export type TurnPart =
+  | { kind: 'process'; key: string; process: TurnProcessGroup }
+  | { kind: 'response'; key: string; message: MobileMessage };
+
 export type TurnGroup = {
   key: string;
   turn?: number;
   user?: MobileMessage;
   /** Tool calls and assistant narration, in event order. */
   steps: MobileMessage[];
+  /** Ordered process groups and visible replies; the final reply renders separately. */
+  parts: TurnPart[];
   /** Last assistant message with visible content; kept outside the fold. */
   final?: MobileMessage;
   /** Every attachment declared inside the turn, de-duplicated. */
@@ -97,13 +109,19 @@ function turnOf(message: MobileMessage): number | undefined {
 
 function finalize(draft: Draft): TurnGroup {
   const entries = draft.entries;
-  const final = [...entries].reverse().find(
-    (message) => message.role === 'assistant'
-      && (message.text.trim().length > 0 || (message.attachments?.length ?? 0) > 0),
+  const lastVisible = [...entries].reverse().find(
+    (message) => message.role === 'tool'
+      || message.text.trim().length > 0
+      || (message.attachments?.length ?? 0) > 0,
   );
+  // Only a trailing visible assistant message is the final reply. If a tool
+  // result follows it, this is an in-flight intermediate response and must
+  // still split the two process groups instead of being moved to the end.
+  const final = lastVisible?.role === 'assistant' ? lastVisible : undefined;
   const steps = entries.filter(
     (message) => message !== final && (message.role === 'tool' || message.text.trim().length > 0),
   );
+  const parts = turnParts(entries, final);
 
   const attachments: MobileAttachment[] = [];
   const seen = new Set<string>();
@@ -127,9 +145,70 @@ function finalize(draft: Draft): TurnGroup {
     ...(draft.turn !== undefined ? { turn: draft.turn } : {}),
     ...(draft.user ? { user: draft.user } : {}),
     steps,
+    parts,
     ...(final ? { final } : {}),
     attachments,
     startedAt,
     endedAt,
   };
+}
+
+/**
+ * Approximates DSH's visible process groups without projecting hidden Host nodes.
+ * A visible assistant reply closes the preceding group; tool names and step
+ * ordinals never decide grouping by themselves.
+ */
+function turnParts(entries: readonly MobileMessage[], final: MobileMessage | undefined): TurnPart[] {
+  const parts: TurnPart[] = [];
+  let members: MobileMessage[] = [];
+
+  const flush = () => {
+    const first = members[0];
+    if (!first) return;
+    const process: TurnProcessGroup = { key: `process-${first.seq}`, steps: members };
+    parts.push({ kind: 'process', key: process.key, process });
+    members = [];
+  };
+
+  for (const message of entries) {
+    if (message === final) continue;
+    const visible = message.role === 'tool'
+      || message.text.trim().length > 0
+      || (message.attachments?.length ?? 0) > 0;
+    if (!visible) continue;
+    if (message.role === 'assistant') {
+      flush();
+      parts.push({ kind: 'response', key: `response-${message.seq}`, message });
+      continue;
+    }
+    members.push(message);
+  }
+  flush();
+  return parts;
+}
+
+/** Human label shared by both runtime shells; it does not affect group boundaries. */
+export function toolStepLabel(toolName?: string): string {
+  const name = (toolName ?? '').toLowerCase();
+  if (/bash|shell|exec|command|terminal|run/.test(name)) return '运行命令';
+  if (/read|view|open|cat|list/.test(name)) return '读取';
+  if (/write|edit|create|patch|apply/.test(name)) return '写入';
+  if (/grep|search|glob|find|query/.test(name)) return '检索';
+  if (/fetch|http|browse|web/.test(name)) return '访问';
+  if (/task|agent|subagent/.test(name)) return '调用';
+  return toolName || '步骤';
+}
+
+export function processGroupTitle(group: Pick<TurnProcessGroup, 'steps'>): string {
+  const labels = [...new Set(group.steps.map((step) => toolStepLabel(step.toolName)))];
+  return labels.length === 1 && labels[0] ? labels[0] : '执行过程';
+}
+
+/** Only the latest running group opens by default; an explicit choice always wins. */
+export function processGroupOpen(
+  manual: boolean | undefined,
+  running: boolean,
+  latest: boolean,
+): boolean {
+  return manual ?? (running && latest);
 }
