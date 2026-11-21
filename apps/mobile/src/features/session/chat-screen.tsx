@@ -1015,13 +1015,15 @@ function ChatScreenContent() {
               {[deviceName, workspaceName].filter(Boolean).join(' · ') || '已授权会话'}
             </Text>
           </View>
-          {transcript?.active ? (
-            <StatusBadge label="运行中" tone="accent" />
-          ) : awaitingReply ? (
-            <StatusBadge label="等待中" tone="warning" />
-          ) : (
-            <StatusBadge label="空闲" tone="neutral" />
-          )}
+          <View style={styles.headStatus}>
+            {transcript?.active ? (
+              <StatusBadge label="运行中" tone="accent" />
+            ) : awaitingReply ? (
+              <StatusBadge label="等待中" tone="warning" />
+            ) : (
+              <StatusBadge label="空闲" tone="neutral" />
+            )}
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="新建会话"
@@ -1613,6 +1615,9 @@ const styles = StyleSheet.create({
   headText: {
     flex: 1,
     gap: 2,
+  },
+  headStatus: {
+    alignSelf: 'center',
   },
   title: {
     fontSize: Typography.reading,
