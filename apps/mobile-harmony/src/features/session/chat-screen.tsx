@@ -20,12 +20,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { File } from 'expo-file-system';
 
+import { AdaptivePage } from '@/components/adaptive-page';
 import { AttachmentDraftBar } from '@/components/attachment-draft-bar';
 import { InteractionCard } from '@/features/interactions/interaction-card';
 import { ModelSheet } from '@/features/session/model-sheet';
 import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
 import { SessionModelProvider, useSessionModel } from '@/features/session/session-model-provider';
 import { SessionDrawer } from '@/features/navigation/session-drawer';
+import { SessionMaster } from '@/features/navigation/session-master';
 import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { MarkdownText } from '@/components/markdown';
 import { ReadAloudButton } from '@/components/read-aloud-button';
@@ -36,6 +38,7 @@ import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
 import { groupTurns, runningTurnIndex, shouldShowTimeDivider } from '@shared/lib/turn-grouping';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
 import {
   admitAttachment,
@@ -76,15 +79,27 @@ import type { MobileMessage, MobileSession, MobileTranscript } from '@shared/typ
 const VOICE_WAVE_BARS = [6, 6, 10, 6, 14, 10, 20, 10, 14, 6, 10, 20, 14, 10, 6, 14, 20, 10, 6, 14, 10, 20, 10, 6, 6] as const;
 
 export function ChatScreen() {
+  const router = useRouter();
+  const { interactions } = useInteractions();
   const params = useLocalSearchParams<{ sessionId: string; deviceId: string; workspaceId: string }>();
   const sessionId = single(params.sessionId);
   const deviceId = single(params.deviceId);
   const workspaceId = single(params.workspaceId);
   const identity = `${deviceId}:${workspaceId}:${sessionId}`;
+  const changeTab = (next: HomeTab) => {
+    if (next !== 'sessions') router.replace({ pathname: '/', params: { tab: next } });
+  };
   return (
-    <SessionModelProvider key={identity} deviceId={deviceId} workspaceId={workspaceId} sessionId={sessionId}>
-      <ChatScreenContent />
-    </SessionModelProvider>
+    <AdaptivePage
+      active="sessions"
+      onChange={changeTab}
+      badge={interactions.length}
+      master={<SessionMaster currentSessionId={sessionId} currentDeviceId={deviceId} currentWorkspaceId={workspaceId} />}
+    >
+      <SessionModelProvider key={identity} deviceId={deviceId} workspaceId={workspaceId} sessionId={sessionId}>
+        <ChatScreenContent />
+      </SessionModelProvider>
+    </AdaptivePage>
   );
 }
 
@@ -92,6 +107,7 @@ function ChatScreenContent() {
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const { authorized, session, connection, rememberSession } = useMobileSession();
   // Attachment images need a live bearer token in their request headers, so the
   // screen resolves one connection snapshot and refreshes it with the session.
@@ -994,19 +1010,21 @@ function ChatScreenContent() {
     >
       <View style={{ paddingTop: insets.top }}>
         <View style={styles.head}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="打开会话侧边栏"
-            hitSlop={10}
-            onPress={() => setDrawerOpen(true)}
-            style={({ pressed }) => [
-              styles.iconButton,
-              { backgroundColor: theme.surface, borderColor: theme.border },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.iconText, { color: theme.text }]}>≡</Text>
-          </Pressable>
+          {!layout.isExpanded ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="打开会话侧边栏"
+              hitSlop={10}
+              onPress={() => setDrawerOpen(true)}
+              style={({ pressed }) => [
+                styles.iconButton,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.iconText, { color: theme.text }]}>≡</Text>
+            </Pressable>
+          ) : null}
           <View style={styles.headText}>
             <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
               {title}
@@ -1085,6 +1103,7 @@ function ChatScreenContent() {
 
       <ScrollView
         ref={scrollRef}
+        style={layout.isExpanded ? { alignSelf: 'center', width: '100%', maxWidth: layout.readingMaxWidth } : undefined}
         contentContainerStyle={styles.messages}
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => {
@@ -1237,6 +1256,9 @@ function ChatScreenContent() {
             {
               backgroundColor: theme.background,
               paddingBottom: 10,
+              alignSelf: layout.isExpanded ? 'center' : undefined,
+              width: layout.isExpanded ? '100%' : undefined,
+              maxWidth: layout.isExpanded ? layout.readingMaxWidth : undefined,
             },
           ]}
         >
@@ -1407,7 +1429,7 @@ function ChatScreenContent() {
           </Pressable>
         </View>
       )}
-      {voiceActive ? null : <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />}
+      {voiceActive || layout.isExpanded ? null : <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />}
       <MoreOptionsSheet
         visible={moreOptionsOpen}
         catalog={modelCatalog}
@@ -1432,13 +1454,15 @@ function ChatScreenContent() {
         onRefresh={refreshModel}
         onSelect={(selection) => { void selectModel(selection); }}
       />
-      <SessionDrawer
-        visible={drawerOpen}
-        currentSessionId={sessionId}
-        onClose={() => setDrawerOpen(false)}
-        onCreateSession={openNewSession}
-        onOpenSession={openDrawerSession}
-      />
+      {!layout.isExpanded ? (
+        <SessionDrawer
+          visible={drawerOpen}
+          currentSessionId={sessionId}
+          onClose={() => setDrawerOpen(false)}
+          onCreateSession={openNewSession}
+          onOpenSession={openDrawerSession}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

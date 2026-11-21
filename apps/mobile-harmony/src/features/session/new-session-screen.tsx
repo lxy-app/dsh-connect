@@ -16,10 +16,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActionButton } from '@/components/action-button';
+import { AdaptivePage } from '@/components/adaptive-page';
 import { AttachmentDraftBar } from '@/components/attachment-draft-bar';
 import { ChatIcon } from '@/components/chat-icon';
 import { EmptyState } from '@/components/empty-state';
 import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
+import { SessionMaster } from '@/features/navigation/session-master';
 import { useVoiceTranscription } from '@/features/session/use-voice-transcription';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -34,6 +36,7 @@ import {
   uploadMobileAttachment,
 } from '@/lib/mobile-api';
 import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import { appendNewSessionTranscript, newSessionTitle, submitNewSessionDraft } from '@shared/lib/new-session-submit';
 import {
   admitAttachment,
@@ -41,6 +44,7 @@ import {
   MAX_PROMPT_ATTACHMENTS,
   type PromptAttachmentDraft,
 } from '@shared/lib/prompt-attachments';
+import { useInteractions } from '@/providers/interactions-provider';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import type {
   MobileAccessOverview,
@@ -64,6 +68,8 @@ export function NewSessionScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
+  const { interactions } = useInteractions();
   const params = useLocalSearchParams<{ deviceId?: string; workspaceId?: string }>();
   const { authorized, lastSession, rememberSession } = useMobileSession();
   const [overview, setOverview] = useState<MobileAccessOverview | null>(null);
@@ -316,10 +322,16 @@ export function NewSessionScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.page, { backgroundColor: theme.background }]}
+    <AdaptivePage
+      active="sessions"
+      badge={interactions.length}
+      onChange={(tab) => router.replace({ pathname: '/', params: { tab } })}
+      master={<SessionMaster currentDeviceId={desktop?.deviceId} currentWorkspaceId={workspace?.id} />}
     >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[styles.page, { backgroundColor: theme.background }]}
+      >
       <View style={[styles.header, { paddingTop: insets.top, backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Pressable
           accessibilityRole="button"
@@ -358,6 +370,7 @@ export function NewSessionScreen() {
       ) : (
         <>
           <ScrollView
+            style={layout.isExpanded ? { alignSelf: 'center', width: '100%', maxWidth: layout.formMaxWidth } : undefined}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -584,7 +597,8 @@ export function NewSessionScreen() {
         onPickAttachments={(source) => void addAttachments(source)}
         onClose={() => setMoreOptionsOpen(false)}
       />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </AdaptivePage>
   );
 }
 

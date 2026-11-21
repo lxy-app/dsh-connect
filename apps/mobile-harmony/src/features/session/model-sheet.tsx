@@ -12,6 +12,7 @@ import {
   selectionKey,
 } from '@shared/lib/session-model';
 import type { SessionModelPending } from '@/features/session/session-model-provider';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import type { MobileModelSelection, MobileSessionModelCatalog } from '@shared/types/mobile';
 
 export function ModelSheet({
@@ -39,6 +40,7 @@ export function ModelSheet({
 }) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const migrationRequired = catalog?.projectionKind === 'migration-required';
   const effectiveUnavailable = catalog !== null && !selectionInCatalog(catalog, catalog.effective);
 
@@ -54,9 +56,9 @@ export function ModelSheet({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, layout.isExpanded && styles.expandedOverlay]}>
         <Pressable accessibilityLabel="关闭模型选择" style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.sheet, layout.isExpanded && { width: '100%', maxWidth: layout.sheetMaxWidth, borderRadius: 24 }, { backgroundColor: theme.surface, paddingBottom: layout.isExpanded ? 10 : Math.max(insets.bottom, 10) }]}>
           <View style={[styles.handle, { backgroundColor: theme.border }]} />
           <View style={styles.heading}>
             <View style={styles.headingCopy}>
@@ -210,6 +212,7 @@ export function ModelSheet({
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.42)' },
+  expandedOverlay: { justifyContent: 'center', padding: 32 },
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   sheet: { maxHeight: '88%', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 16, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, marginBottom: 12 },

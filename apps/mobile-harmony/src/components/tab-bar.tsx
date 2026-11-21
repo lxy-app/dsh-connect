@@ -1,11 +1,14 @@
-import { Image } from 'expo-image';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import {
+  AppNavigation,
+  type AppNavigationTab,
+  type AppNavigationVariant,
+} from '@shared/components/app-navigation';
 
-export type HomeTab = 'sessions' | 'interactions' | 'devices' | 'profile';
+export type HomeTab = AppNavigationTab;
 
 const TABS: { key: HomeTab; label: string; icon: number }[] = [
   { key: 'sessions', label: '会话', icon: require('../../assets/tab-icons/sessions.png') },
@@ -18,10 +21,12 @@ export function TabBar({
   active,
   onChange,
   badge,
+  variant = 'bottom',
 }: {
   active: HomeTab;
   onChange: (tab: HomeTab) => void;
   badge?: number;
+  variant?: AppNavigationVariant;
 }) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -29,85 +34,32 @@ export function TabBar({
   const bottomInset = Platform.OS === 'ios' ? Math.min(insets.bottom, 12) : insets.bottom;
 
   return (
-    <View
-      style={[
-        styles.bar,
-        {
-          backgroundColor: theme.background,
-          borderTopColor: theme.border,
-          paddingBottom: Math.max(bottomInset, 6),
-        },
-      ]}
-    >
-      {TABS.map((tab) => {
-        const selected = tab.key === active;
-        const color = selected ? theme.accent : theme.textSecondary;
-        return (
-          <Pressable
-            key={tab.key}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            onPress={() => onChange(tab.key)}
-            style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
-          >
-            <Image source={tab.icon} tintColor={color} contentFit="contain" style={styles.icon} />
-            <Text style={[styles.label, { color }, selected && styles.labelActive]}>
-              {tab.label}
-            </Text>
-            {tab.key === 'interactions' && badge ? (
-              <View style={[styles.badge, { backgroundColor: theme.warning }]}>
-                <Text style={[styles.badgeText, { color: theme.onAccent }]}>{badge}</Text>
-              </View>
-            ) : null}
-          </Pressable>
-        );
-      })}
-    </View>
+    <AppNavigation
+      active={active}
+      badge={badge}
+      variant={variant}
+      bottomPadding={Math.max(bottomInset, 6)}
+      onChange={onChange}
+      colors={{
+        background: theme.background,
+        border: theme.border,
+        accent: theme.accent,
+        accentSoft: theme.accentSoft,
+        textSecondary: theme.textSecondary,
+        onAccent: theme.onAccent,
+        warning: theme.warning,
+      }}
+      items={TABS.map((tab) => ({
+        ...tab,
+        icon: (color: string) => <Image source={tab.icon} tintColor={color} resizeMode="contain" style={styles.icon} />,
+      }))}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 6,
-  },
-  tab: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
   icon: {
     width: 22,
     height: 22,
-  },
-  label: {
-    fontSize: Typography.caption,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  labelActive: {
-    fontWeight: '700',
-  },
-  badge: {
-    position: 'absolute',
-    top: 2,
-    right: '27%',
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    fontSize: Typography.caption,
-    lineHeight: 16,
-    fontWeight: '800',
-  },
-  pressed: {
-    opacity: 0.55,
   },
 });

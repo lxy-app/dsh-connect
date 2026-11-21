@@ -18,6 +18,14 @@
 - 当前原生 Stack 在已验证基线上会导致白屏，根布局使用 Expo Router `Slot`；恢复 Stack 前必须真机验证。
 - `expo-speech-recognition` 没有鸿蒙移植，只能使用 `src/shims/` 的明确降级或另接火山 ASR；不要假装系统 ASR 已可用。
 
+## Pad 自适应
+
+- 统一使用 `@shared/hooks/use-responsive-layout`，依据当前应用窗口而非设备型号：竖向窗口宽 ≥744、横向窗口宽 ≥1024 才进入 expanded；窄分屏保持 compact。
+- `AdaptivePage` 必须保持同一棵 detail 组件树，不得按布局设置 key；会话主栏放在按会话身份重建的 `SessionModelProvider` 外。Pad 切换当前会话使用 `router.setParams` 保留 route key，同会话重复点击直接 no-op；参数合并时必须清除旧 `awaitingReply`，只有从新建页进入已有会话才跳转路由。
+- compact 保持底部 Tab 和模态会话抽屉；expanded 使用导航 rail、常驻会话主栏和居中限宽弹层。键盘、语音、附件和原生 shim 仍留在详情与壳内。
+- `harmony.orientation: default` 允许系统旋转；这不等于真机旋转已验收。修改后必须重新 `setup:native` 并构建 HAP。
+- 共享 TSX 的 React 声明在本壳 `tsconfig.json` 中映射到 SDK 55 对应版本，RN 使用 `types/index.d.ts`；不要复用主线 `types_generated` 严格声明。`metro.config.js` 的 `resolveRequest` 仅对精确的 React / React Native 运行时入口返回本壳实现，不能让运行时解析到 `@types/*`。
+
 ## 常用命令
 
 ```bash
@@ -43,7 +51,7 @@ export EXPO_HARMONY_SIGNING_CONFIG_FILE=/absolute/path/to/signing.json
 
 - `harmony/` 是 CNG 生成物，已忽略；不要手改后当作永久方案。可重复修改必须进入 `scripts/` 或 `patches/`。
 - `vendor/` 中的包记录上游版本和本地修改；不要把它们升级成与 RNOH 不匹配的版本。
-- `scripts/patch-upstream.sh` 负责 expo-image 的 SDK API 修正与生成 Hvigor 脚本的 CLI 参数兼容；重复执行必须幂等。
+- `scripts/patch-upstream.sh` 负责 expo-image 的 SDK API 修正、生成 Hvigor 脚本的 CLI 参数兼容，并调用 `patch-safe-area.sh` 修复 safe-area-context 5.6.4 的主窗口同步 inset 读取；重复执行必须幂等。
 - 不用简单占位 CMake 目标覆盖真实 HAR 的原生构建规则。
 - 修改原生配置、权限或模块后，重新执行 `setup:native` 并构建 HAP。
 - 鸿蒙使用 hdc，不使用 adb；不同网段时可用 `hdc rport` 做开发调试转发，正式使用走 HTTPS/WSS。

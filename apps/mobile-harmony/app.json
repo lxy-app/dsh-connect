@@ -31,6 +31,7 @@
       "@expo-harmony/prebuild-config"
     ],
     "harmony": {
+      "orientation": "default",
       "bundleName": "app.lxy.dshconnect",
       "label": "DSH Connect",
       "versionCode": 2,

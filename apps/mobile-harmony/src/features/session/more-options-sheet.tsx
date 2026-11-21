@@ -5,6 +5,7 @@ import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import type { AttachmentSource } from '@/lib/attachment-picker';
 import { modelLabel, sameModelSelection } from '@shared/lib/session-model';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import type { MobileSessionModelCatalog } from '@shared/types/mobile';
 
 export function MoreOptionsSheet({
@@ -29,6 +30,7 @@ export function MoreOptionsSheet({
 }) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const diverged = catalog !== null && !sameModelSelection(catalog.effective, catalog.default);
   const pickersDisabled = attachmentSlots <= 0;
   const tiles: readonly { source: AttachmentSource; label: string; glyph: string }[] = [
@@ -38,9 +40,9 @@ export function MoreOptionsSheet({
   ];
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, layout.isExpanded && styles.expandedOverlay]}>
         <Pressable accessibilityLabel="关闭更多输入选项" style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={[styles.sheet, layout.isExpanded && { width: '100%', maxWidth: layout.sheetMaxWidth, borderRadius: 24 }, { backgroundColor: theme.surface, paddingBottom: layout.isExpanded ? 12 : Math.max(insets.bottom, 12) }]}>
           <View style={[styles.handle, { backgroundColor: theme.border }]} />
           <Text style={[styles.title, { color: theme.text }]}>更多输入选项</Text>
           <View style={styles.attachmentGrid}>
@@ -95,6 +97,7 @@ export function MoreOptionsSheet({
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.42)' },
+  expandedOverlay: { justifyContent: 'center', padding: 32 },
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 16, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, marginBottom: 14 },

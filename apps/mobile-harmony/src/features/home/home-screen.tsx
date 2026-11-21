@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AdaptivePage } from '@/components/adaptive-page';
 import { TabBar, type HomeTab } from '@/components/tab-bar';
 import { Typography } from '@/constants/theme';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import {
   describeMobileApiError,
@@ -36,6 +38,7 @@ export function HomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: HomeTab }>();
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const { session, authorized, disconnect, lastSession, rememberSession } = useMobileSession();
   const { interactions } = useInteractions();
   const openInteractions = () => router.push('/interactions');
@@ -121,7 +124,8 @@ export function HomeScreen() {
   if (!session) return null;
 
   return (
-    <View style={[styles.page, { backgroundColor: theme.background }]}>
+    <AdaptivePage active={tab} onChange={setTab} badge={interactions.length}>
+      <View style={[styles.page, { backgroundColor: theme.background }]}>
       <View style={[styles.body, { paddingTop: insets.top }]}>
         {error ? (
           <Pressable
@@ -191,8 +195,9 @@ export function HomeScreen() {
           />
         )}
       </View>
-      <TabBar active={tab} onChange={setTab} badge={interactions.length} />
-    </View>
+        {!layout.isExpanded ? <TabBar active={tab} onChange={setTab} badge={interactions.length} /> : null}
+      </View>
+    </AdaptivePage>
   );
 }
 

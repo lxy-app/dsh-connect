@@ -7,6 +7,7 @@ import { ActionButton } from '@/components/action-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import type { ThemePreference } from '@/lib/theme-preference';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import { useThemeSettings } from '@/providers/theme-provider';
 import type { StoredMobileSession } from '@shared/types/mobile';
 
@@ -32,6 +33,7 @@ export function ProfileTab({
   const theme = useAppTheme();
   const { preference, setPreference } = useThemeSettings();
   const router = useRouter();
+  const layout = useResponsiveLayout();
   const [disconnecting, setDisconnecting] = useState(false);
 
   const selectTheme = (next: ThemePreference) => {
@@ -60,7 +62,11 @@ export function ProfileTab({
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={layout.isExpanded ? { alignSelf: 'center', width: '100%', maxWidth: layout.readingMaxWidth } : undefined}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>我的</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>

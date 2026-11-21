@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { formatScopes } from '@shared/lib/format';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import type { MobileDesktopAccess } from '@shared/types/mobile';
 
 export function DevicesTab({
@@ -26,16 +27,17 @@ export function DevicesTab({
   onRefresh: () => void;
 }) {
   const theme = useAppTheme();
+  const layout = useResponsiveLayout();
 
   return (
     <ScrollView
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, layout.isExpanded && styles.expandedContent]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
       }
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.header}>
+      <View style={[styles.header, styles.fullWidth]}>
         <Text style={[styles.title, { color: theme.text }]}>设备</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           {desktops.length === 0
@@ -44,25 +46,25 @@ export function DevicesTab({
         </Text>
       </View>
 
-      <View style={[styles.explain, { backgroundColor: theme.surfaceMuted, borderColor: theme.border }]}>
+      <View style={[styles.explain, styles.fullWidth, { backgroundColor: theme.surfaceMuted, borderColor: theme.border }]}>
         <Text style={[styles.explainTitle, { color: theme.text }]}>账号权限</Text>
         <Text style={[styles.explainStep, { color: theme.textSecondary }]}>桌面、工作区和操作权限由 Server 按用户访问策略统一下发。</Text>
         <Text style={[styles.explainStep, { color: theme.textSecondary }]}>如需调整权限，请联系管理员；策略更新后下拉刷新即可。</Text>
       </View>
 
       {desktops.length === 0 ? (
-        <EmptyState
-          title="没有可访问的桌面"
-          description="当前账号访问策略没有可访问的桌面或工作区。"
-          secondary="请联系管理员为账号配置访问策略。"
-        />
+        <View style={styles.fullWidth}>
+          <EmptyState
+            title="没有可访问的桌面"
+            description="当前账号访问策略没有可访问的桌面或工作区。"
+            secondary="请联系管理员为账号配置访问策略。"
+          />
+        </View>
       ) : (
         desktops.map((desktop) => (
-          <DesktopCard
-            key={desktop.deviceId}
-            desktop={desktop}
-            onOpenSessions={onOpenSessions}
-          />
+          <View key={desktop.deviceId} style={layout.isExpanded ? styles.expandedCardItem : styles.fullWidth}>
+            <DesktopCard desktop={desktop} onOpenSessions={onOpenSessions} />
+          </View>
         ))
       )}
     </ScrollView>
@@ -136,6 +138,18 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 28,
     gap: 14,
+  },
+  expandedContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  fullWidth: {
+    width: '100%',
+  },
+  expandedCardItem: {
+    width: '48%',
+    minWidth: 280,
+    flexGrow: 1,
   },
   header: {
     gap: 4,

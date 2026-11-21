@@ -45,4 +45,22 @@ if (resolveRequest && resolveRequest.harmonyRuntime && !resolveRequest.harmonyRu
   };
 }
 
+// tsconfig paths 提供共享 TSX 类型声明；精确运行时入口仍由鸿蒙锁定实现承担。
+const runtimeModules = new Map([
+  ['react', path.resolve(projectRoot, 'node_modules/react-harmony/index.js')],
+  ['react/jsx-runtime', path.resolve(projectRoot, 'node_modules/react-harmony/jsx-runtime.js')],
+  ['react/compiler-runtime', path.resolve(projectRoot, 'node_modules/react-harmony/compiler-runtime.js')],
+  // 共享目录向上查找时看不到本壳 node_modules；精确入口固定到 RNOH，不能指回上游 RN。
+  ['react-native', path.resolve(projectRoot, 'node_modules/@react-native-oh/react-native-harmony/index.js')],
+]);
+const harmonyResolveRequest = merged.resolver.resolveRequest;
+const runtimeResolveRequest = (context, moduleName, platform) => {
+  const filePath = runtimeModules.get(moduleName);
+  if (filePath) return { type: 'sourceFile', filePath };
+  if (harmonyResolveRequest) return harmonyResolveRequest(context, moduleName, platform);
+  return context.resolveRequest(context, moduleName, platform);
+};
+if (harmonyResolveRequest?.harmonyRuntime) runtimeResolveRequest.harmonyRuntime = harmonyResolveRequest.harmonyRuntime;
+merged.resolver.resolveRequest = runtimeResolveRequest;
+
 module.exports = merged;
