@@ -47,7 +47,7 @@ EXPO_PUBLIC_DSH_CONNECT_SERVER_URL=https://dsh.lxy.app npm start
 npm run setup:native
 ```
 
-该命令依次执行：上游 HAR 补丁 → Expo CNG prebuild → OHPM 安装 → 解压副本修正。`harmony/` 是生成物并已忽略，不要手改作为永久方案。`patch-upstream.sh` 也会调用 `patch-safe-area.sh`，让 safe-area-context 5.6.4 从主窗口同步读取 inset，避免冷启动竞态返回全零。
+该命令依次执行：上游 HAR 补丁 → Expo CNG prebuild → OHPM 安装 → 解压副本修正。`harmony/` 是生成物并已忽略，不要手改作为永久方案。`patch-upstream.sh` 也会调用 `patch-safe-area.sh`，让 safe-area-context 5.6.4 从主窗口同步读取 inset，避免冷启动竞态返回全零；`patch-pdf-autolinking.sh` 仅在旧包缺少 ArkTS Package 时移除无效注册；检测到有效 `PdfViewPackage` 与 `RTNPdfView` builder 时必须保留自动链接，避免原生视图白屏。
 
 ## 签名与 HAP 构建
 
@@ -115,6 +115,12 @@ apps/mobile-harmony/
 ```
 
 通用业务代码放在 `apps/mobile-shared/`。平台差异不要写进共享目录；主线也不要为了鸿蒙修改 SDK 版本。
+
+## 附件文档预览
+
+- 文件卡点击后才下载；MD/TXT/JSON/LOG 在应用内阅读，PDF 与 Office 转换结果使用本地 `react-native-pdf`。Office 预览依赖 Server 的可选 preview-worker，不需要桌面安装办公套件。缓存重开必须经 Bearer + `If-None-Match` 鉴权并收到 304，401/403 或断网不会直接展示旧缓存。
+- PDF 原生依赖锁定为 `@react-native-ohos/react-native-pdf@7.1.0`（上游 `react-native-pdf@7.0.4`）与对应 BlobUtil；该版本提供面向 RNOH 0.84 的 ArkTS `PdfViewPackage`。Expo/RNOH 版本保持 SDK 55.0.31 + RNOH 0.84.1。修改这些依赖后必须重新执行 `setup:native` 和 HAP 构建。
+- 已验证 Hermes 导出、unsigned HAP 构建，以及 XYAO-W00（HarmonyOS 6.1 / API 24）上的签名 Release 覆盖安装。实测 DOCX 经 Worker 转 PDF 后，中文标题、正文、列表和表格正常显示，并可连续滚动到第二页。缩放、取消和缓存清理仍需继续验收。
 
 ## Pad 自适应
 
