@@ -20,8 +20,31 @@ COPY server/ ./
 ARG TARGETARCH=amd64
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
     -o /out/dsh-connect-server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" \
+    -o /out/dsh-connect-preview-worker ./cmd/preview-worker
 
-FROM docker.m.daocloud.io/library/alpine:3.22
+# Office conversion is isolated from the API image. This target is deployed only
+# when application-internal Office preview is enabled.
+FROM docker.m.daocloud.io/library/alpine:3.22 AS preview-worker
+ARG APK_REPOSITORY_HOST=
+RUN if [ -n "$APK_REPOSITORY_HOST" ]; then \
+        sed -i "s#dl-cdn.alpinelinux.org#${APK_REPOSITORY_HOST}#g" /etc/apk/repositories; \
+    fi \
+    && apk add --no-cache ca-certificates tzdata libreoffice font-noto-cjk ttf-dejavu \
+    && addgroup -S -g 10001 app \
+    && adduser -S -D -H -u 10001 -G app app
+WORKDIR /app
+COPY --from=server-build /out/dsh-connect-preview-worker /usr/local/bin/dsh-connect-preview-worker
+ENV DSH_CONNECT_PREVIEW_LISTEN_ADDR=0.0.0.0:8788 \
+    DSH_CONNECT_PREVIEW_SOFFICE=soffice \
+    HOME=/tmp
+EXPOSE 8788
+USER app
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8788/healthz || exit 1
+ENTRYPOINT ["/usr/local/bin/dsh-connect-preview-worker"]
+
+FROM docker.m.daocloud.io/library/alpine:3.22 AS server-runtime
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app \

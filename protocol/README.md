@@ -55,6 +55,7 @@ REST 请求 DTO 与 command params 均禁止未定义字段，Server 对未知 J
 
 - `session.attachment.fetch`（v1 `command`，要求 `read` scope）：params 为 `sessionId/workspaceId/attachmentId`，30s 默认超时上限内由 Server 用 60s 触发。Connector 在**命令返回前**把字节上传到 `POST /v1/connector/attachments/{attachmentId}`（`application/octet-stream`，device token 认证，`X-DSH-Attachment-{Session,Bytes,Sha256}`），随后返回 `{status:"ready",bytes,sha256,mime}`。
 - `GET /v1/mobile/attachments/{attachmentId}`：手机只用不可猜测的 `attachmentId`，从不提交路径。`200` 字节（`ETag` 支持 `If-None-Match` → `304`）、`202` 拉取中（`Retry-After`）、`409` 桌面侧判定（`changed`/`denied`/`too_large` 等）、`404` 未知或已过期、`413` 超限、`403` 用户权限失效。
+- `GET /v1/mobile/attachments/{attachmentId}/preview`：PDF 直接返回；DOC/DOCX/PPT/PPTX/XLS/XLSX 由独立预览 Worker 转成 PDF。`202` 区分 `fetching` 与 `converting`，`200` 只返回 `application/pdf`；预览派生文件与原附件分别缓存，转换失败不回写原附件状态。Worker 未配置返回 `503 preview_unavailable`，不支持类型返回 `415 preview_unsupported`，转换失败返回 `409 preview_failed`。
 
 `MobileMessage.attachments[]` 为可选字段，旧客户端忽略即可；`state` 由 Server 覆盖（Connector 只报初始判定），因此同一附件在不同手机上状态一致。字节就绪后 Server 向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅 `attachmentId/bytes/sha256`）。
 

@@ -21,19 +21,23 @@ export DSH_CONNECT_ATTACHMENTS DSH_CONNECT_BOOTSTRAP_TOKEN DSH_CONNECT_LISTEN_AD
 	DSH_CONNECT_DATABASE_URL DSH_CONNECT_ADMIN_ORIGIN \
 	DSH_CONNECT_BOOTSTRAP_OWNER_EMAIL DSH_CONNECT_BOOTSTRAP_OWNER_PASSWORD \
 	DSH_CONNECT_BOOTSTRAP_OWNER_NAME DSH_CONNECT_TEST_DATABASE_DIALECT \
-	DSH_CONNECT_TEST_DATABASE_URL DSH_CONNECT_E2E_DATABASE_URL DSH_CONNECT_REQUIRE_PG
+	DSH_CONNECT_TEST_DATABASE_URL DSH_CONNECT_E2E_DATABASE_URL DSH_CONNECT_REQUIRE_PG \
+	DSH_CONNECT_PREVIEW_WORKER_URL DSH_CONNECT_PREVIEW_WORKER_TOKEN DSH_CONNECT_PREVIEW_TIMEOUT \
+	DSH_CONNECT_MAX_PREVIEW_BYTES DSH_CONNECT_PREVIEW_LISTEN_ADDR DSH_CONNECT_PREVIEW_SOFFICE \
+	DSH_CONNECT_PREVIEW_CONCURRENCY
 endif
 
 .PHONY: help db-up db-down db-reset test test-server test-connector test-e2e \
 	test-admin test-admin-e2e test-mobile test-mobile-harmony vet check run-server run-admin run-mobile run-mobile-harmony admin-install \
 	admin-build website-deploy website-deploy-check mobile-install mobile-harmony-install mobile-build mobile-harmony-build ent-gen \
-	ent-upgrade-check
+	ent-upgrade-check run-preview-worker
 
 help:
 	@echo "db-up          启动 PostgreSQL 18（docker compose）"
 	@echo "db-down        停止数据库，保留数据卷"
 	@echo "db-reset       停止数据库并删除数据卷（破坏性）"
 	@echo "run-server     启动 Go Server（自动执行 ent 迁移与 Owner 引导）"
+	@echo "run-preview-worker 启动独立 Office 转 PDF Worker（需 LibreOffice）"
 	@echo "run-admin      启动管理后台开发服务器（Vite）"
 	@echo "run-mobile     启动 Expo Metro（需先安装 Development Build）"
 	@echo "test           全部既有测试（Server + Connector）"
@@ -99,6 +103,9 @@ check: vet test test-e2e test-admin test-mobile test-mobile-harmony
 
 run-server:
 	go -C server run ./cmd/server
+
+run-preview-worker:
+	go -C server run ./cmd/preview-worker
 
 admin-install:
 	npm --prefix apps/admin install

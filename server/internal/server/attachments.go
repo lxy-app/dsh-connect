@@ -115,6 +115,7 @@ func (s *Server) attachmentsWritable() bool {
 
 func (s *Server) attachmentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/mobile/attachments/{attachmentId}", s.mobileAuth(s.handleMobileAttachment))
+	mux.HandleFunc("GET /v1/mobile/attachments/{attachmentId}/preview", s.mobileAuth(s.handleMobileAttachmentPreview))
 	s.mobileAttachmentRoutes(mux)
 	mux.HandleFunc("POST /v1/connector/attachments/{attachmentId}", s.handleConnectorAttachmentUpload)
 }
@@ -126,46 +127,73 @@ func (s *Server) attachmentRoutes(mux *http.ServeMux) {
 // or workspace values supplied by the phone. An id from one session therefore
 // cannot be read through another session's grant.
 func (s *Server) handleMobileAttachment(w http.ResponseWriter, r *http.Request) {
+	actor, row, ok := s.authorizeMobileAttachment(w, r)
+	if !ok {
+		return
+	}
+	row, ok = s.ensureAttachmentReady(w, r, actor, row, writeAttachmentPending)
+	if !ok {
+		return
+	}
+	s.serveAttachmentBlob(w, r, row)
+}
+
+// authorizeMobileAttachment performs the common fail-closed gates for original
+// downloads and derived previews. Neither handler accepts ownership parameters
+// from the phone.
+func (s *Server) authorizeMobileAttachment(w http.ResponseWriter, r *http.Request) (mobileActor, store.SessionAttachmentRecord, bool) {
 	if !s.attachmentsEnabled() {
 		writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "attachments are disabled", false))
-		return
+		return mobileActor{}, store.SessionAttachmentRecord{}, false
 	}
 	attachmentID := r.PathValue("attachmentId")
 	if !attachmentIDPattern.MatchString(attachmentID) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "invalid attachmentId", false))
-		return
+		return mobileActor{}, store.SessionAttachmentRecord{}, false
 	}
 	row, err := s.store.SessionAttachment(r.Context(), attachmentID)
 	if err != nil {
 		if errors.Is(err, store.ErrAttachmentNotFound) {
 			writeAPIError(w, protocol.NewError(protocol.CodeNotFound, "attachment not found", false))
-			return
+			return mobileActor{}, store.SessionAttachmentRecord{}, false
 		}
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not load attachment", true))
-		return
+		return mobileActor{}, store.SessionAttachmentRecord{}, false
 	}
 	actor, commandError := s.authorizeMobileSession(r, row.DeviceID, row.WorkspaceID, row.SessionID, "read")
 	if commandError != nil {
 		writeAPIError(w, *commandError)
-		return
+		return mobileActor{}, store.SessionAttachmentRecord{}, false
 	}
 	if row.ErrorCode == protocol.AttachmentErrorTooLarge {
 		writeAPIError(w, protocol.NewError(protocol.CodePayloadTooLarge, "attachment exceeds the configured size limit", false))
-		return
+		return mobileActor{}, store.SessionAttachmentRecord{}, false
 	}
 	// A sticky desktop verdict is final regardless of the state it left the row
 	// in: retrying a denied or changed file only repeats the same refusal.
 	if nonRetryableAttachmentErrors[row.ErrorCode] {
 		writeAttachmentFailure(w, row)
-		return
+		return mobileActor{}, store.SessionAttachmentRecord{}, false
 	}
+	return actor, row, true
+}
+
+// ensureAttachmentReady is the existing known→fetching→ready state machine,
+// shared by original downloads and previews. The caller chooses only the pending
+// response shape; all persistence and Connector behavior stays identical.
+func (s *Server) ensureAttachmentReady(
+	w http.ResponseWriter,
+	r *http.Request,
+	actor mobileActor,
+	row store.SessionAttachmentRecord,
+	writePending func(http.ResponseWriter),
+) (store.SessionAttachmentRecord, bool) {
 	switch row.State {
 	case protocol.AttachmentStateReady:
-		s.serveAttachmentBlob(w, r, row)
-		return
+		return row, true
 	case protocol.AttachmentStateFetching:
-		writeAttachmentPending(w)
-		return
+		writePending(w)
+		return store.SessionAttachmentRecord{}, false
 	case protocol.AttachmentStateFailed:
 		// A retryable verdict may be asked again (sticky ones returned above).
 	case protocol.AttachmentStateUnavailable:
@@ -174,25 +202,26 @@ func (s *Server) handleMobileAttachment(w http.ResponseWriter, r *http.Request) 
 		// First request for this file.
 	default:
 		writeAttachmentFailure(w, row)
-		return
+		return store.SessionAttachmentRecord{}, false
 	}
 	if row.Bytes > s.config.MaxAttachmentBytes {
 		// Refuse before asking the desktop to read an oversized file.
 		_ = s.store.FailAttachment(r.Context(), row.ID, protocol.AttachmentErrorTooLarge, nowUTC())
 		writeAPIError(w, protocol.NewError(protocol.CodePayloadTooLarge, "attachment exceeds the configured size limit", false))
-		return
+		return store.SessionAttachmentRecord{}, false
 	}
 	won, beginErr := s.store.BeginAttachmentFetch(r.Context(), row.ID, nowUTC())
 	if beginErr != nil {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not start attachment fetch", true))
-		return
+		return store.SessionAttachmentRecord{}, false
 	}
 	if won {
 		// The command runs detached: the phone is told to retry, and the result
 		// lands in the row before it comes back.
 		s.enqueueAttachmentFetch(actor, row)
 	}
-	writeAttachmentPending(w)
+	writePending(w)
+	return store.SessionAttachmentRecord{}, false
 }
 
 // enqueueAttachmentFetch asks the owning Connector to read and upload one file.

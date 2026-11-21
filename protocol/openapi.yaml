@@ -1449,6 +1449,87 @@ paths:
             application/json:
               schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
         "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/attachments/{attachmentId}/preview:
+    get:
+      tags: [mobileAccess]
+      operationId: previewMobileAttachment
+      summary: Preview a PDF or convert a declared Office attachment to PDF
+      description: |
+        Uses the same opaque attachment id and reversed row ownership checks as
+        the original byte download. PDF attachments are returned directly.
+        DOC/DOCX/PPT/PPTX/XLS/XLSX files are converted by the configured,
+        separate preview Worker; the Server and Connector never read an
+        arbitrary path or execute an office suite in the mobile request process.
+
+        `202` means either the Connector is fetching the original bytes or the
+        Worker is converting them; retry after `Retry-After`. A successful
+        response is always a PDF. Preview derivatives are cached independently
+        from the original attachment and do not change its state.
+      security:
+        - mobileBearer: []
+      parameters:
+        - {name: attachmentId, in: path, required: true, schema: {type: string, pattern: "^att_[A-Za-z0-9_-]{8,64}$"}}
+      responses:
+        "200":
+          description: PDF preview bytes.
+          headers:
+            ETag:
+              description: Preview digest; supports If-None-Match.
+              schema: {type: string}
+            Cache-Control:
+              schema: {type: string}
+            X-Content-Type-Options:
+              schema: {type: string, enum: [nosniff]}
+          content:
+            application/pdf:
+              schema: {type: string, format: binary}
+        "202":
+          description: The original file is being fetched or the PDF is being generated.
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: {type: string, enum: [fetching, converting]}
+                  retryAfterMs: {type: integer, minimum: 0}
+        "304":
+          description: Not modified (If-None-Match matched the current preview digest).
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The original attachment or preview conversion failed.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: schemas/v1/common.schema.json#/$defs/ErrorResponse
+                  - type: object
+                    required: [state]
+                    properties:
+                      state: {type: string, enum: [failed, unavailable]}
+                      errorCode: {type: string}
+        "413":
+          description: The original file or generated PDF exceeds its configured size limit.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "415":
+          description: The attachment type has no PDF preview strategy.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "503":
+          description: The Office preview Worker is not configured.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/common.schema.json#/$defs/ErrorResponse}
+        "500": {$ref: "#/components/responses/InternalError"}
   /v1/connector/attachments/{attachmentId}:
     post:
       tags: [connector]

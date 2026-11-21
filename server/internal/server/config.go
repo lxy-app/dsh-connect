@@ -35,6 +35,15 @@ type Config struct {
 	// AttachmentDir holds the content-addressed blobs; container deployments
 	// must mount a volume here or blobs vanish when the container is recreated.
 	AttachmentDir string
+	// PreviewWorkerURL is the isolated Office-to-PDF Worker base URL. Empty
+	// leaves PDF previews available but makes Office previews unavailable.
+	PreviewWorkerURL string
+	// PreviewWorkerToken authenticates Server-to-Worker conversion requests.
+	PreviewWorkerToken string
+	// PreviewTimeout bounds one detached conversion, including the HTTP response.
+	PreviewTimeout time.Duration
+	// MaxPreviewBytes caps source documents and derived PDF responses.
+	MaxPreviewBytes int64
 
 	BootstrapOwnerEmail    string
 	BootstrapOwnerPassword string
@@ -96,6 +105,12 @@ func (c Config) withDefaults() (Config, error) {
 	if c.AttachmentDir == "" {
 		c.AttachmentDir = "dsh-connect-attachments"
 	}
+	if c.PreviewTimeout == 0 {
+		c.PreviewTimeout = 90 * time.Second
+	}
+	if c.MaxPreviewBytes == 0 {
+		c.MaxPreviewBytes = 50 << 20
+	}
 	if c.BootstrapOwnerName == "" {
 		c.BootstrapOwnerName = "Owner"
 	}
@@ -118,6 +133,12 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if c.MaxAttachmentBytes < 1 || c.MaxAttachmentStoreBytes < c.MaxAttachmentBytes || c.AttachmentTTL <= 0 {
 		return Config{}, errors.New("invalid attachment size or TTL configuration")
+	}
+	if c.PreviewTimeout <= 0 || c.MaxPreviewBytes < 1 {
+		return Config{}, errors.New("invalid preview size or timeout configuration")
+	}
+	if c.PreviewWorkerURL != "" && c.PreviewWorkerToken == "" {
+		return Config{}, errors.New("DSH_CONNECT_PREVIEW_WORKER_TOKEN must be set when DSH_CONNECT_PREVIEW_WORKER_URL is configured")
 	}
 	return c, nil
 }
