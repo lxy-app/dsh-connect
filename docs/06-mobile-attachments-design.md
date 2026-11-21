@@ -962,3 +962,30 @@ App 选择（ImagePicker / DocumentPicker）
 - 鸿蒙：ESLint、TypeScript、130 项单元测试、Hermes 导出与 unsigned HAP 原生构建通过；PDF/Blob HAR、CMake/C++ Package 已进入构建结果。
 - 协议与发布：OpenAPI YAML、Compose 配置、全部 GitHub Actions actionlint 通过。真实移动设备上的版式、缩放、中文显示、取消和缓存清理仍待验收。
 - 鸿蒙真机修正：初次白板日志确认文件已下载，但旧 PDF 包缺少匹配运行时实现。升级为 `@react-native-ohos/react-native-pdf@7.1.0` / 上游 `7.0.4` 后，兼容补丁必须保留其有效 ArkTS `PdfViewPackage`。已在 XYAO-W00（API 24）用签名 Release HAP 验证 DOCX 中文标题、正文、列表、表格显示及滚动到第二页；缩放、取消和撤权清理仍另行验收。
+
+## 22. 正文文件链接与原文件下载（2026-11-21）
+
+### 问题
+
+助手正文中以 Markdown 普通链接交付的文件（如 `[报告.docx](/work/a/报告.docx)`）在移动端点击后提示"无法打开链接"。根因：Connector 只改写 Markdown **图片**链接为 `dsh-attachment://<id>`，普通文件链接保留桌面路径；移动端 `openLink` 只接受 `http/https/mailto`，其他 scheme 直接拒绝。
+
+### 方案
+
+1. **Connector 普通链接投影**：`rewriteAttachmentLinks` 同时处理 `![image](path)` 和 `[file](path)`，仅对同 Turn、路径精确匹配、非歧义的交付声明改写为 `dsh-attachment://<id>`。跳过 inline code span 中的示例链接。DSH Session Log 不变，桌面路径不离开 Connector。
+2. **Mobile 正文链接分发**：`openLink` 先解析 `dsh-attachment://` URI，在当前消息 `attachments[]` 中查找并调用 `onOpenAttachment`，复用现有查看器；未匹配时提示"附件不可用"，不退化为系统浏览器。普通 `http/https/mailto` 行为不变。
+3. **原文件下载**：新增 `downloadOriginalFile`，走 `GET /v1/mobile/attachments/{id}` 获取原始字节（非 PDF 预览衍生文件），支持 202 有界重试、ETag/304 缓存重验、字节校验和原子落盘。缓存键与文档预览缓存隔离。
+4. **系统导出**：查看器顶部新增"下载"按钮。iOS/Android 使用 `expo-sharing` 调起系统分享/保存面板；鸿蒙使用 React Native `Share` API。App 私有缓存不等于用户可见的"已下载到本地"，必须经过系统导出。
+
+### 安全边界
+
+- 手机只持有不透明 `attachmentId`，不接触桌面路径。
+- 原文件缓存复用前携带 Bearer + `If-None-Match` 重新鉴权；仅授权后的 304 可以使用缓存。
+- 401/403 清理原文件缓存；登出/替换登录时同时清理文档预览和原文件缓存。
+- 用户已显式导出到系统目录的副本不反向删除。
+
+### 验证
+
+- Connector：类型检查通过，新增 8 项链接改写测试全部通过（普通链接、angle-bracket、混合图片+文件、code span 跳过、歧义拒绝）。
+- 主线 Mobile：ESLint、TypeScript、139 项单元测试、iOS/Android JS bundle 全部通过。
+- 鸿蒙：ESLint、TypeScript、130+3 项单元测试通过。HAP 构建因沙箱权限受限（`~/.ohpm` 不可写）未能完成，需在正常环境验证。
+- 真机验收：正文 DOCX 链接点击进入预览、下载原文件到系统目录、图片直渲、普通网页链接不变，均需设备验证。
