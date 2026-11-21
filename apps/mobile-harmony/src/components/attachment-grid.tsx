@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { MobileAttachment } from '@shared/types/mobile';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { attachmentDocumentKind, isOfficePdfPreview } from '@/lib/attachment-documents';
 
 export type AttachmentAuth = { readonly serverUrl: string; readonly accessToken: string };
 
@@ -23,17 +24,19 @@ export function AttachmentGrid({
     <View style={styles.container}>
       {attachments.map((attachment) => {
         const isImage = attachment.kind === 'image';
+        const documentKind = attachmentDocumentKind(attachment);
+        const canPreview = isImage || (documentKind !== null && attachment.state !== 'unavailable');
         return (
           <Pressable
             key={attachment.attachmentId}
-            accessibilityRole={isImage ? 'imagebutton' : undefined}
-            accessibilityLabel={isImage ? `打开图片 ${attachment.name}` : attachment.name}
-            disabled={!isImage}
+            accessibilityRole={isImage ? 'imagebutton' : canPreview ? 'button' : undefined}
+            accessibilityLabel={isImage ? `打开图片 ${attachment.name}` : canPreview ? `打开文档 ${attachment.name}` : attachment.name}
+            disabled={!canPreview}
             onPress={() => onOpen(attachment)}
             style={({ pressed }) => [
               styles.fileRow,
               { backgroundColor: theme.surfaceMuted, borderColor: theme.border },
-              pressed && isImage && styles.pressed,
+              pressed && canPreview && styles.pressed,
             ]}
           >
             <Text style={[styles.fileKind, { color: theme.textSecondary }]}>
@@ -52,10 +55,16 @@ export function AttachmentGrid({
                     ? ' · 加载失败，点击查看详情'
                     : isImage
                       ? ' · 点击查看原图'
-                      : ' · 文件预览将在后续版本提供'}
+                      : documentKind === 'pdf'
+                        ? isOfficePdfPreview(attachment)
+                          ? ' · 点击查看转换后的 PDF'
+                          : ' · 点击查看 PDF'
+                        : documentKind
+                          ? ' · 点击查看文档'
+                          : ' · 暂不支持应用内预览'}
               </Text>
             </View>
-            {isImage ? (
+            {canPreview ? (
               <Text style={[styles.fileChevron, { color: theme.textSecondary }]}>›</Text>
             ) : null}
           </Pressable>
