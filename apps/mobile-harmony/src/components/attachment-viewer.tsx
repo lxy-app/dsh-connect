@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -12,6 +14,7 @@ import {
 
 import { AttachmentDocumentViewer } from '@/components/attachment-document-viewer';
 import { AttachmentImage } from '@/components/attachment-image';
+import { downloadOriginalFile } from '@/lib/attachment-original';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 export type ViewerAuth = { readonly serverUrl: string; readonly accessToken: string };
@@ -40,7 +43,29 @@ export function AttachmentViewer({
   const [index, setIndex] = useState(() => selection.kind === 'image'
     ? Math.min(selection.initialIndex, Math.max(0, selection.attachments.length - 1))
     : 0);
+  const [downloading, setDownloading] = useState(false);
   const current = selection.kind === 'image' ? selection.attachments[index] : selection.attachment;
+
+  const handleDownload = useCallback(async () => {
+    if (!current || !auth || downloading) return;
+    setDownloading(true);
+    const controller = new AbortController();
+    try {
+      const { file } = await downloadOriginalFile(current, auth, { signal: controller.signal });
+      // HarmonyOS: use the system share/save sheet via the file URI.
+      // The RNOH share intent is handled by the native shell.
+      const { Share } = await import('react-native');
+      await Share.share(
+        { url: file.uri, title: current.name },
+        { dialogTitle: `保存 ${current.name}` },
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      Alert.alert('下载失败', error instanceof Error ? error.message : '请检查网络后重试。');
+    } finally {
+      setDownloading(false);
+    }
+  }, [current, auth, downloading]);
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent>
@@ -92,11 +117,28 @@ export function AttachmentViewer({
           >
             <Text style={styles.closeText}>关闭</Text>
           </Pressable>
-          {selection.kind === 'image' && selection.attachments.length > 1 ? (
-            <Text style={styles.counter}>
-              {index + 1} / {selection.attachments.length}
-            </Text>
-          ) : null}
+          <View style={styles.headerRight}>
+            {selection.kind === 'image' && selection.attachments.length > 1 ? (
+              <Text style={styles.counter}>
+                {index + 1} / {selection.attachments.length}
+              </Text>
+            ) : null}
+            {current && auth ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`下载原文件 ${current.name}`}
+                disabled={downloading}
+                onPress={() => void handleDownload()}
+                style={({ pressed }) => [styles.download, pressed && styles.pressed]}
+              >
+                {downloading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.downloadText}>下载</Text>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         <View style={[styles.footer, selection.kind === 'document' && styles.documentFooter]} pointerEvents="none">
@@ -129,9 +171,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   close: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.16)' },
   closeText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   counter: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  download: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.16)' },
+  downloadText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  pressed: { opacity: 0.7 },
   footer: { position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center', gap: 4 },
   documentFooter: { bottom: 24, left: 16, right: 16 },
   caption: { color: 'rgba(255,255,255,0.86)', fontSize: 13 },
