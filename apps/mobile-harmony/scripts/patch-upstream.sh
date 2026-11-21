@@ -5,6 +5,7 @@
 # 同时处理 npm 侧的 HAR、ohpm 已解压副本与生成脚本；重复执行是幂等的。
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+bash "$ROOT/scripts/patch-safe-area.sh"
 HAR="$ROOT/node_modules/@expo-harmony/expo-image/harmony/library.har"
 EXTRACTED="$ROOT/harmony/oh_modules/@expo-harmony/expo-image/src/main/ets/ExpoImageUtils.ets"
 

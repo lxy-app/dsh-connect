@@ -144,7 +144,7 @@ export function SessionDrawer({
             {
               backgroundColor: theme.surface,
               borderColor: theme.border,
-              paddingTop: inline ? 0 : insets.top,
+              paddingTop: insets.top,
               paddingBottom: inline ? 0 : insets.bottom,
               transform: [{ translateX: inline ? 0 : translateX }],
             },
