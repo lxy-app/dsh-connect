@@ -89,7 +89,9 @@ export function attachmentPreviewKind(
 
 export function canOpenAttachment(attachment: MobileAttachment): boolean {
   const kind = attachmentPreviewKind(attachment);
-  return kind === 'image' || (kind !== 'unsupported' && attachment.state !== 'unavailable');
+  // Every available file can open the shared viewer. Unsupported formats use
+  // its download-only state instead of becoming a dead card or link.
+  return kind === 'image' || attachment.state !== 'unavailable';
 }
 
 export function attachmentPreviewSpec(

@@ -13,7 +13,7 @@ import {
 
 import { MarkdownText } from '@/components/markdown';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import type { AttachmentDocumentPending } from '@/lib/attachment-documents';
+import { attachmentDocumentKind, type AttachmentDocumentPending } from '@/lib/attachment-documents';
 import {
   isAttachmentDocumentAbortError,
   loadAttachmentDocument,
@@ -43,11 +43,12 @@ export function AttachmentDocumentViewer({
   attachmentRef.current = attachment;
   const attachmentId = attachment.attachmentId;
   const sha256 = attachment.sha256;
+  const documentKind = attachmentDocumentKind(attachment);
   const serverUrl = auth?.serverUrl;
   const accessToken = auth?.accessToken;
 
   useEffect(() => {
-    if (!serverUrl || !accessToken) return;
+    if (!serverUrl || !accessToken || documentKind === null) return;
     let active = true;
     const controller = new AbortController();
     setState({ status: 'loading' });
@@ -68,7 +69,18 @@ export function AttachmentDocumentViewer({
       active = false;
       controller.abort();
     };
-  }, [attachmentId, sha256, serverUrl, accessToken, attempt]);
+  }, [attachmentId, sha256, serverUrl, accessToken, attempt, documentKind]);
+
+  if (documentKind === null) {
+    return (
+      <View style={[styles.status, { backgroundColor: theme.background }]}>
+        <Text style={[styles.statusTitle, { color: theme.text }]}>暂不支持应用内预览</Text>
+        <Text style={[styles.statusText, { color: theme.textSecondary }]}>
+          可点击右上角“下载”获取原始文件，再选择本机应用打开。
+        </Text>
+      </View>
+    );
+  }
 
   if (!serverUrl || !accessToken) {
     return (

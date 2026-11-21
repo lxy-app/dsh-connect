@@ -1486,7 +1486,6 @@ function MessageRow({
     const selected = attachments.find((attachment) => attachment.attachmentId === attachmentId);
     if (!selected) return;
     const previewKind = attachmentPreviewKind(selected);
-    if (previewKind !== 'image' && selected.state === 'unavailable') return;
     if (previewKind === 'image') {
       const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
       if (index >= 0) setViewer({ attachments: imageAttachments, index });

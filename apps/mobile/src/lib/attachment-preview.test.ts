@@ -53,7 +53,7 @@ test('MIME identifies document strategy and extensions only assist generic or pl
   assert.equal(attachmentPreviewKind(document({ kind: 'image', name: 'x.pdf', mime: 'image/png' })), 'image');
   assert.equal(canOpenAttachment(document({ kind: 'image', mime: 'image/png', state: 'unavailable' })), true);
   assert.equal(canOpenAttachment(document({ state: 'unavailable' })), false);
-  assert.equal(canOpenAttachment(document({ name: 'archive.zip', mime: 'application/zip' })), false);
+  assert.equal(canOpenAttachment(document({ name: 'archive.zip', mime: 'application/zip' })), true);
 });
 
 test('preview URL is authorized separately and never contains a token or desktop path', () => {

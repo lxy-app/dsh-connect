@@ -10,7 +10,7 @@ import {
   type AttachmentDocumentAuth,
   type DownloadedAttachmentDocument,
 } from '@/lib/attachment-document';
-import { describeAttachmentPreviewError, type AttachmentPendingState } from '@/lib/attachment-preview';
+import { describeAttachmentPreviewError, attachmentPreviewKind, type AttachmentPendingState } from '@/lib/attachment-preview';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 const MONOSPACE_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
@@ -39,13 +39,14 @@ export function AttachmentDocumentPreview({
   const [loadState, setLoadState] = useState<KeyedLoadState | null>(null);
   const serverUrl = auth?.serverUrl;
   const accessToken = auth?.accessToken;
+  const previewKind = attachmentPreviewKind(attachment);
   const requestKey = `${attachment.attachmentId}:${attachment.sha256 ?? ''}:${serverUrl ?? ''}:${accessToken ?? ''}:${retryCount}`;
   const state: LoadState = loadState?.key === requestKey
     ? loadState
     : { status: 'loading', pending: null };
 
   useEffect(() => {
-    if (!serverUrl || !accessToken) return;
+    if (!serverUrl || !accessToken || previewKind === 'unsupported') return;
     let active = true;
     const controller = new AbortController();
     const load = async () => {
@@ -75,9 +76,20 @@ export function AttachmentDocumentPreview({
       active = false;
       controller.abort();
     };
-  }, [attachment, serverUrl, accessToken, retryCount, requestKey]);
+  }, [attachment, serverUrl, accessToken, retryCount, requestKey, previewKind]);
 
   const retry = () => setRetryCount((current) => current + 1);
+
+  if (previewKind === 'unsupported') {
+    return (
+      <View style={styles.status}>
+        <Text style={[styles.statusTitle, { color: theme.text }]}>暂不支持应用内预览</Text>
+        <Text style={[styles.statusDetail, { color: theme.textSecondary }]}>
+          可点击右上角“下载”获取原始文件，再选择本机应用打开。
+        </Text>
+      </View>
+    );
+  }
 
   if (!serverUrl || !accessToken) {
     return (
