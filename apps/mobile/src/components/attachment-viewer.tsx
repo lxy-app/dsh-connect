@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -9,11 +11,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import * as Sharing from 'expo-sharing';
 
 import { AttachmentDocumentPreview } from '@/components/attachment-document-preview';
 import { AttachmentImage } from '@/components/attachment-image';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { attachmentPreviewKind } from '@/lib/attachment-preview';
+import { downloadOriginalFile } from '@/lib/attachment-original';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 export type ViewerAuth = { readonly serverUrl: string; readonly accessToken: string };
@@ -36,8 +40,32 @@ export function AttachmentViewer({
   const theme = useAppTheme();
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(0, attachments.length - 1)));
+  const [downloading, setDownloading] = useState(false);
   const current = attachments[index];
   const documentMode = current !== undefined && attachmentPreviewKind(current) !== 'image';
+
+  const handleDownload = useCallback(async () => {
+    if (!current || !auth || downloading) return;
+    setDownloading(true);
+    try {
+      const { file } = await downloadOriginalFile(current, auth);
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert('无法导出', '当前设备不支持系统文件分享。');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: current.mime || 'application/octet-stream',
+        dialogTitle: `保存 ${current.name}`,
+        ...(current.name ? { UTI: utiForFileName(current.name) } : {}),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      Alert.alert('下载失败', error instanceof Error ? error.message : '请检查网络后重试。');
+    } finally {
+      setDownloading(false);
+    }
+  }, [current, auth, downloading]);
 
   return (
     <Modal
@@ -95,11 +123,32 @@ export function AttachmentViewer({
           >
             <Text style={[styles.closeText, documentMode && { color: theme.text }]}>关闭</Text>
           </Pressable>
-          {!documentMode && attachments.length > 1 ? (
-            <Text style={styles.counter}>
-              {index + 1} / {attachments.length}
-            </Text>
-          ) : null}
+          <View style={styles.headerRight}>
+            {!documentMode && attachments.length > 1 ? (
+              <Text style={styles.counter}>
+                {index + 1} / {attachments.length}
+              </Text>
+            ) : null}
+            {current && auth ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`下载原文件 ${current.name}`}
+                disabled={downloading}
+                onPress={() => void handleDownload()}
+                style={({ pressed }) => [
+                  styles.download,
+                  documentMode && { backgroundColor: theme.surfaceMuted },
+                  pressed && styles.pressed,
+                ]}
+              >
+                {downloading ? (
+                  <ActivityIndicator size="small" color={documentMode ? theme.text : '#fff'} />
+                ) : (
+                  <Text style={[styles.downloadText, documentMode && { color: theme.text }]}>下载</Text>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.footer} pointerEvents="none">
@@ -121,6 +170,26 @@ export function AttachmentViewer({
   );
 }
 
+/** Maps common extensions to iOS Uniform Type Identifiers for the share sheet. */
+function utiForFileName(name: string): string | undefined {
+  const ext = name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  switch (ext) {
+    case 'pdf': return 'com.adobe.pdf';
+    case 'doc': case 'docx': return 'org.openxmlformats.wordprocessingml.document';
+    case 'ppt': case 'pptx': return 'org.openxmlformats.presentationml.presentation';
+    case 'xls': case 'xlsx': return 'org.openxmlformats.spreadsheetml.sheet';
+    case 'md': case 'markdown': return 'net.daringfireball.markdown';
+    case 'txt': return 'public.plain-text';
+    case 'json': return 'public.json';
+    case 'png': return 'public.png';
+    case 'jpg': case 'jpeg': return 'public.jpeg';
+    case 'gif': return 'com.compuserve.gif';
+    case 'webp': return 'org.webmproject.webp';
+    case 'zip': return 'public.zip-archive';
+    default: return undefined;
+  }
+}
+
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: '#000' },
   documentPage: { flex: 1, paddingTop: 108, paddingBottom: 82 },
@@ -136,9 +205,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   close: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.16)' },
   closeText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   counter: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  download: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.16)' },
+  downloadText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  pressed: { opacity: 0.7 },
   footer: { position: 'absolute', bottom: 40, left: 16, right: 16, alignItems: 'center', gap: 4 },
   caption: { color: 'rgba(255,255,255,0.86)', fontSize: 13 },
 });
