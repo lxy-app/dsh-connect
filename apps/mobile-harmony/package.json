@@ -15,7 +15,7 @@
     "build": "bash scripts/build-hap.sh",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/*.test.ts",
+    "test": "tsx --test src/lib/*.test.ts && node --test scripts/*.test.js",
     "check": "npm run lint && npm run typecheck"
   },
   "dependencies": {

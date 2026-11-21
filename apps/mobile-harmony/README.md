@@ -49,7 +49,7 @@ EXPO_PUBLIC_DSH_CONNECT_SERVER_URL=https://dsh.lxy.app npm start
 npm run setup:native
 ```
 
-该命令依次执行：上游 HAR 补丁 → Expo CNG prebuild → OHPM 安装 → 解压副本修正。`harmony/` 是生成物并已忽略，不要手改作为永久方案。`patch-upstream.sh` 也会调用 `patch-safe-area.sh`，让 safe-area-context 5.6.4 从主窗口同步读取 inset，避免冷启动竞态返回全零；`patch-pdf-autolinking.sh` 仅在旧包缺少 ArkTS Package 时移除无效注册；检测到有效 `PdfViewPackage` 与 `RTNPdfView` builder 时必须保留自动链接，避免原生视图白屏。
+该命令依次执行：上游 HAR 补丁 → Expo CNG prebuild → OHPM 安装 → 解压副本修正。`harmony/` 是生成物并已忽略，不要手改作为永久方案。`patch-upstream.sh` 也会调用 `patch-safe-area.sh`，让 safe-area-context 5.6.4 从主窗口同步读取 inset，避免冷启动竞态返回全零；`patch-pdf-autolinking.sh` 仅在旧包缺少 ArkTS Package 时移除无效注册；检测到有效 `PdfViewPackage` 与 `RTNPdfView` builder 时必须保留自动链接，避免原生视图白屏。`patch-audio-routing.sh` 会让 `expo-audio` 只在真正切换听筒/扬声器时调用系统输出路由，避免普通 TTS 播放或 ASR 录音在 Pad 上被无路由变更的 `System error` 阻断。
 
 ## 签名与 HAP 构建
 
