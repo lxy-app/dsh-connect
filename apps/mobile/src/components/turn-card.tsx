@@ -8,8 +8,9 @@ import { ReadAloudButton } from '@/components/read-aloud-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { markdownToPlainText } from '@/lib/markdown';
+import { attachmentPreviewKind } from '@/lib/attachment-preview';
 import type { TurnGroup } from '@shared/lib/turn-grouping';
-import type { MobileMessage } from '@shared/types/mobile';
+import type { MobileAttachment, MobileMessage } from '@shared/types/mobile';
 
 const COLLAPSE_CHARS = 700;
 
@@ -50,14 +51,25 @@ export function TurnCard({
   const renderedAsMarkdown = !collapsible || expanded;
 
   const imageAttachments = useMemo(
-    () => group.attachments.filter((attachment) => attachment.kind === 'image'),
+    () => group.attachments.filter((attachment) => attachmentPreviewKind(attachment) === 'image'),
     [group.attachments],
   );
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [viewer, setViewer] = useState<{
+    readonly attachments: readonly MobileAttachment[];
+    readonly index: number;
+  } | null>(null);
   const openAttachment = useCallback((attachmentId: string) => {
-    const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
-    if (index >= 0) setViewerIndex(index);
-  }, [imageAttachments]);
+    const selected = group.attachments.find((attachment) => attachment.attachmentId === attachmentId);
+    if (!selected) return;
+    const previewKind = attachmentPreviewKind(selected);
+    if (previewKind !== 'image' && selected.state === 'unavailable') return;
+    if (previewKind === 'image') {
+      const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
+      if (index >= 0) setViewer({ attachments: imageAttachments, index });
+      return;
+    }
+    setViewer({ attachments: [selected], index: 0 });
+  }, [group.attachments, imageAttachments]);
 
   const elapsed = elapsedLabel(running ? now - group.startedAt : group.endedAt - group.startedAt);
   const steps = group.steps;
@@ -124,12 +136,12 @@ export function TurnCard({
             attachments={group.attachments}
             onOpen={(attachment) => openAttachment(attachment.attachmentId)}
           />
-          {viewerIndex !== null ? (
+          {viewer !== null ? (
             <AttachmentViewer
-              attachments={imageAttachments}
+              attachments={viewer.attachments}
               auth={attachmentAuth}
-              initialIndex={viewerIndex}
-              onClose={() => setViewerIndex(null)}
+              initialIndex={viewer.index}
+              onClose={() => setViewer(null)}
             />
           ) : null}
           {collapsible ? (

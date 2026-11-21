@@ -46,6 +46,7 @@ import {
 } from '@shared/lib/prompt-attachments';
 import type { PromptAttachmentDraft } from '@shared/lib/prompt-attachments';
 import { pickAttachments } from '@/lib/attachment-picker';
+import { attachmentPreviewKind } from '@/lib/attachment-preview';
 import type { AttachmentSource } from '@/lib/attachment-picker';
 import {
   cancelMobileSession,
@@ -69,7 +70,7 @@ import { AttachmentViewer } from '@/components/attachment-viewer';
 import type { AttachmentAuth } from '@/components/attachment-grid';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useVoice } from '@/providers/voice-provider';
-import type { MobileMessage, MobileSession, MobileTranscript } from '@shared/types/mobile';
+import type { MobileAttachment, MobileMessage, MobileSession, MobileTranscript } from '@shared/types/mobile';
 
 const VOICE_WAVE_BARS = [6, 6, 10, 6, 14, 10, 20, 10, 14, 6, 10, 20, 14, 10, 6, 14, 20, 10, 6, 14, 10, 20, 10, 6, 6] as const;
 
@@ -1473,14 +1474,26 @@ function MessageRow({
   );
   const renderedAsMarkdown = !user && (!collapsible || expanded);
   const imageAttachments = useMemo(
-    () => (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
+    () => (message.attachments ?? []).filter((attachment) => attachmentPreviewKind(attachment) === 'image'),
     [message.attachments],
   );
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [viewer, setViewer] = useState<{
+    readonly attachments: readonly MobileAttachment[];
+    readonly index: number;
+  } | null>(null);
   const openAttachment = useCallback((attachmentId: string) => {
-    const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
-    if (index >= 0) setViewerIndex(index);
-  }, [imageAttachments]);
+    const attachments = message.attachments ?? [];
+    const selected = attachments.find((attachment) => attachment.attachmentId === attachmentId);
+    if (!selected) return;
+    const previewKind = attachmentPreviewKind(selected);
+    if (previewKind !== 'image' && selected.state === 'unavailable') return;
+    if (previewKind === 'image') {
+      const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
+      if (index >= 0) setViewer({ attachments: imageAttachments, index });
+      return;
+    }
+    setViewer({ attachments: [selected], index: 0 });
+  }, [imageAttachments, message.attachments]);
 
   return (
     <View style={[styles.messageRow, user && styles.messageRowUser]}>
@@ -1515,12 +1528,12 @@ function MessageRow({
           attachments={message.attachments ?? []}
           onOpen={(attachment) => openAttachment(attachment.attachmentId)}
         />
-        {viewerIndex !== null ? (
+        {viewer !== null ? (
           <AttachmentViewer
-            attachments={imageAttachments}
+            attachments={viewer.attachments}
             auth={attachmentAuth}
-            initialIndex={viewerIndex}
-            onClose={() => setViewerIndex(null)}
+            initialIndex={viewer.index}
+            onClose={() => setViewer(null)}
           />
         ) : null}
         {collapsible ? (

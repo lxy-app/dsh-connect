@@ -101,7 +101,8 @@
           "enableBackgroundRecording": false
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "@config-plugins/react-native-pdf"
     ],
     "experiments": {
       "typedRoutes": true,

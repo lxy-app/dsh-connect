@@ -13,14 +13,14 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 - 在“设备”页只读查看账号有效桌面、工作区与动作；权限由后端用户策略和桌面当前开放范围共同决定。
 - “工作区”已迁入会话左侧抽屉，按桌面分组；每个工作区默认展开 5 条会话，支持查看更多与收起。“会话”入口恢复最近选中的聊天，聊天页保留底部导航。
 - 聊天页右上角、抽屉“新建会话”和工作区旁 `+` 均可创建真实会话。新建页默认沿用当前设备/工作区，要求在线桌面及 `read + prompt` 授权；首条指令支持文字、图片/文件草稿和系统/火山 ASR 转写，转写只回填不自动提交。创建成功后才向该 Session 上传附件，任一附件未就绪都会阻止首条 prompt；`POST /v1/mobile/sessions` 与首条 prompt 使用两个稳定 requestId，失败重试复用已创建会话和已上传附件，不重复创建或发送，成功后进入聊天并立即接续等待状态与流式响应。
-- 会话详情从 `/v1/mobile/sessions/{id}/messages` 读取稳定 transcript，空闲时每 3 秒轮询、等待响应时每 1.8 秒轮询；界面按 DSH turn 聚合为一张卡片：头部显示「深度求索中 / 已完成」与用时，折叠区里是单行工具步骤（名称 + 脱敏摘要 + 状态 + 耗时）和中间叙述，最终回复始终在折叠区外，朗读与时间每轮只出现一次。工具参数、命令输出、推理内容和注入的 runtime/time/skill context 不下发到手机。超长最终回复默认折叠为 14 行并可展开；会话运行期间通过 `/v1/mobile/events/ws` 接收 assistant 文本增量并实时追加，WSS 断开时自动回退到轮询，支持加载更早消息、手动刷新、发送/排队/执行等待状态和慢响应提示。新指令使用独立的等待回复气泡或新 Turn 卡片，不会把上一轮已完成回复重新标记为运行中；用户气泡与后续回复卡片之间保留固定间距。
+- 会话详情从 `/v1/mobile/sessions/{id}/messages` 读取稳定 transcript，空闲时每 3 秒轮询、等待响应时每 1.8 秒轮询；界面按 DSH turn 聚合为一张卡片：头部显示「深度求索中 / 已完成」与用时，折叠区里是单行工具步骤（名称 + 脱敏摘要 + 状态 + 耗时）和中间叙述，最终回复始终在折叠区外，朗读与时间每轮只出现一次。工具参数、命令输出、推理内容和注入的 runtime/time/skill context 不下发到手机。超长最终回复默认折叠为 14 行并可展开；会话运行期间通过 `/v1/mobile/events/ws` 接收 assistant 文本增量并实时追加，WSS 断开时自动回退到轮询；最新 30 条事件窗口前移时保留本屏已见消息，避免长 Turn 的早期叙述和步骤在刷新后消失；支持加载更早消息、手动刷新、发送/排队/执行等待状态和慢响应提示。新指令使用独立的等待回复气泡或新 Turn 卡片，不会把上一轮已完成回复重新标记为运行中；用户气泡与后续回复卡片之间保留固定间距。
 - assistant 回复按 Markdown 渲染：标题、列表、粗体/斜体/删除线、行内代码、代码块、引用、表格、任务列表、链接和交付图片；流式增量也按 Markdown 实时呈现。普通链接只允许 http(s)/mailto 并由系统浏览器打开，交付图片使用内部不透明附件引用并在正文中等比显示。长消息折叠时显示纯文本摘要，展开后恢复完整排版。
 - 在 `prompt` 授权下发送排队提示词，在 `cancel` 授权下停止当前 Turn；按住说话支持火山 Agent Plan Seed ASR 2.0 双向/单向 WebSocket 转写与系统 ASR，回复朗读和自动播报支持 Agent Plan Seed TTS 2.0 与系统 TTS。Agent Plan 密钥只通过 Keychain / Keystore 加密保存，云端错误会明确提示，不用格式检查或系统语音冒充云端调用成功。
 - 云端回复朗读支持准备中取消、暂停/恢复、后台连续播放和锁屏/控制中心媒体按钮；开始录音时会暂停当前朗读并隔离录音与播放音频模式。系统 TTS 在 iOS 支持暂停/恢复，Android 因 `expo-speech` 平台限制提供停止后重新朗读。后台播放涉及原生配置，修改后必须重新构建 Development Build 并在真机验收。
 - 会话输入区使用单胶囊容器：空闲时显示语音入口与更多选项，聚焦或有草稿时显示圆形发送按钮；录音时收起输入框和底部导航，仅保留光晕、波形与手势提示。向上滑动可取消本次识别；正常松开后仍按既有链路等待最终转写并回填输入框，由用户确认后发送。
 - 会话模型通过 `/v1/mobile/sessions/{id}/model` 读取目录与当前选择；只读授权可直接查看，`prompt` 授权可从「＋ → 选择模型」切换模型和推理强度。切换只修改当前 Session，不改桌面默认；每个意图使用稳定 requestId，结果不确定时只允许同参数重试，切换待确认期间禁止发送。目录在进入会话和打开面板时主动刷新，活跃 WSS 的 `model/selection` 作为补充；迁移未完成时只读并提示先在桌面完成迁移。
 - 在 `approve` 授权下接收桌面转发的一次性审批与提问：首页横幅与“待处理”页展示，会话内也会固定显示待答卡片；审批只能 `allow-once` 或 `reject`，提问支持选项与自定义文本。
-- 会话中由 `present` 或 `dsh_im_return_file` 明确交付的图片随 transcript 展示：正文 Markdown 图片使用真实宽高比和 `contain` 完整显示，点击可进入全屏分页与应用内缩放；消息下方的附件区默认只展示文件卡，不渲染图片也不请求字节，点击卡片后才加载原图。附件字节使用带 Bearer Token 的独立 HTTPS 端点，不向手机暴露桌面路径，`attachment.ready` 到达后自动刷新。图片准备期间的 `202` 响应会有界自动重试，加载失败会显示原因并支持点击重试；认证快照获取失败也会自动恢复。非图片文件目前只展示信息，下载/保存/分享属于 M2。
+- 会话中由 `present` 或 `dsh_im_return_file` 明确交付的图片随 transcript 展示：正文 Markdown 图片使用真实宽高比和 `contain` 完整显示，点击可进入全屏分页与应用内缩放；消息下方的附件区默认只展示文件卡，不渲染图片也不请求字节，点击卡片后才加载。MD/TXT/JSON/LOG 直接在应用内阅读，PDF 使用本地阅读器，Office 文档通过 Server 的可选 preview-worker 转 PDF；`202 fetching/converting` 有界重试，关闭预览会取消，失败可手动重试。附件字节使用带 Bearer Token 的独立 HTTPS 端点，不向手机暴露桌面路径；文档缓存按 Server 与不可变附件 ID 隔离；每次重开都携带 Bearer + `If-None-Match` 重新鉴权，只有 304 才复用缓存，401/403、退出或替换登录时清理，断网时不直接展示旧缓存。
 - 支持撤销本机授权、断开本机并尽力吊销 Server 端手机凭据。
 - “我的 → 外观”支持跟随系统、浅色和深色三种模式，选择会持久保存；页面、Markdown、底部导航、状态栏与原生弹窗同步切换，深色启动页使用独立背景色。
 
@@ -42,7 +42,8 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - `expo-local-authentication`：后续用于应用解锁和敏感操作确认。
 - `expo-camera`：目前保留既有原生依赖与配置，扫码配对 UI 已移除；依赖清理由独立原生改动处理。
 - `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。
-- `expo-file-system`：在缓存目录写入 TTS MP3 / PCM；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
+- `expo-file-system`：在缓存目录写入 TTS MP3 / PCM 和按需下载的预览文档；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
+- `react-native-pdf` + `react-native-blob-util`：显示本地 PDF 与 Office 转换结果；`@config-plugins/react-native-pdf` 负责 CNG 原生配置。它们不属于 Expo Go，变更后必须重新构建 Development Build。
 - `expo-sqlite`：后续保存草稿、游标和可重建缓存。
 - `expo-notifications`：后续接入原生 APNs/FCM token 与通知深链。远程推送尚未实现，`app.json` 中 `enableRemoteNotifications` 保持 `false`，不向 iOS 工程写入 `aps-environment`；未来启用时需同时在 Apple Developer 账号、App ID 和签名 Profile 中配置 Push Notifications 能力。
 - 聊天 Markdown 由 `src/lib/markdown.ts` 本地解析、`src/components/markdown.tsx` 按主题渲染，不引入第三方 Markdown 运行时依赖。
@@ -147,7 +148,7 @@ npm run android
 
 这两个命令分别执行 `expo run:ios` / `expo run:android`，会生成原生目录、编译并安装应用，然后启动 Metro。
 
-之后只修改 TypeScript/JavaScript 时，无需重新编译原生应用。新增 `expo-speech`、`expo-speech-recognition`、`expo-audio`、`expo-file-system` 原生模块或修改麦克风/语音识别权限配置后，必须先重新执行一次 `npm run ios` 或 `npm run android`，再使用 Metro 进行日常开发。
+之后只修改 TypeScript/JavaScript 时，无需重新编译原生应用。新增 `expo-speech`、`expo-speech-recognition`、`expo-audio`、`expo-file-system`、`react-native-pdf` / `react-native-blob-util` 原生模块或修改麦克风/语音识别权限配置后，必须先重新执行一次 `npm run ios` 或 `npm run android`，再使用 Metro 进行日常开发。
 
 ```sh
 npm start
