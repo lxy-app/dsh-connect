@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+import { Image } from 'react-native';
 
 // These PNGs used to be 96x96 with 17-27% transparent margins on every side, so
 // a `size` of 16 drew a glyph only ~9pt tall. They are now trimmed flush to the
@@ -20,7 +20,7 @@ export function ChatIcon({ name, color, size = 18 }: { name: ChatIconName; color
     <Image
       source={icon.source}
       tintColor={color}
-      contentFit="contain"
+      resizeMode="contain"
       style={{ width: Math.round(size * icon.aspect), height: size }}
     />
   );

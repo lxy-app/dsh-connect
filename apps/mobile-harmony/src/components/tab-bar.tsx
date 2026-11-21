@@ -1,5 +1,4 @@
-import { Image } from 'expo-image';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Typography } from '@/constants/theme';
@@ -50,7 +49,7 @@ export function TabBar({
             onPress={() => onChange(tab.key)}
             style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
           >
-            <Image source={tab.icon} tintColor={color} contentFit="contain" style={styles.icon} />
+            <Image source={tab.icon} tintColor={color} resizeMode="contain" style={styles.icon} />
             <Text style={[styles.label, { color }, selected && styles.labelActive]}>
               {tab.label}
             </Text>
