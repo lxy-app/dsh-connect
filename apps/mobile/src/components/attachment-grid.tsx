@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { MobileAttachment } from '@shared/types/mobile';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { attachmentPreviewKind, canOpenAttachment } from '@/lib/attachment-preview';
 
 export type AttachmentAuth = { readonly serverUrl: string; readonly accessToken: string };
 
@@ -22,18 +23,32 @@ export function AttachmentGrid({
   return (
     <View style={styles.container}>
       {attachments.map((attachment) => {
-        const isImage = attachment.kind === 'image';
+        const previewKind = attachmentPreviewKind(attachment);
+        const isImage = previewKind === 'image';
+        const openable = canOpenAttachment(attachment);
+        const previewStatus = attachment.state === 'unavailable'
+          ? '文件已在桌面删除或过期'
+          : previewKind === 'unsupported'
+            ? '暂不支持应用内预览'
+            : attachment.state === 'failed'
+              ? '加载失败，点击重试预览'
+              : isImage
+                ? '点击查看原图'
+                : previewKind === 'office'
+                  ? '点击查看或生成 PDF 预览'
+                  : '点击应用内查看';
         return (
           <Pressable
             key={attachment.attachmentId}
-            accessibilityRole={isImage ? 'imagebutton' : undefined}
-            accessibilityLabel={isImage ? `打开图片 ${attachment.name}` : attachment.name}
-            disabled={!isImage}
+            accessibilityRole={openable ? (isImage ? 'imagebutton' : 'button') : undefined}
+            accessibilityLabel={openable ? `打开附件 ${attachment.name}` : attachment.name}
+            accessibilityState={{ disabled: !openable }}
+            disabled={!openable}
             onPress={() => onOpen(attachment)}
             style={({ pressed }) => [
               styles.fileRow,
               { backgroundColor: theme.surfaceMuted, borderColor: theme.border },
-              pressed && isImage && styles.pressed,
+              pressed && openable && styles.pressed,
             ]}
           >
             <Text style={[styles.fileKind, { color: theme.textSecondary }]}>
@@ -45,17 +60,10 @@ export function AttachmentGrid({
               </Text>
               <Text numberOfLines={2} style={[styles.fileMeta, { color: theme.textSecondary }]}>
                 {attachment.description ? `${attachment.description} · ` : ''}
-                {formatBytes(attachment.bytes)}
-                {attachment.state === 'unavailable'
-                  ? ' · 文件已在桌面删除或过期'
-                  : attachment.state === 'failed'
-                    ? ' · 加载失败，点击查看详情'
-                    : isImage
-                      ? ' · 点击查看原图'
-                      : ' · 文件预览将在后续版本提供'}
+                {formatBytes(attachment.bytes)} · {previewStatus}
               </Text>
             </View>
-            {isImage ? (
+            {openable ? (
               <Text style={[styles.fileChevron, { color: theme.textSecondary }]}>›</Text>
             ) : null}
           </Pressable>

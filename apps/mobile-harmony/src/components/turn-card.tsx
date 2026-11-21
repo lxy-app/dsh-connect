@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AttachmentGrid, type AttachmentAuth } from '@/components/attachment-grid';
-import { AttachmentViewer } from '@/components/attachment-viewer';
+import { AttachmentViewer, type AttachmentViewerSelection } from '@/components/attachment-viewer';
 import { MarkdownText } from '@/components/markdown';
 import { ReadAloudButton } from '@/components/read-aloud-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { markdownToPlainText } from '@/lib/markdown';
+import { attachmentDocumentKind } from '@/lib/attachment-documents';
 import type { TurnGroup } from '@shared/lib/turn-grouping';
 import type { MobileMessage } from '@shared/types/mobile';
 
@@ -53,11 +54,18 @@ export function TurnCard({
     () => group.attachments.filter((attachment) => attachment.kind === 'image'),
     [group.attachments],
   );
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [viewer, setViewer] = useState<AttachmentViewerSelection | null>(null);
   const openAttachment = useCallback((attachmentId: string) => {
     const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
-    if (index >= 0) setViewerIndex(index);
-  }, [imageAttachments]);
+    if (index >= 0) {
+      setViewer({ kind: 'image', attachments: imageAttachments, initialIndex: index });
+      return;
+    }
+    const document = group.attachments.find(
+      (attachment) => attachment.attachmentId === attachmentId && attachmentDocumentKind(attachment) !== null,
+    );
+    if (document) setViewer({ kind: 'document', attachment: document });
+  }, [group.attachments, imageAttachments]);
 
   const elapsed = elapsedLabel(running ? now - group.startedAt : group.endedAt - group.startedAt);
   const steps = group.steps;
@@ -124,12 +132,11 @@ export function TurnCard({
             attachments={group.attachments}
             onOpen={(attachment) => openAttachment(attachment.attachmentId)}
           />
-          {viewerIndex !== null ? (
+          {viewer !== null ? (
             <AttachmentViewer
-              attachments={imageAttachments}
+              selection={viewer}
               auth={attachmentAuth}
-              initialIndex={viewerIndex}
-              onClose={() => setViewerIndex(null)}
+              onClose={() => setViewer(null)}
             />
           ) : null}
           {collapsible ? (

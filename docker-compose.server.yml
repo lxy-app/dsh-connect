@@ -27,6 +27,35 @@ services:
       # Allows DSH_CONNECT_DATABASE_URL to reach PostgreSQL on the Docker host
       # via host.docker.internal. A remote database can use its DNS name or IP.
       - "host.docker.internal:host-gateway"
+    networks: [default, preview-internal]
+
+  # Optional: docker compose -f docker-compose.server.yml --profile office-preview up -d
+  # Set DSH_CONNECT_PREVIEW_WORKER_URL=http://preview-worker:8788 and a separate
+  # DSH_CONNECT_PREVIEW_WORKER_TOKEN in .env. No host port is published.
+  preview-worker:
+    image: lxyapp/dsh-connect-preview-worker:latest
+    container_name: dsh-connect-preview-worker
+    restart: unless-stopped
+    profiles: [office-preview]
+    env_file:
+      - .env
+    environment:
+      DSH_CONNECT_PREVIEW_LISTEN_ADDR: 0.0.0.0:8788
+      DSH_CONNECT_PREVIEW_SOFFICE: soffice
+      HOME: /tmp
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [preview-internal]
+
+networks:
+  # The untrusted document converter can reach the Server only through this
+  # internal network; it has no external network or host-published port.
+  preview-internal:
+    internal: true
 
 volumes:
   dsh-connect-attachments:

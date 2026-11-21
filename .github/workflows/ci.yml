@@ -377,7 +377,7 @@ jobs:
   docker:
     name: Docker Smoke
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     needs: changes
     if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.docker == 'true' }}
     steps:
@@ -389,6 +389,17 @@ jobs:
 
       - name: Build image and run container smoke tests
         run: bash scripts/ci/docker-smoke.sh
+        env:
+          PLATFORM: linux/amd64
+          BUILDPLATFORM: linux/amd64
+
+      - name: Build and smoke test the isolated preview worker
+        run: |
+          image=lxyapp/dsh-connect-preview-worker:ci
+          docker build --target preview-worker --platform "$PLATFORM" \
+            --build-arg BUILDPLATFORM="$BUILDPLATFORM" -t "$image" .
+          IMAGE="$image" PREVIEW_SMOKE_CONTAINER=dsh-connect-preview-worker-ci \
+            bash scripts/ci/preview-worker-smoke.sh
         env:
           PLATFORM: linux/amd64
           BUILDPLATFORM: linux/amd64

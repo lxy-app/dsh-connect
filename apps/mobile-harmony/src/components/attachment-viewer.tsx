@@ -10,83 +10,96 @@ import {
   View,
 } from 'react-native';
 
+import { AttachmentDocumentViewer } from '@/components/attachment-document-viewer';
 import { AttachmentImage } from '@/components/attachment-image';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 export type ViewerAuth = { readonly serverUrl: string; readonly accessToken: string };
+export type AttachmentViewerSelection =
+  | {
+    readonly kind: 'image';
+    readonly attachments: readonly MobileAttachment[];
+    readonly initialIndex: number;
+  }
+  | {
+    readonly kind: 'document';
+    readonly attachment: MobileAttachment;
+  };
 
-/**
- * Full-screen image viewer: horizontal paging, pinch/zoom through ScrollView
- * (which keeps native gesture behaviour instead of re-implementing it) and a
- * counter for multi-image turns.
- */
+/** One modal owner for images and documents; only images enter the pager. */
 export function AttachmentViewer({
-  attachments,
+  selection,
   auth,
-  initialIndex,
   onClose,
 }: {
-  attachments: readonly MobileAttachment[];
+  selection: AttachmentViewerSelection;
   auth: ViewerAuth | null;
-  initialIndex: number;
   onClose: () => void;
 }) {
   const { width, height } = useWindowDimensions();
-  const [index, setIndex] = useState(Math.min(initialIndex, Math.max(0, attachments.length - 1)));
-  const current = attachments[index];
+  const [index, setIndex] = useState(() => selection.kind === 'image'
+    ? Math.min(selection.initialIndex, Math.max(0, selection.attachments.length - 1))
+    : 0);
+  const current = selection.kind === 'image' ? selection.attachments[index] : selection.attachment;
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.backdrop}>
-        <FlatList
-          data={attachments}
-          horizontal
-          pagingEnabled
-          initialScrollIndex={index}
-          getItemLayout={(_data, itemIndex) => ({ length: width, offset: width * itemIndex, index: itemIndex })}
-          keyExtractor={(item) => item.attachmentId}
-          onMomentumScrollEnd={(event) => {
-            const next = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, width));
-            setIndex(Math.max(0, Math.min(next, attachments.length - 1)));
-          }}
-          renderItem={({ item, index: itemIndex }) => (
-            <ScrollView
-              style={{ width }}
-              contentContainerStyle={styles.page}
-              maximumZoomScale={3}
-              minimumZoomScale={1}
-              centerContent
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-            >
-              <AttachmentImage
-                attachment={item}
-                auth={auth}
-                style={{ width, height: height * 0.72 }}
-                contentFit="contain"
-                accessibilityLabel={`第 ${itemIndex + 1} 张图片，共 ${attachments.length} 张，${item.name}`}
-              />
-            </ScrollView>
-          )}
-        />
+        {selection.kind === 'image' ? (
+          <FlatList
+            data={selection.attachments}
+            horizontal
+            pagingEnabled
+            initialScrollIndex={index}
+            getItemLayout={(_data, itemIndex) => ({ length: width, offset: width * itemIndex, index: itemIndex })}
+            keyExtractor={(item) => item.attachmentId}
+            onMomentumScrollEnd={(event) => {
+              const next = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, width));
+              setIndex(Math.max(0, Math.min(next, selection.attachments.length - 1)));
+            }}
+            renderItem={({ item, index: itemIndex }) => (
+              <ScrollView
+                style={{ width }}
+                contentContainerStyle={styles.page}
+                maximumZoomScale={3}
+                minimumZoomScale={1}
+                centerContent
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+              >
+                <AttachmentImage
+                  attachment={item}
+                  auth={auth}
+                  style={{ width, height: height * 0.72 }}
+                  contentFit="contain"
+                  accessibilityLabel={`第 ${itemIndex + 1} 张图片，共 ${selection.attachments.length} 张，${item.name}`}
+                />
+              </ScrollView>
+            )}
+          />
+        ) : (
+          <View style={styles.documentPage}>
+            <AttachmentDocumentViewer attachment={selection.attachment} auth={auth} />
+          </View>
+        )}
 
         <View style={styles.header} pointerEvents="box-none">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="关闭图片预览"
+            accessibilityLabel={selection.kind === 'image' ? '关闭图片预览' : '关闭文档预览'}
             onPress={onClose}
             style={styles.close}
           >
             <Text style={styles.closeText}>关闭</Text>
           </Pressable>
-          {attachments.length > 1 ? (
+          {selection.kind === 'image' && selection.attachments.length > 1 ? (
             <Text style={styles.counter}>
-              {index + 1} / {attachments.length}
+              {index + 1} / {selection.attachments.length}
             </Text>
           ) : null}
         </View>
 
-        <View style={styles.footer} pointerEvents="none">
+        <View style={[styles.footer, selection.kind === 'document' && styles.documentFooter]} pointerEvents="none">
           <Text numberOfLines={1} style={styles.caption}>
             {current?.name ?? ''}
           </Text>
@@ -104,6 +117,7 @@ export function AttachmentViewer({
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: '#000' },
   page: { alignItems: 'center', justifyContent: 'center' },
+  documentPage: { flex: 1, paddingTop: 100, paddingBottom: 52 },
   header: {
     position: 'absolute',
     top: 0,
@@ -119,5 +133,6 @@ const styles = StyleSheet.create({
   closeText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   counter: { color: '#fff', fontSize: 14, fontWeight: '600' },
   footer: { position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center', gap: 4 },
+  documentFooter: { bottom: 24, left: 16, right: 16 },
   caption: { color: 'rgba(255,255,255,0.86)', fontSize: 13 },
 });

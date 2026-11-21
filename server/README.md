@@ -45,6 +45,10 @@ DSH_CONNECT_DATABASE_URL=sqlite://./data/dsh-connect.db
 | `DSH_CONNECT_LISTEN_ADDR` | `127.0.0.1:8787` | HTTP 监听地址 |
 | `DSH_CONNECT_SERVER_URL` | 按监听地址推导 | 配对码响应中的外部 URL |
 | `DSH_CONNECT_TLS_CERT_FILE` / `_KEY_FILE` | 空 | 同时设置后对外为 https/wss |
+| `DSH_CONNECT_PREVIEW_WORKER_URL` | 空 | 独立 Office 预览 Worker 的内部 HTTP(S) URL；空时仍支持 PDF 直出，Office 返回 `preview_unavailable` |
+| `DSH_CONNECT_PREVIEW_WORKER_TOKEN` | 空 | 主 Server 与预览 Worker 共享的 Bearer Token；配置 Worker URL 后必填 |
+| `DSH_CONNECT_PREVIEW_TIMEOUT` | `90s` | 单次预览转换超时，Go duration |
+| `DSH_CONNECT_MAX_PREVIEW_BYTES` | `52428800`（50 MiB） | 预览源文档与派生 PDF 的单文件字节上限 |
 
 Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不会被覆盖或重置密码。
 
@@ -171,6 +175,7 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 | 端点 | 调用方 | 说明 |
 |---|---|---|
 | `GET /v1/mobile/attachments/{attachmentId}` | App | `200` 字节（带 `ETag`，支持 `If-None-Match` → `304`）；`202` 正在拉取（`Retry-After`）；`409` 桌面侧失败（带 `errorCode`）；`403` 用户权限失效；`404` 未知/过期；`413` 超限 |
+| `GET /v1/mobile/attachments/{attachmentId}/preview` | App | PDF 直接 inline 返回；Office 经独立 Worker 转 PDF。`202` 区分 `fetching/converting`，`503 preview_unavailable`、`415 preview_unsupported`、`409 preview_failed`；预览缓存不改变原附件状态 |
 | `POST /v1/connector/attachments/{attachmentId}` | Connector | `application/octet-stream`，device token 认证；`X-DSH-Attachment-{Session,Bytes,Sha256}` 必须与行内归属和 body 一致 |
 
 实现要点：
@@ -181,10 +186,13 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 - **字节与元数据分离**：内容寻址写 `DSH_CONNECT_ATTACHMENT_DIR/<sha[0:2]>/<sha>`，DB 只存引用；上传先写临时文件再 rename，避免半成品。Docker 镜像默认使用可写的 `/data/attachments`，Compose 必须挂载 `dsh-connect-attachments` 持久卷。
 - **就绪通知**：上传成功后向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅元数据），App 立即重载而不轮询。
 - **失败关闭**：Connector 侧路径必须落在会话工作区内（默认拒绝工作区外交付）、拒绝 final symlink、命中敏感名单直接拒绝、并在读盘前重新 `stat` 比对基线，变化返回 `attachment_changed` 且不发送内容。
+- **预览隔离**：主 Server 不执行 LibreOffice。`DSH_CONNECT_PREVIEW_WORKER_URL` 与独立 `DSH_CONNECT_PREVIEW_WORKER_TOKEN` 同时配置后，才把已授权 blob 发给 `cmd/preview-worker`；Worker 使用固定扩展名白名单、临时目录、无 Shell 的命令执行、输入/输出上限和超时。预览 PDF 按原文件摘要与转换版本派生缓存键，原子写入 `AttachmentDir/previews`。
 
-M1 已实现范围：交付图片在手机上以网格展示并可全屏缩放/翻页；非图片文件显示为信息行（下载/保存/打开属 M2）；手机上行为 M3。配置项见 `.env.example` 的 `DSH_CONNECT_ATTACHMENT*`（默认 `DSH_CONNECT_ATTACHMENTS=read`，单文件 20 MiB，blob 目录总量 2 GiB，blob TTL 168h）。
+独立 Worker 使用同一组 `DSH_CONNECT_PREVIEW_WORKER_TOKEN`、`DSH_CONNECT_PREVIEW_TIMEOUT`、`DSH_CONNECT_MAX_PREVIEW_BYTES` 配置，并通过 `DSH_CONNECT_PREVIEW_LISTEN_ADDR` 设置监听地址（默认 `127.0.0.1:8788`，容器可改为 `0.0.0.0:8788`）。`DSH_CONNECT_PREVIEW_CONCURRENCY` 默认 `2`，限制 LibreOffice 进程数且排队同样受转换超时约束；`DSH_CONNECT_PREVIEW_SOFFICE` 可显式指定可执行文件，空时依次查找 `soffice`、`libreoffice`。转换子进程仅获得最小环境白名单，不继承 Worker Token。`GET /healthz` 返回无敏感信息的 `200 ok`；转换入口仅接受带共享 Bearer Token 的 `POST /convert` 原始字节。
 
-已知未实现：blob TTL 的定时回收任务（当前仅记录 TTL 配置，不主动删除过期 blob）。手机上行需启用 `DSH_CONNECT_ATTACHMENTS=readwrite`，并由用户策略和桌面当前授权共同为该工作区提供 `prompt` 权限。
+移动端支持图片、MD/TXT/PDF 应用内预览，Office 文档依赖上述可选 Worker；手机上行需启用 `DSH_CONNECT_ATTACHMENTS=readwrite`，并由用户策略和桌面当前授权共同为该工作区提供 `prompt` 权限。基础配置项见 `.env.example` 的 `DSH_CONNECT_ATTACHMENT*` 与 `DSH_CONNECT_PREVIEW*`（默认单文件 20 MiB，blob 目录总量 2 GiB，blob TTL 168h，预览 PDF 50 MiB，转换 90 秒）。
+
+已知未实现：blob 与预览派生 PDF 的 TTL/容量定时回收任务（当前仅记录 TTL 配置，不主动删除过期文件）。手机上行需启用 `DSH_CONNECT_ATTACHMENTS=readwrite`，并由用户策略和桌面当前授权共同为该工作区提供 `prompt` 权限。
 
 ## 数据模型（ent schema）
 

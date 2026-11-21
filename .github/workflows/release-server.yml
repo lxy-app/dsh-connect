@@ -23,7 +23,7 @@ jobs:
   verify:
     name: Build and Smoke Test
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 50
     outputs:
       version: ${{ steps.version.outputs.version }}
       stable: ${{ steps.version.outputs.stable }}
@@ -61,6 +61,28 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
 
+      - name: Build preview worker release candidate
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: preview-worker
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: lxyapp/dsh-connect-preview-worker:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=preview-worker
+          cache-to: type=gha,mode=max,scope=preview-worker
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Smoke test preview worker release candidate
+        run: bash scripts/ci/preview-worker-smoke.sh
+        env:
+          IMAGE: lxyapp/dsh-connect-preview-worker:${{ steps.version.outputs.version }}
+          PREVIEW_SMOKE_CONTAINER: dsh-connect-preview-worker-release-smoke
+
       - name: Smoke test release candidate
         run: bash scripts/ci/docker-smoke.sh
         env:
@@ -79,7 +101,7 @@ jobs:
     if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 50
     environment: release
     permissions:
       contents: write
@@ -121,6 +143,27 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ needs.verify.outputs.version }}
 
+      - name: Build preview worker image for publication
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: preview-worker
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: lxyapp/dsh-connect-preview-worker:${{ needs.verify.outputs.version }}
+          cache-from: type=gha,scope=preview-worker
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.verify.outputs.version }}
+
+      - name: Smoke test the exact preview worker image to publish
+        run: bash scripts/ci/preview-worker-smoke.sh
+        env:
+          IMAGE: lxyapp/dsh-connect-preview-worker:${{ needs.verify.outputs.version }}
+          PREVIEW_SMOKE_CONTAINER: dsh-connect-preview-worker-publish-smoke
+
       - name: Smoke test the exact image to publish
         run: bash scripts/ci/docker-smoke.sh
         env:
@@ -146,15 +189,27 @@ jobs:
             docker tag "$version_image" "$repository:latest"
           fi
 
+          worker_repository=lxyapp/dsh-connect-preview-worker
+          worker_version_image="$worker_repository:$RELEASE_VERSION"
+          worker_sha_image="$worker_repository:sha-$GITHUB_SHA"
+          docker tag "$worker_version_image" "$worker_sha_image"
+          if [[ "$RELEASE_STABLE" == 'true' ]]; then
+            docker tag "$worker_version_image" "$worker_repository:latest"
+          fi
+
           docker push "$version_image"
           docker push "$sha_image"
+          docker push "$worker_version_image"
+          docker push "$worker_sha_image"
           if [[ "$RELEASE_STABLE" == 'true' ]]; then
             docker push "$repository:latest"
+            docker push "$worker_repository:latest"
           fi
 
           published_reference="$(docker image inspect --format '{{index .RepoDigests 0}}' "$version_image")"
-          if [[ "$published_reference" != *@sha256:* ]]; then
-            echo 'Could not determine the published image digest.' >&2
+          worker_published_reference="$(docker image inspect --format '{{index .RepoDigests 0}}' "$worker_version_image")"
+          if [[ "$published_reference" != *@sha256:* || "$worker_published_reference" != *@sha256:* ]]; then
+            echo 'Could not determine the published image digests.' >&2
             exit 1
           fi
           {
@@ -162,7 +217,8 @@ jobs:
             echo
             echo "- Version: \`$RELEASE_VERSION\`"
             echo "- Local image ID: \`$image_id\`"
-            echo "- Published reference: \`$published_reference\`"
+            echo "- Published Server reference: \`$published_reference\`"
+            echo "- Published preview Worker reference: \`$worker_published_reference\`"
             echo "- Stable \`latest\` updated: \`$RELEASE_STABLE\`"
           } >> "$GITHUB_STEP_SUMMARY"
         env:

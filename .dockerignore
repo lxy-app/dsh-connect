@@ -21,3 +21,7 @@ docs
 prototype
 dsh-connect-prototype.html
 apps/mobile
+# Generated HarmonyOS projects and OHPM dependencies are not Docker inputs.
+apps/mobile-harmony/harmony
+apps/mobile-harmony/modules/*/harmony
+**/oh_modules

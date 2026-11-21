@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/deepseek/dsh-connect/server/internal/preview"
 	"github.com/deepseek/dsh-connect/server/internal/store"
 )
 
@@ -18,6 +19,10 @@ type Server struct {
 	interactions           *InteractionStore
 	router                 *Router
 	attachmentBlobs        attachmentBlobs
+	previewClient          *preview.Client
+	previewCache           attachmentPreviewCache
+	previewMu              sync.Mutex
+	previewJobs            map[string]*attachmentPreviewJob
 	mobileLoginRateLimiter *mobileLoginRateLimiter
 	handler                http.Handler
 	closeOnce              sync.Once
@@ -27,6 +32,13 @@ func New(ctx context.Context, config Config) (*Server, error) {
 	config, err := config.withDefaults()
 	if err != nil {
 		return nil, err
+	}
+	var previewClient *preview.Client
+	if config.PreviewWorkerURL != "" {
+		previewClient, err = preview.NewClient(config.PreviewWorkerURL, config.PreviewWorkerToken, config.MaxPreviewBytes, config.PreviewTimeout)
+		if err != nil {
+			return nil, err
+		}
 	}
 	persistentStore, err := store.Open(ctx, config.DatabaseURL)
 	if err != nil {
@@ -64,6 +76,9 @@ func New(ctx context.Context, config Config) (*Server, error) {
 		events:                 NewEventHub(config.EventBuffer),
 		interactions:           NewInteractionStore(time.Duration(approvalPolicy.TTLSeconds) * time.Second),
 		attachmentBlobs:        attachmentBlobs{dir: config.AttachmentDir},
+		previewClient:          previewClient,
+		previewCache:           attachmentPreviewCache{dir: config.AttachmentDir},
+		previewJobs:            make(map[string]*attachmentPreviewJob),
 		mobileLoginRateLimiter: newMobileLoginRateLimiter(),
 	}
 	s.interactions.SetEnabled(approvalPolicy.RemoteEnabled)

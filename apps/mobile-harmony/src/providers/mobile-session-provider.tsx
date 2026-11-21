@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 
+import { clearAttachmentDocumentCache } from '@/lib/attachment-document-loader';
 import {
   getMobileIdentity,
   isUnauthorizedError,
@@ -106,6 +107,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
             (current !== null && !isSameMobileCredential(current, stored))) {
             return;
           }
+          clearDocumentCacheBestEffort();
           try {
             await deleteStoredMobileSession();
           } catch {
@@ -149,6 +151,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
           (current !== null && !isSameMobileCredential(current, stored))) {
           return;
         }
+        clearDocumentCacheBestEffort();
         try {
           await deleteStoredMobileSession();
         } catch {
@@ -218,6 +221,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
       setState({ status: 'paired', session: stored, notice });
 
       if (previous) {
+        clearDocumentCacheBestEffort();
         // Replacing the local login should revoke the previous device credential.
         void bestEffortRevoke(previous);
       }
@@ -227,6 +231,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
 
   const disconnect = useCallback(async () => {
     const current = state.session;
+    clearDocumentCacheBestEffort();
     await deleteStoredMobileSession();
     operationGeneration.current += 1;
     sessionRef.current = null;
@@ -267,6 +272,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
     const current = sessionRef.current ?? state.session;
     // A delayed 401 must not delete a newer rotation or a newer login.
     if (!current || !isSameMobileCredential(current, invalidated)) return;
+    clearDocumentCacheBestEffort();
     try {
       await deleteStoredMobileSession();
     } catch {
@@ -388,6 +394,10 @@ function loginDevice(): { name: string; platform: MobilePlatform } {
 
 function appVersion(): string {
   return (Constants.expoConfig?.version ?? '0.1.0').slice(0, 64);
+}
+
+function clearDocumentCacheBestEffort(): void {
+  void clearAttachmentDocumentCache().catch(() => undefined);
 }
 
 /**

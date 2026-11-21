@@ -50,6 +50,7 @@ import {
   uploadPendingAttachments,
 } from '@shared/lib/prompt-attachments';
 import type { PromptAttachmentDraft } from '@shared/lib/prompt-attachments';
+import { attachmentDocumentKind } from '@/lib/attachment-documents';
 import { pickAttachments } from '@/lib/attachment-picker';
 import type { AttachmentSource } from '@/lib/attachment-picker';
 import {
@@ -70,7 +71,7 @@ import { SystemVoiceSessionGuard } from '@/lib/system-voice-session';
 import { openVolcAsrSession, type VolcAsrSession } from '@/lib/volc-asr';
 import { useInteractions } from '@/providers/interactions-provider';
 import { AttachmentGrid } from '@/components/attachment-grid';
-import { AttachmentViewer } from '@/components/attachment-viewer';
+import { AttachmentViewer, type AttachmentViewerSelection } from '@/components/attachment-viewer';
 import type { AttachmentAuth } from '@/components/attachment-grid';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useVoice } from '@/providers/voice-provider';
@@ -1497,11 +1498,18 @@ function MessageRow({
     () => (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
     [message.attachments],
   );
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [viewer, setViewer] = useState<AttachmentViewerSelection | null>(null);
   const openAttachment = useCallback((attachmentId: string) => {
     const index = imageAttachments.findIndex((attachment) => attachment.attachmentId === attachmentId);
-    if (index >= 0) setViewerIndex(index);
-  }, [imageAttachments]);
+    if (index >= 0) {
+      setViewer({ kind: 'image', attachments: imageAttachments, initialIndex: index });
+      return;
+    }
+    const document = (message.attachments ?? []).find(
+      (attachment) => attachment.attachmentId === attachmentId && attachmentDocumentKind(attachment) !== null,
+    );
+    if (document) setViewer({ kind: 'document', attachment: document });
+  }, [imageAttachments, message.attachments]);
 
   return (
     <View style={[styles.messageRow, user && styles.messageRowUser]}>
@@ -1536,12 +1544,11 @@ function MessageRow({
           attachments={message.attachments ?? []}
           onOpen={(attachment) => openAttachment(attachment.attachmentId)}
         />
-        {viewerIndex !== null ? (
+        {viewer !== null ? (
           <AttachmentViewer
-            attachments={imageAttachments}
+            selection={viewer}
             auth={attachmentAuth}
-            initialIndex={viewerIndex}
-            onClose={() => setViewerIndex(null)}
+            onClose={() => setViewer(null)}
           />
         ) : null}
         {collapsible ? (

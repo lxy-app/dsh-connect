@@ -96,6 +96,15 @@ docker compose -f docker-compose.server.yml pull server
 docker compose -f docker-compose.server.yml up -d --pull never
 ```
 
+如需 Word、PowerPoint、Excel 的应用内预览，在 `.env` 另设 `DSH_CONNECT_PREVIEW_WORKER_URL=http://preview-worker:8788` 和独立随机 `DSH_CONNECT_PREVIEW_WORKER_TOKEN`，再启用可选 Worker：
+
+```sh
+docker compose -f docker-compose.server.yml --profile office-preview pull
+docker compose -f docker-compose.server.yml --profile office-preview up -d --pull never
+```
+
+Worker 不发布宿主机端口；MD/TXT 和 PDF 预览不依赖该 Worker。
+
 #### 方式二 · 从源码构建镜像部署
 
 在部署主机准备 Git、Docker、Buildx 和 Compose。从要部署的源码版本构建；首次获取仓库可执行：
@@ -113,6 +122,12 @@ docker buildx build --load -t lxyapp/dsh-connect:latest .
 docker compose -f docker-compose.server.yml up -d --pull never
 ```
 
+需要 Office 预览时，额外构建 Worker 并按上节启用 `office-preview` profile：
+
+```sh
+docker buildx build --load --target preview-worker -t lxyapp/dsh-connect-preview-worker:latest .
+```
+
 #### 部署公共配置
 
 编辑 `.env`，至少完成以下设置：
@@ -124,6 +139,7 @@ docker compose -f docker-compose.server.yml up -d --pull never
 | `DSH_CONNECT_DATABASE_URL` | 默认连接预先准备的 PostgreSQL 18，例如 `postgres://USER:PASSWORD@DB_HOST:5432/dsh_connect?sslmode=verify-full`，替换占位符并配置相应证书。容器访问宿主机数据库可使用 `host.docker.internal`，数据库须允许该连接。单实例可直接填写 `sqlite:///data/sqlite/dsh-connect.db` |
 | `DSH_CONNECT_SERVER_URL` | 填写桌面和手机都能访问的外部地址，如 `https://connect.example.com`；它将出现在配对信息中 |
 | `DSH_CONNECT_ATTACHMENTS` | 需要手机上传图片或文件时填写 `readwrite`。缺省为 `read`。修改后用 Compose 重建 server 容器，在管理后台「设置」确认附件模式 |
+| `DSH_CONNECT_PREVIEW_WORKER_URL`、`DSH_CONNECT_PREVIEW_WORKER_TOKEN` | 可选 Office 预览。Compose 同时启用 `office-preview` profile，URL 填 `http://preview-worker:8788`；Token 使用独立随机值，主 Server 与 Worker 共用 |
 | `DSH_CONNECT_ADMIN_ORIGIN` | Admin 独立域名部署时填写其完整 origin，如 `https://admin.example.com`；同源部署可留空 |
 
 #### 部署验证
@@ -189,7 +205,7 @@ npm start
 | 查看进度 | 按工作区浏览会话，查看历史、工具步骤摘要和 Markdown 回复。运行中的回复通过 WebSocket 实时显示，连接中断时回退到轮询。 |
 | 推进会话 | 在授权工作区新建会话、发送或排队指令。有发送权限时，可在当前会话切换模型与推理强度。有取消权限时，可停止当前轮次。 |
 | 审批与提问 | 有审批权限的手机在前台检查待处理项时，优先收到一次性请求。默认 6 秒内未作答，Connector 先撤回手机卡片，再转交桌面。系统通知（APNs/FCM）尚未接入。 |
-| 收发附件 | 手机可全屏查看桌面交付的图片。iOS/Android 可拍照、选图或选文件，上传后单独发送或附在指令中。上传需要 Server 开启 `DSH_CONNECT_ATTACHMENTS=readwrite` 且手机具有该工作区的发送权限。非图片交付文件目前仅展示信息。 |
+| 收发附件 | 手机可全屏查看图片，应用内阅读 MD/TXT/PDF；Word、PowerPoint、Excel 可通过可选 preview-worker 转 PDF 后预览。iOS/Android 可拍照、选图或选文件，上传后单独发送或附在指令中。上传需要 Server 开启 `DSH_CONNECT_ATTACHMENTS=readwrite` 且手机具有该工作区的发送权限。 |
 | 语音交互 | iOS/Android 支持按住说话转写、确认后发送，以及朗读回复。可使用系统语音，也可配置火山 Agent Plan 的 ASR/TTS。 |
 | 后台管理 | 管理用户、设备和访问策略，查看运行中的会话元数据、待处理审批与提问、服务配置和审计记录。管理员可配置远程审批开关和有效期。 |
 

@@ -61,6 +61,11 @@ export function buildAttachmentUrl(serverUrl: string, attachmentId: string): str
   return `${base}/v1/mobile/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
+/** Absolute URL for the Server-owned PDF derivative of an Office attachment. */
+export function buildAttachmentPreviewUrl(serverUrl: string, attachmentId: string): string {
+  return `${buildAttachmentUrl(serverUrl, attachmentId)}/preview`;
+}
+
 export function normalizeServerUrl(raw: string): string {
   const value = raw.trim();
   if (!value) {

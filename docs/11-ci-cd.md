@@ -33,7 +33,7 @@ dry-run 可能读写 GitHub Actions 的依赖与构建缓存，但不发布业�
 | Mobile JS | ESLint、TypeScript、单元测试、iOS/Android JS bundle | Mobile、Mobile Shared、`protocol/` |
 | HarmonyOS Static Checks | ESLint、TypeScript、单元测试 | Harmony、Mobile Shared、`protocol/` |
 | Website | 类型检查、组件测试、静态导出及资源校验 | `website/` |
-| Docker Smoke | 镜像构建、SQLite 启动、健康检查、SPA 深路由、未授权 401、非 root 与卷可写 | Server、Admin、Docker 配置、`protocol/` |
+| Docker Smoke | Server 镜像构建、SQLite 启动、健康检查、SPA 深路由、未授权 401、非 root 与卷可写；独立 preview-worker 镜像构建、健康检查及真实 LibreOffice DOC→PDF 转换 | Server、Admin、Docker 配置、`protocol/` |
 
 `apps/mobile-shared/` 同时触发主线 Mobile 和 HarmonyOS。`Makefile`、任一 GitHub Actions 工作流、Actions Dependabot 配置或 `scripts/ci/` 变化会运行完整矩阵和 actionlint。文档和原型等无关变更只运行变更检测与最终 Gate。ent 一致性检查同时拒绝已跟踪差异和新生成但未提交的文件。
 
@@ -52,8 +52,8 @@ dry-run 可能读写 GitHub Actions 的依赖与构建缓存，但不发布业�
 在 Actions 页面手动运行 **Release Server**，输入形如 `0.1.5` 的版本。工作流会：
 
 1. 确认当前 commit 的 `CI Gate` 已成功。
-2. 构建 `linux/amd64` 候选镜像。
-3. 使用临时 SQLite 数据运行容器 Smoke Test。
+2. 构建 `linux/amd64` Server 与独立 preview-worker 候选镜像。
+3. 使用临时 SQLite 数据运行 Server 容器 Smoke Test，并通过 Worker `/healthz` 与真实 DOC→PDF 转换验证预览镜像。
 4. 不登录 Docker Hub、不推送镜像、不创建 GitHub Release。
 
 ### 正式发布
@@ -61,11 +61,11 @@ dry-run 可能读写 GitHub Actions 的依赖与构建缓存，但不发布业�
 1. 确认目标 commit 已合入 `main` 且 CI 成功，并完成真实功能发布门槛。
 2. 选择未被使用的版本，创建受保护标签，例如 `server-v0.1.5`。
 3. 标签工作流先构建和 Smoke Test，随后在 `release` Environment 等待审批。
-4. 审批后的发布 job 会构建、加载并再次 Smoke Test；随后给**同一个本地镜像**添加标签并推送：
-   - `lxyapp/dsh-connect:0.1.5`
-   - `lxyapp/dsh-connect:sha-<完整 commit SHA>`
-   - 稳定版本额外更新 `lxyapp/dsh-connect:latest`
-5. 工作流记录本地 image ID 和推送后的 digest，并创建同名 GitHub Release；预发布 Release 显式标记为 prerelease 且不设为 Latest。
+4. 审批后的发布 job 会构建、加载并再次 Smoke Test；随后给**同一组已测试本地镜像**添加标签并推送：
+   - `lxyapp/dsh-connect:0.1.5` 与 `lxyapp/dsh-connect-preview-worker:0.1.5`
+   - 两个仓库各自的 `sha-<完整 commit SHA>`
+   - 稳定版本额外更新两个仓库的 `latest`
+5. 工作流记录 image ID 和两个镜像推送后的 digest，并创建同名 GitHub Release；预发布 Release 显式标记为 prerelease 且不设为 Latest。
 
 同一组件的发布工作流全局串行，不能并行覆盖默认通道。稳定版本会读取当前 `latest` 镜像的 OCI 版本标签并阻止 SemVer 回退；当前无版本标签的旧镜像需要首次发布审批人工确认基线，本流程生成的新镜像均带版本标签。预发布版本（如 `0.2.0-rc.1`）不会更新 Docker `latest`。版本标签应按不可变制品管理，不要重复使用已发布版本号。
 

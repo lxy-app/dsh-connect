@@ -929,4 +929,36 @@ App 选择（ImagePicker / DocumentPicker）
 - 鸿蒙壳可编译，但 RNOH 暂无 `expo-image-picker` / `expo-document-picker` 的 JS API（`@expo-harmony` 版只提供原生模块桩），当前明确提示「鸿蒙版暂不支持选择附件」，需另做鸿蒙原生选择器模块。
 - 未做 iOS/Android 真机验收；附件选择、相机权限与上传只在静态检查、单元测试和受控 Host 跨端测试中验证。
 - 未做真实 DSH 0.2.2-rc.1 的完整 Agent 冒烟；图片完整解码、持久消息内容与真机相机仍需在安装更新后的桌面 Connector 和手机 App 后验收。
+
+## 21. 文档与 Office 应用内预览（2026-11-21）
+
+### 预览策略
+
+- 附件卡仍只在点击后加载字节。图片沿用现有全屏分页查看器；文档进入同一个 Modal 外壳，但不与图片混排翻页。
+- MD 使用现有 `MarkdownText` 解析器渲染标题、列表、代码块与表格，不把文档放进执行 HTML/JavaScript 的 WebView。TXT/JSON/LOG 使用只读文本视图。
+- PDF 下载到应用缓存后由本地 PDF 组件阅读；DOC/DOCX/PPT/PPTX/XLS/XLSX 通过 `GET /v1/mobile/attachments/{attachmentId}/preview` 获取服务端转换后的 PDF。
+- 手机只携带 `attachmentId` 与 Bearer Token。通用文档下载器负责有界 `202` 重试、取消、手动重试、字节校验和安全缓存；原文件与 PDF 预览使用不同缓存键。缓存重开也必须重新鉴权：携带 `If-None-Match`，仅在授权后的 304 使用本地副本，200 替换缓存，401/403 清理，断网不直接展示旧内容。
+
+### Server 与独立 Worker
+
+- PDF 可直接预览；Office 预览由 `cmd/preview-worker` 中的 LibreOffice Headless 完成。主 Server 与桌面 Connector 都不执行办公套件，Server 只处理 Connector 已授权上传的 blob。
+- 主 Server 与 Worker 使用独立 `DSH_CONNECT_PREVIEW_WORKER_TOKEN`。Worker 只接受固定 Office 扩展名白名单，不接收桌面路径或展示文件名；转换使用临时目录、无 Shell 的进程调用、输入/输出上限与超时。
+- 预览端点的 `202` 分为 `fetching`（桌面原文件拉取中）与 `converting`（PDF 生成中）；成功只返回 `application/pdf`。`preview_unavailable`、`preview_unsupported`、`preview_failed` 分别表示未配置 Worker、不支持格式和转换失败。
+- PDF 派生文件按原文件 sha256 与转换器版本缓存到 `AttachmentDir/previews`，原子发布并支持 ETag/304。转换状态不写入原附件的 `known/fetching/ready/failed/unavailable` 状态机。
+
+### 部署与验收边界
+
+- 主 Server 镜像不包含 LibreOffice。`Dockerfile` 的 `preview-worker` target 与 Compose 的 `office-preview` profile 提供可选独立容器；容器不发布宿主机端口，使用只读根文件系统、临时 `/tmp`、移除 Linux capabilities、`no-new-privileges` 和无外部访问的内部网络。Worker 默认最多并发执行 2 个转换，排队也受超时约束；LibreOffice 子进程只获得最小环境白名单，不继承 Worker Token。
+- 新增 PDF 原生组件后必须重新构建 iOS/Android Development Build 与鸿蒙 HAP。JS bundle、ESLint、TypeScript 和单元测试不能代替真实文档版式、分页、缩放、中文及权限收回的原生验收。
+- PPT 动画/音视频不属于 PDF 静态预览范围；加密、损坏、超限文件应明确失败，不能无限等待。MD 内相对路径资源只有在另行显式交付并获得不透明附件 id 时才允许打开。
 - 未实现上传进度百分比、断点续传与后台上传；大文件在弱网下仍是一次性请求。
+
+### 本轮验证
+
+- Server：PostgreSQL 18 与 SQLite 全量测试、`go vet`、预览 Worker/Server 关键 race 测试通过；覆盖 PDF 直出/304、Office `fetching → converting → 200`、singleflight、缓存、失败手动重试与撤权 403。
+- 真实转换：ARM64 Worker Docker 镜像构建成功；通过实际 LibreOffice 分别完成 DOC、DOCX、PPTX → PDF，并校验非空 `%PDF-` 输出。`scripts/ci/preview-worker-smoke.sh` 将最小真实 DOC 转换纳入 CI 与发布门槛；复杂版式、中文字体和移动阅读器视觉仍需设备验收。
+- 跨端：真实 Go Server + Connector + 可控 Host 的 PostgreSQL/SQLite E2E 均通过；没有把 Host 仿真当作真实 DSH 生命周期验收。
+- 主线 Mobile：ESLint、TypeScript、135 项单元测试、iOS/Android JS bundle、Expo prebuild 配置解析及 Expo Doctor 20/20 检查通过。
+- 鸿蒙：ESLint、TypeScript、130 项单元测试、Hermes 导出与 unsigned HAP 原生构建通过；PDF/Blob HAR、CMake/C++ Package 已进入构建结果。
+- 协议与发布：OpenAPI YAML、Compose 配置、全部 GitHub Actions actionlint 通过。真实移动设备上的版式、缩放、中文显示、取消和缓存清理仍待验收。
+- 鸿蒙真机修正：初次白板日志确认文件已下载，但旧 PDF 包缺少匹配运行时实现。升级为 `@react-native-ohos/react-native-pdf@7.1.0` / 上游 `7.0.4` 后，兼容补丁必须保留其有效 ArkTS `PdfViewPackage`。已在 XYAO-W00（API 24）用签名 Release HAP 验证 DOCX 中文标题、正文、列表、表格显示及滚动到第二页；缩放、取消和撤权清理仍另行验收。
