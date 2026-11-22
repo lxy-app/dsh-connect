@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { AttachmentHtmlPreview } from '@/components/attachment-html-preview';
 import { MarkdownText } from '@/components/markdown';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import {
@@ -133,6 +134,9 @@ export function AttachmentDocumentViewer({
   }
 
   const document = state.document;
+  if (isHtmlAttachment(attachment)) {
+    return <AttachmentHtmlPreview fileUri={document.file.uri} />;
+  }
   if (document.kind === 'pdf') {
     return (
       <View style={[styles.document, { backgroundColor: theme.surfaceMuted }]}>
@@ -160,9 +164,7 @@ export function AttachmentDocumentViewer({
   }
 
   const text = document.text ?? '';
-  const htmlSource = isHtmlAttachment(attachment);
-  const monospace = htmlSource
-    || /\.(?:json|log)$/i.test(attachment.name)
+  const monospace = /\.(?:json|log)$/i.test(attachment.name)
     || /(?:application\/json|text\/json|log)/i.test(attachment.mime);
   return (
     <ScrollView
@@ -173,23 +175,16 @@ export function AttachmentDocumentViewer({
       {document.kind === 'markdown' ? (
         <MarkdownText text={text} />
       ) : (
-        <>
-          {htmlSource ? (
-            <Text style={[styles.htmlLabel, { color: theme.textSecondary }]}>
-              HTML 源码（不执行脚本）
-            </Text>
-          ) : null}
-          <Text
-            selectable
-            style={[
-              styles.plainText,
-              monospace && styles.monospace,
-              { color: theme.text },
-            ]}
-          >
-            {text}
-          </Text>
-        </>
+        <Text
+          selectable
+          style={[
+            styles.plainText,
+            monospace && styles.monospace,
+            { color: theme.text },
+          ]}
+        >
+          {text}
+        </Text>
       )}
     </ScrollView>
   );
@@ -233,7 +228,6 @@ const styles = StyleSheet.create({
   pdfLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   textContent: { padding: 18, paddingBottom: 40 },
   plainText: { fontSize: 15, lineHeight: 24 },
-  htmlLabel: { fontSize: 13, lineHeight: 20, marginBottom: 12 },
   monospace: { fontFamily: 'monospace', fontSize: 13, lineHeight: 21 },
   status: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 28 },
   statusTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },

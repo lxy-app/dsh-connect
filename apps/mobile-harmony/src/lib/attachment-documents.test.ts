@@ -45,7 +45,7 @@ test('explicit MIME wins over misleading extensions except plain-text Markdown r
   assert.equal(attachmentDocumentKind({ name: 'runtime', mime: 'text/log' }), 'text');
 });
 
-test('HTML extensions and MIME use source-text preview while archives stay unsupported', () => {
+test('HTML extensions and MIME use bounded local preview while archives stay unsupported', () => {
   for (const attachment of [
     { name: 'page.html', mime: 'application/octet-stream' },
     { name: 'page.HTM', mime: '' },
