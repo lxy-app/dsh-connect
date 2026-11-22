@@ -976,7 +976,7 @@ App 选择（ImagePicker / DocumentPicker）
 3. **正文工作区图片**：助手消息里的本地 `![alt](path)` 即使没有单独 `present`，也会被视为交付意图。Connector 仅接受 PNG/JPEG/WebP/GIF 本地路径，并继续执行工作区边界、敏感名称、符号链接和大小校验；外部 HTTP 图片、普通文件链接和代码示例不会因此变成附件。匹配成功后，独立成段的图片由两端 `MarkdownText` 直接内嵌显示。
 4. **Mobile 正文链接分发**：`openLink` 先解析 `dsh-attachment://` URI，在当前消息 `attachments[]` 中查找并调用 `onOpenAttachment`，复用现有查看器；未匹配时提示"附件不可用"，不退化为系统浏览器。普通 `http/https/mailto` 行为不变。
 5. **不支持格式的下载页**：ZIP 等没有应用内预览器的附件也必须打开统一查看器，显示"暂不支持应用内预览"并保留原文件下载按钮；不得在 `openAttachment` 中静默返回。附件卡同样可进入该下载页。
-6. **HTML 源码预览**：HTML/HTM 与 `text/html` 按只读、等宽、可选中文本显示，复用原附件 2 MiB 限制，不执行 JavaScript，不引入 WebView。
+6. **HTML 本地 WebView 预览**：HTML/HTM 与 `text/html` 先按原附件链路下载到 App 私有缓存，再以本地 `file://` 在 WebView 中打开，允许原型脚本运行；不注入 Token 或 Server 地址，外部导航被拦截，通用跨域文件访问关闭。原附件大小限制仍为 2 MiB。
 7. **原文件下载**：新增 `downloadOriginalFile`，走 `GET /v1/mobile/attachments/{id}` 获取原始字节（非 PDF 预览衍生文件），支持 202 有界重试、ETag/304 缓存重验、字节校验和原子落盘。缓存键与文档预览缓存隔离。
 8. **真正保存到本地**：Android 通过 SAF 选择目录并创建真实文档；鸿蒙通过原生 `DocumentViewPicker` 选择保存位置并复制到返回 URI，两端均校验最终文件字节数。iOS 使用系统导出面板，由用户选择“存储到文件”。不得以 `Share.share` 或系统分享代替本地保存，也不得把 App 私有缓存显示为已下载。
 
@@ -1001,5 +1001,5 @@ App 选择（ImagePicker / DocumentPicker）
 - Android 使用 `StorageAccessFramework` 选择目录、创建文档、写入并校验原文件，重名使用数字后缀，失败删除未完成文件；不再调用系统分享。
 - 鸿蒙新增可重复构建的 `modules/harmony-file-export` 原生模块，使用 `DocumentViewPicker` 与 `fs.copy` 保存，随后通过 `fs.open` / `fs.stat(fd)` 比较源和目标字节数，只有校验一致才返回 `saved`。保存 URI 不进入日志或返回给 JS。
 - iOS 保留系统导出面板，由用户明确选择“存储到文件”，不宣称静默保存成功。
-- HTML/HTM 以“HTML 源码（不执行脚本）”展示，纯文本大小上限 2 MiB；ZIP 等仍为“不支持预览+保存”。
-- 验证：主线 Mobile 144 项、鸿蒙 134+3 项测试及两端 ESLint/TypeScript 全部通过。原生保存面板、取消、真实落盘和 HTML 源码显示需通过原生构建与真机验收，不能以静态检查代替。
+- HTML/HTM 先缓存到 App 私有目录，再通过本地 WebView 打开并允许原型脚本运行；外部导航被拦截，`allowUniversalAccessFromFileURLs=false`，不注入凭据或远程站点地址。原文件大小上限 2 MiB；ZIP 等仍为“不支持预览+保存”。
+- 验证：主线 Mobile 146 项、鸿蒙 134+3 项测试及两端 ESLint/TypeScript 全部通过。原生保存面板、取消、真实落盘和本地 WebView 显示需通过原生构建与真机验收，不能以静态检查代替。
