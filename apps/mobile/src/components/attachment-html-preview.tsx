@@ -3,27 +3,37 @@ import WebView from 'react-native-webview';
 
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import type { AttachmentDocumentAuth } from '@/lib/attachment-document';
+import { buildAttachmentUrl } from '@/lib/mobile-api';
 import { canNavigateLocalHtml } from '@shared/lib/html-preview';
+import type { MobileAttachment } from '@shared/types/mobile';
 
-/** Offline local-document preview; no credentials or remote site navigation. */
-export function AttachmentHtmlPreview({ html }: { readonly html: string }) {
+/** Authenticated remote-document preview; credentials stay in request headers. */
+export function AttachmentHtmlPreview({
+  attachment,
+  auth,
+}: {
+  readonly attachment: MobileAttachment;
+  readonly auth: AttachmentDocumentAuth;
+}) {
   const theme = useAppTheme();
+  const url = buildAttachmentUrl(auth.serverUrl, attachment.attachmentId);
   return (
     <View style={styles.container}>
       <View style={[styles.notice, { backgroundColor: theme.surfaceMuted, borderColor: theme.border }]}>
         <Text style={[styles.noticeText, { color: theme.textSecondary }]}>
-          本地 HTML 预览 · 外部导航已禁用
+          HTML 在线预览 · 鉴权仅通过请求头发送
         </Text>
       </View>
       <WebView
-        source={{ html, baseUrl: 'about:blank' }}
-        originWhitelist={['data:*', 'blob:*', 'about:blank']}
+        source={{ uri: url, headers: { Authorization: `Bearer ${auth.accessToken}` } }}
+        originWhitelist={['https://*', 'data:*', 'blob:*', 'about:blank']}
+        onShouldStartLoadWithRequest={(event) => event.url === url || canNavigateLocalHtml(event.url)}
         javaScriptEnabled
         domStorageEnabled
         allowFileAccess={false}
         allowFileAccessFromFileURLs={false}
         allowUniversalAccessFromFileURLs={false}
-        onShouldStartLoadWithRequest={(event) => canNavigateLocalHtml(event.url)}
         setSupportMultipleWindows={false}
         mixedContentMode="never"
         startInLoadingState

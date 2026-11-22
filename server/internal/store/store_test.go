@@ -554,3 +554,51 @@ func TestAttachmentFailureSurvivesTranscriptRefresh(t *testing.T) {
 		t.Fatalf("in-flight retry regressed to another state: %+v", retrying)
 	}
 }
+
+func TestAttachmentRefreshKeepsUploadedByteLength(t *testing.T) {
+	for _, scenario := range []struct {
+		name          string
+		uploadedBytes int64
+		storedBytes   int64
+	}{
+		{"ready", 9066, 9066},
+		{"previously-overwritten", 9066, 8872},
+		{"empty-file", 0, 8872},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			persistent := newStore(t)
+			ctx := context.Background()
+			now := time.Now().UTC()
+			declaration := store.SessionAttachmentRecord{
+				ID: "att_markdown_size", DeviceID: "dev-1", SessionID: "sess-1", WorkspaceID: "ws-1",
+				Source: protocol.AttachmentSourceDeliverable, Kind: "file", DisplayName: "README.md",
+				Mime: "text/markdown", Bytes: 8872, State: protocol.AttachmentStateKnown, ExpiresAt: now.Add(time.Hour),
+			}
+			if err := persistent.UpsertSessionAttachments(ctx, []store.SessionAttachmentRecord{declaration}, now); err != nil {
+				t.Fatal(err)
+			}
+			// Upload completion establishes the size of the digest-addressed blob.
+			const digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			if err := persistent.PutAttachmentBlob(ctx, store.AttachmentBlobRecord{
+				SHA256: digest, Mime: declaration.Mime, Bytes: scenario.uploadedBytes, StoragePath: "unused-test-path", CreatedAt: now, LastUsedAt: now,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// 8872 also models a row already damaged by an older transcript refresh.
+			if err := persistent.CompleteAttachment(ctx, declaration.ID, digest, scenario.storedBytes, now); err != nil {
+				t.Fatal(err)
+			}
+			declaration.Description = "updated description"
+			if err := persistent.UpsertSessionAttachments(ctx, []store.SessionAttachmentRecord{declaration}, now.Add(time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			got, err := persistent.SessionAttachment(ctx, declaration.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Bytes != scenario.uploadedBytes || got.SHA256 != digest || got.State != protocol.AttachmentStateReady || got.Description != declaration.Description {
+				t.Fatalf("uploaded metadata diverged after refresh: %+v", got)
+			}
+		})
+	}
+}

@@ -28,6 +28,7 @@
           "enableBackgroundRecording": false
         }
       ],
+      "./plugins/with-arkweb",
       "@expo-harmony/prebuild-config"
     ],
     "harmony": {

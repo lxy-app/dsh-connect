@@ -91,7 +91,7 @@ export function AttachmentDocumentViewer({
     return (
       <View style={[styles.status, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={theme.accent} />
-        <Text style={[styles.statusText, { color: theme.textSecondary }]}>正在准备登录凭据…</Text>
+        <Text style={[styles.statusText, { color: theme.textSecondary }]}>正在准备文件…</Text>
       </View>
     );
   }
@@ -99,7 +99,7 @@ export function AttachmentDocumentViewer({
   if (state.status === 'error') {
     return (
       <View style={[styles.status, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorTitle, { color: theme.danger }]}>文档预览失败</Text>
+        <Text style={[styles.errorTitle, { color: theme.text }]}>暂时无法预览</Text>
         <Text style={[styles.errorDetail, { color: theme.textSecondary }]}>{state.message}</Text>
         <Pressable
           accessibilityRole="button"
@@ -122,12 +122,7 @@ export function AttachmentDocumentViewer({
       <View style={[styles.status, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={theme.accent} size="large" />
         <Text style={[styles.statusTitle, { color: theme.text }]}>
-          {state.pending?.state === 'converting' ? '正在生成 PDF 预览…' : '正在准备文档…'}
-        </Text>
-        <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-          {state.pending
-            ? '文件尚未就绪，会自动进行有限次重试；关闭预览可取消。'
-            : '正在安全下载并校验文档，关闭预览可取消。'}
+          {state.pending?.state === 'converting' ? '正在生成预览…' : '正在打开文件…'}
         </Text>
       </View>
     );
@@ -135,7 +130,7 @@ export function AttachmentDocumentViewer({
 
   const document = state.document;
   if (isHtmlAttachment(attachment)) {
-    return <AttachmentHtmlPreview html={document.text ?? ''} />;
+    return <AttachmentHtmlPreview key={`${document.file.uri}:${attempt}`} html={document.text ?? ''} />;
   }
   if (document.kind === 'pdf') {
     return (

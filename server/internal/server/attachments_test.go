@@ -239,6 +239,25 @@ func TestMobileAttachmentLearnFetchUploadDownload(t *testing.T) {
 		t.Fatalf("revalidation status=%d, want 304", response.StatusCode)
 	}
 
+	// A later desktop declaration may report a different size for the same
+	// id. The transcript must continue to describe the uploaded blob served
+	// above, or clients will reject an otherwise complete download.
+	transcript["messages"].([]map[string]any)[0]["attachments"].([]map[string]any)[0]["bytes"] = len(fileBytes) - 1
+	go func() {
+		_ = answerCommand(connector.connection, protocol.MethodSessionTranscript, transcript)
+	}()
+	status, body = testRequest(t, http.MethodGet,
+		environment.http.URL+"/v1/mobile/sessions/sess-1/messages?deviceId="+connector.deviceID+"&workspaceId=ws-1",
+		phone.AccessToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("refreshed transcript status=%d body=%s", status, body)
+	}
+	decodeTestJSON(t, body, &transcriptResponse)
+	refreshed := transcriptResponse.Messages[0].Attachments[0]
+	if refreshed.Bytes != int64(len(fileBytes)) || refreshed.SHA256 != digestOf(fileBytes) || refreshed.State != protocol.AttachmentStateReady {
+		t.Fatalf("refreshed metadata disagrees with downloaded bytes: %+v", refreshed)
+	}
+
 	// Disabling the user policy closes the same URL immediately.
 	disabled := false
 	if _, err := environment.server.store.UpdateAccessPolicy(context.Background(), policy.PolicyID, policy.Revision, store.AccessPolicyUpdate{Enabled: &disabled}); err != nil {

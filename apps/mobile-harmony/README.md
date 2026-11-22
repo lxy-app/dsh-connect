@@ -121,7 +121,7 @@ apps/mobile-harmony/
 
 ## 附件文档预览
 
-- 文件卡点击后才下载；MD/TXT/JSON/LOG 在应用内阅读，HTML/HTM 与 `text/html` 下载到 App 私有缓存后，通过 `@react-native-ohos/react-native-webview` 以本地 `file://` 预览（最大 2 MiB），允许原型脚本运行、拦截外部导航且不注入凭据。PDF 与 Office 转换结果使用本地 `react-native-pdf`。Office 预览依赖 Server 的可选 preview-worker，不需要桌面安装办公套件。缓存重开必须经 Bearer + `If-None-Match` 鉴权并收到 304，401/403 或断网不会直接展示旧缓存。
+- 文件卡点击后才下载；MD/TXT/JSON/LOG 在应用内阅读，HTML/HTM 与 `text/html` 下载到 App 私有缓存后，读取为文本后通过 `@react-native-ohos/react-native-webview` 的 `source.html` 预览（最大 2 MiB），允许原型脚本运行、在原生层拦截外部导航且不注入凭据。预览加载超过 15 秒会显示重试和保存提示。PDF 与 Office 转换结果使用本地 `react-native-pdf`。Office 预览依赖 Server 的可选 preview-worker，不需要桌面安装办公套件。缓存重开必须经 Bearer + `If-None-Match` 鉴权并收到 304，401/403 或断网不会直接展示旧缓存。
 - 所有附件的“保存”按钮复用原附件下载与校验缓存，再由 `harmony-file-export` 打开系统 `DocumentViewPicker` 并复制到用户选择的 URI；复制后校验字节数，取消或失败不提示成功，不使用 `Share.share` 代替本地保存。该原生模块必须经 `setup:native`、重新构建并安装 HAP 后才能验收。
 - PDF 原生依赖锁定为 `@react-native-ohos/react-native-pdf@7.1.0`（上游 `react-native-pdf@7.0.4`）与对应 BlobUtil；该版本提供面向 RNOH 0.84 的 ArkTS `PdfViewPackage`。Expo/RNOH 版本保持 SDK 55.0.31 + RNOH 0.84.1。修改这些依赖后必须重新执行 `setup:native` 和 HAP 构建。
 - 已验证 Hermes 导出、unsigned HAP 构建，以及 XYAO-W00（HarmonyOS 6.1 / API 24）上的签名 Release 覆盖安装。实测 DOCX 经 Worker 转 PDF 后，中文标题、正文、列表和表格正常显示，并可连续滚动到第二页。缩放、取消和缓存清理仍需继续验收。
@@ -144,3 +144,25 @@ apps/mobile-harmony/
 - 用户登录、语音播放/识别、附件、远程审批需要逐项真机验收；扫码配对入口已移除。
 - 静态检查和 JS bundle 不等于 HAP 构建或真机通过。
 - 生产跨网络必须使用 HTTPS/WSS；hdc reverse forwarding 只用于开发调试。
+
+### HTML WebView 初始化与原生补丁
+
+`plugins/with-arkweb.js` 在 EntryAbility 的主线程 `onCreate` 中、启动 RNOH 前同步初始化 ArkWeb，避免网络请求的 CookieManager 在 Worker 上抢先加载内核。该插件必须排在 `@expo-harmony/prebuild-config` 之前（Harmony mods 逆注册顺序执行），由配置生成原生入口，不手改生成物。
+
+华为的 [initializeWebEngine 文档](https://developer.huawei.com/consumer/cn/doc/harmonyos-references-V13/js-apis-webview-V13/) 要求在主线程初始化且每个应用生命周期调用一次；不要用定时器或 Worker 执行初始化。
+
+`scripts/patch-webview.sh` 同步修补 npm 源码、实际参与构建的 `rn_webview.har` 和 ohpm 已解包副本；只改 npm 源码不会进入 HAP。补丁以 `about:blank` 初始化，仅在 `onControllerAttached` 后加载 HTML，销毁时保护未绑定的控制器，并在原生层拒绝 HTML 文档外部导航。修改后必须重新 `setup:native`、构建并安装 HAP。
+
+HTML 继续通过现有文档下载器鉴权和校验，WebView 只接收文本。不要直接加载附件下载接口：Server 对 HTML 返回 `Content-Disposition: attachment`，并非网页预览响应。
+
+调试模式下，共享 TSX 的 `react/jsx-dev-runtime` 与生产模式的 `react/jsx-runtime` 均映射到本壳锁定的 `react-harmony`，避免 Metro 从共享目录解析失败。
+
+2026-11-22 验证：ESLint/TypeScript、134 项业务测试和 10 项脚本测试通过；Debug 与 Release 签名 HAP 均构建并覆盖安装成功。API 24 PAD 实测 HTML 显示、JavaScript 按钮、外部导航拦截及超时提示，关闭开发服务后最终 Release 中的原始 HTML 附件显示和交互正常。旋转、分屏和其他附件格式未在本次重新验收。
+
+### 文档预览展示
+
+- 文档使用跟随主题的 56vp 顶部工具栏，集中显示关闭、文件名、保存；长文件名中间省略。页面按安全区避让系统栏，正文占据剩余空间，不再保留黑色底栏或重复文件名；图片继续使用原有图片查看器。
+- HTML 不显示常驻的“外部导航已禁用”。原生层拒绝导航后发送通知，页面显示 3.5 秒提示，不打开外部应用；通知失败仍拒绝导航。使用独立的无等待通知标识，避免复用其他导航的锁。
+- 打开过程只显示简短状态，失败保留重新加载与顶部保存入口。文档保存成功短暂提示，取消保存静默返回；关闭预览会取消下载和清理提示计时器。
+- 本次展示优化的 ESLint/TypeScript、134 项业务测试与 12 项脚本测试通过；新增覆盖原生拦截通知、通知失败时继续拦截以及旧补丁升级。
+- Release 签名 HAP 构建、PAD 覆盖安装及启动通过；本次原始附件页面布局、链接提示、保存反馈及旋转/分屏仍待真机交互验收。

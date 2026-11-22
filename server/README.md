@@ -184,6 +184,7 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 - **反向授权**：下载端点只按行内记录的 device/workspace/session 校验用户有效权限，不信任手机提交的任何归属参数。
 - **状态由 Server 拥有**：Connector 只报 `known`，`fetching/ready/failed/unavailable` 与 `sha256` 由 Server 推进；`ready` 不会因新的 transcript 回落，传输/上传产生的 `failed` 也不会被普通轮询重置成 `known`，只有移动 GET 会显式触发重试。Server 启动时会把上一进程遗留的 `fetching` 恢复为 `known`，避免永久等待已消失的命令。
 - **字节与元数据分离**：内容寻址写 `DSH_CONNECT_ATTACHMENT_DIR/<sha[0:2]>/<sha>`，DB 只存引用；上传先写临时文件再 rename，避免半成品。Docker 镜像默认使用可写的 `/data/attachments`，Compose 必须挂载 `dsh-connect-attachments` 持久卷。
+- **上传后的长度一致性**：已有摘要的附件，大小以该摘要对应的 blob 索引为准，后续 transcript 声明不能覆盖。会话刷新会修复旧版本覆盖过的长度（包括零字节文件）；更新带摘要条件，避免与并发上传完成互相覆盖。升级后关闭旧预览、刷新会话，再重新打开附件；无需删除文件或清空缓存。
 - **就绪通知**：上传成功后向该 `(deviceId, sessionId)` 广播 `attachment.ready`（仅元数据），App 立即重载而不轮询。
 - **失败关闭**：Connector 侧路径必须落在会话工作区内（默认拒绝工作区外交付）、拒绝 final symlink、命中敏感名单直接拒绝、并在读盘前重新 `stat` 比对基线，变化返回 `attachment_changed` 且不发送内容。
 - **预览隔离**：主 Server 不执行 LibreOffice。`DSH_CONNECT_PREVIEW_WORKER_URL` 与独立 `DSH_CONNECT_PREVIEW_WORKER_TOKEN` 同时配置后，才把已授权 blob 发给 `cmd/preview-worker`；Worker 使用固定扩展名白名单、临时目录、无 Shell 的命令执行、输入/输出上限和超时。预览 PDF 按原文件摘要与转换版本派生缓存键，原子写入 `AttachmentDir/previews`。

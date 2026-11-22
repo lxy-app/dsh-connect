@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,9 +11,12 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AttachmentDocumentViewer } from '@/components/attachment-document-viewer';
 import { AttachmentImage } from '@/components/attachment-image';
+import { AttachmentPreviewFeedback, usePreviewFeedback } from '@/components/attachment-preview-feedback';
+import { useAppTheme } from '@/hooks/use-app-theme';
 import { downloadOriginalFile } from '@/lib/attachment-original';
 import { saveOriginalAttachment } from '@/lib/attachment-save';
 import type { MobileAttachment } from '@shared/types/mobile';
@@ -41,6 +44,11 @@ export function AttachmentViewer({
   onClose: () => void;
 }) {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const theme = useAppTheme();
+  const { message, notify } = usePreviewFeedback();
+  const saveController = useRef<AbortController | null>(null);
+  useEffect(() => () => saveController.current?.abort(), []);
   const [index, setIndex] = useState(() => selection.kind === 'image'
     ? Math.min(selection.initialIndex, Math.max(0, selection.attachments.length - 1))
     : 0);
@@ -51,26 +59,65 @@ export function AttachmentViewer({
     if (!current || !auth || saving) return;
     setSaving(true);
     const controller = new AbortController();
+    saveController.current = controller;
     try {
       const { file } = await downloadOriginalFile(current, auth, { signal: controller.signal });
       const result = await saveOriginalAttachment(file.uri, current.name);
-      if (result === 'cancelled') {
-        Alert.alert('已取消保存', '附件未保存到本地，可稍后重试。');
-      } else {
-        Alert.alert('保存成功', `“${current.name}”已保存到你选择的位置。`);
+      if (controller.signal.aborted) return;
+      if (result === 'saved') {
+        if (selection.kind === 'document') notify('已保存到所选位置');
+        else Alert.alert('保存成功', `“${current.name}”已保存到你选择的位置。`);
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
+      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
       Alert.alert('保存失败', error instanceof Error ? error.message : '请检查网络或本机存储后重试。');
     } finally {
-      setSaving(false);
+      if (!controller.signal.aborted) setSaving(false);
     }
-  }, [current, auth, saving]);
+  }, [current, auth, saving, selection.kind, notify]);
+
+  if (selection.kind === 'document') {
+    return (
+      <Modal visible animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent>
+        <View style={[styles.documentBackdrop, {
+          backgroundColor: theme.surface,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        }]}>
+          <View style={[styles.documentToolbar, { borderColor: theme.border }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="关闭文档预览" onPress={onClose}
+              style={({ pressed }) => [styles.documentAction, pressed && styles.pressed]}>
+              <Text style={[styles.documentActionText, { color: theme.text }]}>关闭</Text>
+            </Pressable>
+            <Text numberOfLines={1} ellipsizeMode="middle" accessibilityLabel={selection.attachment.name}
+              style={[styles.documentTitle, { color: theme.text }]}>{selection.attachment.name}</Text>
+            <View style={styles.documentAction}>
+              {auth ? (
+                <Pressable accessibilityRole="button"
+                  accessibilityLabel={saving ? '正在保存文件' : '保存原文件到本地'}
+                  accessibilityState={{ disabled: saving, busy: saving }}
+                  disabled={saving} onPress={() => void handleSave()}
+                  style={({ pressed }) => [styles.documentAction, pressed && styles.pressed]}>
+                  {saving ? <ActivityIndicator size="small" color={theme.text} />
+                    : <Text style={[styles.documentActionText, { color: theme.text }]}>保存</Text>}
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+          <View style={[styles.documentPage, { backgroundColor: theme.background }]}>
+            <AttachmentDocumentViewer attachment={selection.attachment} auth={auth} />
+          </View>
+          <AttachmentPreviewFeedback message={message} bottom={insets.bottom + 20} />
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.backdrop}>
-        {selection.kind === 'image' ? (
           <FlatList
             data={selection.attachments}
             horizontal
@@ -102,16 +149,11 @@ export function AttachmentViewer({
               </ScrollView>
             )}
           />
-        ) : (
-          <View style={styles.documentPage}>
-            <AttachmentDocumentViewer attachment={selection.attachment} auth={auth} />
-          </View>
-        )}
 
         <View style={styles.header} pointerEvents="box-none">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={selection.kind === 'image' ? '关闭图片预览' : '关闭文档预览'}
+            accessibilityLabel="关闭图片预览"
             onPress={onClose}
             style={styles.close}
           >
@@ -141,7 +183,7 @@ export function AttachmentViewer({
           </View>
         </View>
 
-        <View style={[styles.footer, selection.kind === 'document' && styles.documentFooter]} pointerEvents="none">
+        <View style={styles.footer} pointerEvents="none">
           <Text numberOfLines={1} style={styles.caption}>
             {current?.name ?? ''}
           </Text>
@@ -159,7 +201,12 @@ export function AttachmentViewer({
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: '#000' },
   page: { alignItems: 'center', justifyContent: 'center' },
-  documentPage: { flex: 1, paddingTop: 100, paddingBottom: 52 },
+  documentBackdrop: { flex: 1 },
+  documentPage: { flex: 1 },
+  documentToolbar: { minHeight: 56, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  documentAction: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  documentActionText: { fontSize: 15, fontWeight: '500' },
+  documentTitle: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: '500', textAlign: 'center' },
   header: {
     position: 'absolute',
     top: 0,
@@ -179,6 +226,5 @@ const styles = StyleSheet.create({
   downloadText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   pressed: { opacity: 0.7 },
   footer: { position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center', gap: 4 },
-  documentFooter: { bottom: 24, left: 16, right: 16 },
   caption: { color: 'rgba(255,255,255,0.86)', fontSize: 13 },
 });

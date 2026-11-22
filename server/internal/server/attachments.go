@@ -582,7 +582,7 @@ func (s *Server) learnTranscriptAttachments(
 			if row.Mime != "" {
 				attachment.Mime = row.Mime
 			}
-			if row.Bytes > 0 {
+			if row.SHA256 != "" || row.Bytes > 0 {
 				attachment.Bytes = row.Bytes
 			}
 		}

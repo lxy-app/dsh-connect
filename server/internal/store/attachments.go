@@ -57,7 +57,8 @@ var (
 
 // UpsertSessionAttachments learns attachment metadata from a Connector
 // transcript. It refreshes descriptive fields but never downgrades a row the
-// Server already advanced: state, digest and error code stay server-owned.
+// Server already advanced: state, digest, uploaded byte length and error code
+// stay server-owned.
 func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionAttachmentRecord, now time.Time) error {
 	for _, record := range records {
 		existing, err := s.client.SessionAttachment.Get(ctx, record.ID)
@@ -98,7 +99,6 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 				SetKind(sessionattachment.Kind(record.Kind)).
 				SetDisplayName(record.DisplayName).
 				SetMime(record.Mime).
-				SetBytes(record.Bytes).
 				SetNillableDescription(nilIfEmpty(record.Description)).
 				SetUpdatedAt(now).
 				SetExpiresAt(record.ExpiresAt)
@@ -110,7 +110,34 @@ func (s *Store) UpsertSessionAttachments(ctx context.Context, records []SessionA
 			if _, updateErr := update.Save(ctx); updateErr != nil {
 				return fmt.Errorf("update session attachment %s: %w", record.ID, updateErr)
 			}
+			if err := s.refreshAttachmentByteLength(ctx, existing.ID, existing.Sha256, record.Bytes); err != nil {
+				return err
+			}
 		}
+	}
+	return nil
+}
+
+// A transcript describes a desktop declaration, not necessarily the blob
+// already uploaded for that id. Recover previously overwritten sizes from the
+// digest's blob index, and guard writes against a concurrent upload completion.
+func (s *Store) refreshAttachmentByteLength(ctx context.Context, id, digest string, declaredBytes int64) error {
+	update := s.client.SessionAttachment.Update().Where(sessionattachment.IDEQ(id))
+	if digest == "" {
+		update.Where(sessionattachment.Or(sessionattachment.Sha256IsNil(), sessionattachment.Sha256EQ(""))).SetBytes(declaredBytes)
+	} else {
+		blob, err := s.client.AttachmentBlob.Get(ctx, digest)
+		if ent.IsNotFound(err) {
+			// Missing/expired blobs must not regain availability through metadata.
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("load attachment size %s: %w", id, err)
+		}
+		update.Where(sessionattachment.Sha256EQ(digest)).SetBytes(blob.Bytes)
+	}
+	if _, err := update.Save(ctx); err != nil {
+		return fmt.Errorf("refresh attachment size %s: %w", id, err)
 	}
 	return nil
 }
