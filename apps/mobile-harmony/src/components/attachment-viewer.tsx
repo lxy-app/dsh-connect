@@ -15,6 +15,7 @@ import {
 import { AttachmentDocumentViewer } from '@/components/attachment-document-viewer';
 import { AttachmentImage } from '@/components/attachment-image';
 import { downloadOriginalFile } from '@/lib/attachment-original';
+import { saveOriginalAttachment } from '@/lib/attachment-save';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 export type ViewerAuth = { readonly serverUrl: string; readonly accessToken: string };
@@ -43,29 +44,28 @@ export function AttachmentViewer({
   const [index, setIndex] = useState(() => selection.kind === 'image'
     ? Math.min(selection.initialIndex, Math.max(0, selection.attachments.length - 1))
     : 0);
-  const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const current = selection.kind === 'image' ? selection.attachments[index] : selection.attachment;
 
-  const handleDownload = useCallback(async () => {
-    if (!current || !auth || downloading) return;
-    setDownloading(true);
+  const handleSave = useCallback(async () => {
+    if (!current || !auth || saving) return;
+    setSaving(true);
     const controller = new AbortController();
     try {
       const { file } = await downloadOriginalFile(current, auth, { signal: controller.signal });
-      // HarmonyOS: use the system share/save sheet via the file URI.
-      // The RNOH share intent is handled by the native shell.
-      const { Share } = await import('react-native');
-      await Share.share(
-        { url: file.uri, title: current.name },
-        { dialogTitle: `保存 ${current.name}` },
-      );
+      const result = await saveOriginalAttachment(file.uri, current.name);
+      if (result === 'cancelled') {
+        Alert.alert('已取消保存', '附件未保存到本地，可稍后重试。');
+      } else {
+        Alert.alert('保存成功', `“${current.name}”已保存到你选择的位置。`);
+      }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
-      Alert.alert('下载失败', error instanceof Error ? error.message : '请检查网络后重试。');
+      Alert.alert('保存失败', error instanceof Error ? error.message : '请检查网络或本机存储后重试。');
     } finally {
-      setDownloading(false);
+      setSaving(false);
     }
-  }, [current, auth, downloading]);
+  }, [current, auth, saving]);
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent>
@@ -126,15 +126,15 @@ export function AttachmentViewer({
             {current && auth ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`下载原文件 ${current.name}`}
-                disabled={downloading}
-                onPress={() => void handleDownload()}
+                accessibilityLabel={saving ? `正在保存 ${current.name}` : `保存原文件 ${current.name} 到本地`}
+                disabled={saving}
+                onPress={() => void handleSave()}
                 style={({ pressed }) => [styles.download, pressed && styles.pressed]}
               >
-                {downloading ? (
+                {saving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.downloadText}>下载</Text>
+                  <Text style={styles.downloadText}>保存</Text>
                 )}
               </Pressable>
             ) : null}

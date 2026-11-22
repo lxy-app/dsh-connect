@@ -13,7 +13,11 @@ import {
 
 import { MarkdownText } from '@/components/markdown';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { attachmentDocumentKind, type AttachmentDocumentPending } from '@/lib/attachment-documents';
+import {
+  attachmentDocumentKind,
+  isHtmlAttachment,
+  type AttachmentDocumentPending,
+} from '@/lib/attachment-documents';
 import {
   isAttachmentDocumentAbortError,
   loadAttachmentDocument,
@@ -76,7 +80,7 @@ export function AttachmentDocumentViewer({
       <View style={[styles.status, { backgroundColor: theme.background }]}>
         <Text style={[styles.statusTitle, { color: theme.text }]}>暂不支持应用内预览</Text>
         <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-          可点击右上角“下载”获取原始文件，再选择本机应用打开。
+          可点击右上角“保存”将原始文件保存到本机，再选择应用打开。
         </Text>
       </View>
     );
@@ -156,7 +160,9 @@ export function AttachmentDocumentViewer({
   }
 
   const text = document.text ?? '';
-  const monospace = /\.(?:json|log)$/i.test(attachment.name)
+  const htmlSource = isHtmlAttachment(attachment);
+  const monospace = htmlSource
+    || /\.(?:json|log)$/i.test(attachment.name)
     || /(?:application\/json|text\/json|log)/i.test(attachment.mime);
   return (
     <ScrollView
@@ -167,16 +173,23 @@ export function AttachmentDocumentViewer({
       {document.kind === 'markdown' ? (
         <MarkdownText text={text} />
       ) : (
-        <Text
-          selectable
-          style={[
-            styles.plainText,
-            monospace && styles.monospace,
-            { color: theme.text },
-          ]}
-        >
-          {text}
-        </Text>
+        <>
+          {htmlSource ? (
+            <Text style={[styles.htmlLabel, { color: theme.textSecondary }]}>
+              HTML 源码（不执行脚本）
+            </Text>
+          ) : null}
+          <Text
+            selectable
+            style={[
+              styles.plainText,
+              monospace && styles.monospace,
+              { color: theme.text },
+            ]}
+          >
+            {text}
+          </Text>
+        </>
       )}
     </ScrollView>
   );
@@ -220,6 +233,7 @@ const styles = StyleSheet.create({
   pdfLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   textContent: { padding: 18, paddingBottom: 40 },
   plainText: { fontSize: 15, lineHeight: 24 },
+  htmlLabel: { fontSize: 13, lineHeight: 20, marginBottom: 12 },
   monospace: { fontFamily: 'monospace', fontSize: 13, lineHeight: 21 },
   status: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 28 },
   statusTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },

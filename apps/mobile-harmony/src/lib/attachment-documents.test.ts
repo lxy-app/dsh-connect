@@ -12,6 +12,7 @@ import {
   hasExpectedOriginalByteLength,
   hasPdfMagic,
   isAttachmentDocumentWithinLimit,
+  isHtmlAttachment,
   isOfficePdfPreview,
   normalizeAttachmentDocumentETag,
   parseAttachmentDocumentPending,
@@ -42,6 +43,24 @@ test('explicit MIME wins over misleading extensions except plain-text Markdown r
   assert.equal(attachmentDocumentKind({ name: 'plain.md', mime: 'text/plain; charset=utf-8' }), 'markdown');
   assert.equal(attachmentDocumentKind({ name: 'payload', mime: 'application/x-json' }), 'text');
   assert.equal(attachmentDocumentKind({ name: 'runtime', mime: 'text/log' }), 'text');
+});
+
+test('HTML extensions and MIME use source-text preview while archives stay unsupported', () => {
+  for (const attachment of [
+    { name: 'page.html', mime: 'application/octet-stream' },
+    { name: 'page.HTM', mime: '' },
+    { name: 'page.html', mime: 'text/plain' },
+    { name: 'payload', mime: 'text/html; charset=utf-8' },
+  ]) {
+    assert.equal(attachmentDocumentKind(attachment), 'text');
+    assert.equal(isHtmlAttachment(attachment), true);
+  }
+  assert.equal(isHtmlAttachment({ name: 'README.md', mime: 'text/markdown' }), false);
+  assert.equal(isHtmlAttachment({ name: 'misleading.html', mime: 'application/zip' }), false);
+  assert.equal(attachmentDocumentKind({ name: 'misleading.html', mime: 'application/zip' }), null);
+  assert.equal(attachmentDocumentKind({ name: 'archive.zip', mime: 'application/zip' }), null);
+  assert.equal(isAttachmentDocumentWithinLimit(ATTACHMENT_DOCUMENT_TEXT_MAX_BYTES, 'text'), true);
+  assert.equal(isAttachmentDocumentWithinLimit(ATTACHMENT_DOCUMENT_TEXT_MAX_BYTES + 1, 'text'), false);
 });
 
 test('only Office inputs are labelled as converted PDF previews', () => {

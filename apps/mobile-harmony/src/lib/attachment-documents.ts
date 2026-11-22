@@ -21,6 +21,8 @@ const EXTENSIONS: Readonly<Record<string, AttachmentDocumentKind>> = {
   txt: 'text',
   json: 'text',
   log: 'text',
+  html: 'text',
+  htm: 'text',
   pdf: 'pdf',
   doc: 'pdf',
   docx: 'pdf',
@@ -32,6 +34,7 @@ const EXTENSIONS: Readonly<Record<string, AttachmentDocumentKind>> = {
 const MARKDOWN_MIMES: ReadonlySet<string> = new Set(['text/markdown', 'text/x-markdown']);
 const TEXT_MIMES: ReadonlySet<string> = new Set([
   'text/plain',
+  'text/html',
   'application/json',
   'text/json',
   'application/x-json',
@@ -49,6 +52,7 @@ const OFFICE_MIMES: ReadonlySet<string> = new Set([
 ]);
 const GENERIC_MIMES: ReadonlySet<string> = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 const OFFICE_EXTENSIONS: ReadonlySet<string> = new Set(['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx']);
+const HTML_EXTENSIONS: ReadonlySet<string> = new Set(['html', 'htm']);
 
 /** Explicit MIME is authoritative; extensions refine only plain/generic metadata. */
 export function attachmentDocumentKind(
@@ -62,6 +66,13 @@ export function attachmentDocumentKind(
   if (TEXT_MIMES.has(mime)) return 'text';
   if (GENERIC_MIMES.has(mime)) return fromName ?? null;
   return null;
+}
+
+/** HTML is source text only; it must never be routed to a WebView or Markdown renderer. */
+export function isHtmlAttachment(attachment: Pick<MobileAttachment, 'name' | 'mime'>): boolean {
+  if (attachmentDocumentKind(attachment) !== 'text') return false;
+  return normalizedMime(attachment.mime) === 'text/html'
+    || HTML_EXTENSIONS.has(extensionOf(attachment.name));
 }
 
 export function isOfficePdfPreview(attachment: Pick<MobileAttachment, 'name' | 'mime'>): boolean {

@@ -109,6 +109,7 @@ apps/mobile-harmony/
 ├── src/platform/      # 平台实现与适配边界
 ├── src/shims/         # 鸿蒙 API 兼容与明确降级
 ├── modules/harmony-audio-stream/ # ArkTS AudioCapturer 实时 PCM 原生模块
+├── modules/harmony-file-export/  # DocumentViewPicker 原附件本地保存模块
 ├── scripts/           # 可重复的补丁、prebuild 和 HAP 构建脚本
 ├── vendor/            # 固定版本的上游 JS 与鸿蒙 HAR 提供包
 ├── app.json           # bundleName、权限、SDK 与 Expo 模块配置
@@ -120,7 +121,8 @@ apps/mobile-harmony/
 
 ## 附件文档预览
 
-- 文件卡点击后才下载；MD/TXT/JSON/LOG 在应用内阅读，PDF 与 Office 转换结果使用本地 `react-native-pdf`。Office 预览依赖 Server 的可选 preview-worker，不需要桌面安装办公套件。缓存重开必须经 Bearer + `If-None-Match` 鉴权并收到 304，401/403 或断网不会直接展示旧缓存。
+- 文件卡点击后才下载；MD/TXT/JSON/LOG 在应用内阅读，HTML/HTM 与 `text/html` 以最大 2 MiB 的等宽、可选中源码文本显示，不执行脚本。PDF 与 Office 转换结果使用本地 `react-native-pdf`。Office 预览依赖 Server 的可选 preview-worker，不需要桌面安装办公套件。缓存重开必须经 Bearer + `If-None-Match` 鉴权并收到 304，401/403 或断网不会直接展示旧缓存。
+- 所有附件的“保存”按钮复用原附件下载与校验缓存，再由 `harmony-file-export` 打开系统 `DocumentViewPicker` 并复制到用户选择的 URI；复制后校验字节数，取消或失败不提示成功，不使用 `Share.share` 代替本地保存。该原生模块必须经 `setup:native`、重新构建并安装 HAP 后才能验收。
 - PDF 原生依赖锁定为 `@react-native-ohos/react-native-pdf@7.1.0`（上游 `react-native-pdf@7.0.4`）与对应 BlobUtil；该版本提供面向 RNOH 0.84 的 ArkTS `PdfViewPackage`。Expo/RNOH 版本保持 SDK 55.0.31 + RNOH 0.84.1。修改这些依赖后必须重新执行 `setup:native` 和 HAP 构建。
 - 已验证 Hermes 导出、unsigned HAP 构建，以及 XYAO-W00（HarmonyOS 6.1 / API 24）上的签名 Release 覆盖安装。实测 DOCX 经 Worker 转 PDF 后，中文标题、正文、列表和表格正常显示，并可连续滚动到第二页。缩放、取消和缓存清理仍需继续验收。
 
