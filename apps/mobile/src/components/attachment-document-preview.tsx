@@ -10,7 +10,12 @@ import {
   type AttachmentDocumentAuth,
   type DownloadedAttachmentDocument,
 } from '@/lib/attachment-document';
-import { describeAttachmentPreviewError, attachmentPreviewKind, type AttachmentPendingState } from '@/lib/attachment-preview';
+import {
+  describeAttachmentPreviewError,
+  attachmentPreviewKind,
+  isHtmlAttachment,
+  type AttachmentPendingState,
+} from '@/lib/attachment-preview';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 const MONOSPACE_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
@@ -40,6 +45,7 @@ export function AttachmentDocumentPreview({
   const serverUrl = auth?.serverUrl;
   const accessToken = auth?.accessToken;
   const previewKind = attachmentPreviewKind(attachment);
+  const htmlSource = isHtmlAttachment(attachment);
   const requestKey = `${attachment.attachmentId}:${attachment.sha256 ?? ''}:${serverUrl ?? ''}:${accessToken ?? ''}:${retryCount}`;
   const state: LoadState = loadState?.key === requestKey
     ? loadState
@@ -85,7 +91,9 @@ export function AttachmentDocumentPreview({
       <View style={styles.status}>
         <Text style={[styles.statusTitle, { color: theme.text }]}>暂不支持应用内预览</Text>
         <Text style={[styles.statusDetail, { color: theme.textSecondary }]}>
-          可点击右上角“下载”获取原始文件，再选择本机应用打开。
+          {Platform.OS === 'android'
+            ? '可点击右上角“保存”，选择本地目录保存原始文件。'
+            : '可点击右上角“保存”，在系统面板中选择“存储到文件”。'}
         </Text>
       </View>
     );
@@ -109,7 +117,9 @@ export function AttachmentDocumentPreview({
             ? '正在生成 PDF 预览…'
             : state.pending === 'fetching'
               ? '正在从桌面获取附件…'
-              : '正在准备文档…'}
+              : htmlSource
+                ? '正在准备 HTML 源码…'
+                : '正在准备文档…'}
         </Text>
         {state.pending === 'converting' ? (
           <Text style={[styles.statusDetail, { color: theme.textSecondary }]}>
@@ -123,11 +133,15 @@ export function AttachmentDocumentPreview({
   if (state.status === 'error') {
     return (
       <View style={styles.status}>
-        <Text style={[styles.errorTitle, { color: theme.danger }]}>无法预览文档</Text>
+        <Text style={[styles.errorTitle, { color: theme.danger }]}>
+          {htmlSource ? '无法读取 HTML 源码' : '无法预览文档'}
+        </Text>
         <Text style={[styles.statusDetail, { color: theme.textSecondary }]}>{state.message}</Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`重试预览 ${attachment.name}`}
+          accessibilityLabel={htmlSource
+            ? `重试读取 HTML 源码 ${attachment.name}`
+            : `重试预览 ${attachment.name}`}
           onPress={retry}
           style={({ pressed }) => [
             styles.retry,
@@ -170,9 +184,16 @@ export function AttachmentDocumentPreview({
       {downloaded.spec.kind === 'markdown' ? (
         <MarkdownText text={text ?? ''} />
       ) : (
-        <Text selectable style={[styles.plainText, { color: theme.text }]}>
-          {text ?? ''}
-        </Text>
+        <>
+          {htmlSource ? (
+            <Text style={[styles.sourceLabel, { color: theme.textSecondary }]}>
+              HTML 源码（不执行脚本）
+            </Text>
+          ) : null}
+          <Text selectable style={[styles.plainText, { color: theme.text }]}>
+            {text ?? ''}
+          </Text>
+        </>
       )}
     </ScrollView>
   );
@@ -202,5 +223,6 @@ const styles = StyleSheet.create({
   pdf: { flex: 1, width: '100%', backgroundColor: '#FFFFFF' },
   reader: { flex: 1, width: '100%' },
   readerContent: { padding: 20, paddingBottom: 48 },
+  sourceLabel: { fontSize: Typography.body, fontWeight: '600', marginBottom: 12 },
   plainText: { fontFamily: MONOSPACE_FONT, fontSize: Typography.body, lineHeight: 23 },
 });

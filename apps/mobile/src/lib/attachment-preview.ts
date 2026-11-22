@@ -37,6 +37,7 @@ export type AttachmentPreviewFailure = {
 const MARKDOWN_MIMES = new Set(['text/markdown', 'text/x-markdown']);
 const TEXT_MIMES = new Set([
   'text/plain',
+  'text/html',
   'application/json',
   'text/json',
   'application/x-json',
@@ -59,6 +60,8 @@ const EXTENSIONS: Readonly<Record<string, Exclude<AttachmentPreviewKind, 'image'
   txt: 'text',
   json: 'text',
   log: 'text',
+  html: 'text',
+  htm: 'text',
   pdf: 'pdf',
   doc: 'office',
   docx: 'office',
@@ -85,6 +88,18 @@ export function attachmentPreviewKind(
   if (TEXT_MIMES.has(mime)) return 'text';
   if (GENERIC_MIMES.has(mime)) return extensionKind ?? 'unsupported';
   return 'unsupported';
+}
+
+/** HTML is always rendered as selectable source text, never as web content. */
+export function isHtmlAttachment(
+  attachment: Pick<MobileAttachment, 'kind' | 'mime' | 'name'>,
+): boolean {
+  if (attachmentPreviewKind(attachment) !== 'text') return false;
+  const mime = attachment.mime.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  if (mime === 'text/html') return true;
+  const extension = attachment.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? '';
+  return (extension === 'html' || extension === 'htm')
+    && (mime === 'text/plain' || GENERIC_MIMES.has(mime));
 }
 
 export function canOpenAttachment(attachment: MobileAttachment): boolean {

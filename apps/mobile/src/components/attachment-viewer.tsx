@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,8 +17,10 @@ import * as Sharing from 'expo-sharing';
 import { AttachmentDocumentPreview } from '@/components/attachment-document-preview';
 import { AttachmentImage } from '@/components/attachment-image';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { saveOriginalFileToAndroid } from '@/lib/attachment-android-save';
 import { attachmentPreviewKind } from '@/lib/attachment-preview';
 import { downloadOriginalFile } from '@/lib/attachment-original';
+import { attachmentMimeType, attachmentUti } from '@/lib/attachment-save-utils';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 export type ViewerAuth = { readonly serverUrl: string; readonly accessToken: string };
@@ -49,19 +52,33 @@ export function AttachmentViewer({
     setDownloading(true);
     try {
       const { file } = await downloadOriginalFile(current, auth);
-      const available = await Sharing.isAvailableAsync();
-      if (!available) {
-        Alert.alert('无法导出', '当前设备不支持系统文件分享。');
+      if (Platform.OS === 'android') {
+        const result = await saveOriginalFileToAndroid(file, current);
+        if (result.status === 'saved') {
+          Alert.alert('已保存', `“${result.fileName}”已保存到所选目录。`);
+        }
         return;
       }
+
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert('无法导出', '当前设备无法打开系统导出面板。');
+        return;
+      }
+      const UTI = attachmentUti(current);
+      // iOS presents the system activity sheet; the user explicitly chooses
+      // “存储到文件” or another destination. No silent-save success is claimed.
       await Sharing.shareAsync(file.uri, {
-        mimeType: current.mime || 'application/octet-stream',
-        dialogTitle: `保存 ${current.name}`,
-        ...(current.name ? { UTI: utiForFileName(current.name) } : {}),
+        mimeType: attachmentMimeType(current),
+        dialogTitle: `存储到文件或导出 ${current.name}`,
+        ...(UTI ? { UTI } : {}),
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
-      Alert.alert('下载失败', error instanceof Error ? error.message : '请检查网络后重试。');
+      Alert.alert(
+        Platform.OS === 'android' ? '保存失败' : '导出失败',
+        error instanceof Error ? error.message : '请检查网络后重试。',
+      );
     } finally {
       setDownloading(false);
     }
@@ -132,7 +149,9 @@ export function AttachmentViewer({
             {current && auth ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`下载原文件 ${current.name}`}
+                accessibilityLabel={Platform.OS === 'android'
+                  ? `保存原文件到本地 ${current.name}`
+                  : `导出原文件 ${current.name}，可选择存储到文件`}
                 disabled={downloading}
                 onPress={() => void handleDownload()}
                 style={({ pressed }) => [
@@ -144,7 +163,7 @@ export function AttachmentViewer({
                 {downloading ? (
                   <ActivityIndicator size="small" color={documentMode ? theme.text : '#fff'} />
                 ) : (
-                  <Text style={[styles.downloadText, documentMode && { color: theme.text }]}>下载</Text>
+                  <Text style={[styles.downloadText, documentMode && { color: theme.text }]}>保存</Text>
                 )}
               </Pressable>
             ) : null}
@@ -168,26 +187,6 @@ export function AttachmentViewer({
       </View>
     </Modal>
   );
-}
-
-/** Maps common extensions to iOS Uniform Type Identifiers for the share sheet. */
-function utiForFileName(name: string): string | undefined {
-  const ext = name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
-  switch (ext) {
-    case 'pdf': return 'com.adobe.pdf';
-    case 'doc': case 'docx': return 'org.openxmlformats.wordprocessingml.document';
-    case 'ppt': case 'pptx': return 'org.openxmlformats.presentationml.presentation';
-    case 'xls': case 'xlsx': return 'org.openxmlformats.spreadsheetml.sheet';
-    case 'md': case 'markdown': return 'net.daringfireball.markdown';
-    case 'txt': return 'public.plain-text';
-    case 'json': return 'public.json';
-    case 'png': return 'public.png';
-    case 'jpg': case 'jpeg': return 'public.jpeg';
-    case 'gif': return 'com.compuserve.gif';
-    case 'webp': return 'org.webmproject.webp';
-    case 'zip': return 'public.zip-archive';
-    default: return undefined;
-  }
 }
 
 const styles = StyleSheet.create({
