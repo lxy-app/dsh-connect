@@ -135,7 +135,7 @@ export function AttachmentDocumentViewer({
 
   const document = state.document;
   if (isHtmlAttachment(attachment)) {
-    return <AttachmentHtmlPreview fileUri={document.file.uri} />;
+    return <AttachmentHtmlPreview html={document.text ?? ''} />;
   }
   if (document.kind === 'pdf') {
     return (

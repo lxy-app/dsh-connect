@@ -3,10 +3,10 @@ import WebView from '@react-native-ohos/react-native-webview/lib';
 
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { canNavigateLocalHtml, htmlReadAccessDirectory } from '@shared/lib/html-preview';
+import { canNavigateLocalHtml } from '@shared/lib/html-preview';
 
 /** Offline local-document preview; no credentials or remote site navigation. */
-export function AttachmentHtmlPreview({ fileUri }: { readonly fileUri: string }) {
+export function AttachmentHtmlPreview({ html }: { readonly html: string }) {
   const theme = useAppTheme();
   return (
     <View style={styles.container}>
@@ -16,14 +16,13 @@ export function AttachmentHtmlPreview({ fileUri }: { readonly fileUri: string })
         </Text>
       </View>
       <WebView
-        source={{ uri: fileUri }}
-        originWhitelist={['file://*', 'data:*', 'blob:*', 'about:blank']}
+        source={{ html }}
+        originWhitelist={['data:*', 'blob:*', 'about:blank']}
         javaScriptEnabled
         domStorageEnabled
-        allowFileAccess
-        allowFileAccessFromFileURLs
+        allowFileAccess={false}
+        allowFileAccessFromFileURLs={false}
         allowUniversalAccessFromFileURLs={false}
-        allowingReadAccessToURL={htmlReadAccessDirectory(fileUri)}
         onShouldStartLoadWithRequest={(event) => canNavigateLocalHtml(event.url)}
         setSupportMultipleWindows={false}
         mixedContentMode="never"

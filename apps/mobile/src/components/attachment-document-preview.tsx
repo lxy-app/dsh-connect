@@ -158,7 +158,7 @@ export function AttachmentDocumentPreview({
 
   const { downloaded, text } = state.result;
   if (htmlSource) {
-    return <AttachmentHtmlPreview fileUri={downloaded.file.uri} />;
+    return <AttachmentHtmlPreview html={text ?? ''} />;
   }
   if (downloaded.spec.kind === 'office' || downloaded.spec.kind === 'pdf') {
     return (
