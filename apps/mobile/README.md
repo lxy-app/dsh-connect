@@ -20,7 +20,7 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 - 会话输入区使用单胶囊容器：空闲时显示语音入口与更多选项，聚焦或有草稿时显示圆形发送按钮；录音时收起输入框和底部导航，仅保留光晕、波形与手势提示。向上滑动可取消本次识别；正常松开后仍按既有链路等待最终转写并回填输入框，由用户确认后发送。
 - 会话模型通过 `/v1/mobile/sessions/{id}/model` 读取目录与当前选择；只读授权可直接查看，`prompt` 授权可从「＋ → 选择模型」切换模型和推理强度。切换只修改当前 Session，不改桌面默认；每个意图使用稳定 requestId，结果不确定时只允许同参数重试，切换待确认期间禁止发送。目录在进入会话和打开面板时主动刷新，活跃 WSS 的 `model/selection` 作为补充；迁移未完成时只读并提示先在桌面完成迁移。
 - 在 `approve` 授权下接收桌面转发的一次性审批与提问：首页横幅与“待处理”页展示，会话内也会固定显示待答卡片；审批只能 `allow-once` 或 `reject`，提问支持选项与自定义文本。
-- 会话中由 `present` 或 `dsh_im_return_file` 明确交付的图片随 transcript 展示：正文 Markdown 图片使用真实宽高比和 `contain` 完整显示，点击可进入全屏分页与应用内缩放；消息下方的附件区默认只展示文件卡，不渲染图片也不请求字节，点击卡片后才加载。MD/TXT/JSON/LOG 直接在应用内阅读，HTML/HTM 以等宽、可选中的“HTML 源码（不执行脚本）”展示（限制 2 MiB），PDF 使用本地阅读器，Office 文档通过 Server 的可选 preview-worker 转 PDF；`202 fetching/converting` 有界重试，关闭预览会取消，失败可手动重试。附件字节使用带 Bearer Token 的独立 HTTPS 端点，不向手机暴露桌面路径；文档缓存按 Server 与不可变附件 ID 隔离；每次重开都携带 Bearer + `If-None-Match` 重新鉴权，只有 304 才复用缓存，401/403、退出或替换登录时清理，断网时不直接展示旧缓存。
+- 会话中由 `present` 或 `dsh_im_return_file` 明确交付的图片随 transcript 展示：正文 Markdown 图片使用真实宽高比和 `contain` 完整显示，点击可进入全屏分页与应用内缩放；消息下方的附件区默认只展示文件卡，不渲染图片也不请求字节，点击卡片后才加载。MD/TXT/JSON/LOG 直接在应用内阅读，HTML/HTM 下载到 App 私有缓存后通过本地 WebView 预览（限制 2 MiB），允许原型脚本运行、拦截外部导航且不注入凭据，PDF 使用本地阅读器，Office 文档通过 Server 的可选 preview-worker 转 PDF；`202 fetching/converting` 有界重试，关闭预览会取消，失败可手动重试。附件字节使用带 Bearer Token 的独立 HTTPS 端点，不向手机暴露桌面路径；文档缓存按 Server 与不可变附件 ID 隔离；每次重开都携带 Bearer + `If-None-Match` 重新鉴权，只有 304 才复用缓存，401/403、退出或替换登录时清理，断网时不直接展示旧缓存。
 - 支持撤销本机授权、断开本机并尽力吊销 Server 端手机凭据。
 - “我的 → 外观”支持跟随系统、浅色和深色三种模式，选择会持久保存；页面、Markdown、底部导航、状态栏与原生弹窗同步切换，深色启动页使用独立背景色。
 

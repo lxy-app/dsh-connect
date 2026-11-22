@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Pdf from 'react-native-pdf';
 
+import { AttachmentHtmlPreview } from '@/components/attachment-html-preview';
 import { MarkdownText } from '@/components/markdown';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -156,6 +157,9 @@ export function AttachmentDocumentPreview({
   }
 
   const { downloaded, text } = state.result;
+  if (htmlSource) {
+    return <AttachmentHtmlPreview fileUri={downloaded.file.uri} />;
+  }
   if (downloaded.spec.kind === 'office' || downloaded.spec.kind === 'pdf') {
     return (
       <Pdf
@@ -184,16 +188,9 @@ export function AttachmentDocumentPreview({
       {downloaded.spec.kind === 'markdown' ? (
         <MarkdownText text={text ?? ''} />
       ) : (
-        <>
-          {htmlSource ? (
-            <Text style={[styles.sourceLabel, { color: theme.textSecondary }]}>
-              HTML 源码（不执行脚本）
-            </Text>
-          ) : null}
-          <Text selectable style={[styles.plainText, { color: theme.text }]}>
-            {text ?? ''}
-          </Text>
-        </>
+        <Text selectable style={[styles.plainText, { color: theme.text }]}>
+          {text ?? ''}
+        </Text>
       )}
     </ScrollView>
   );
@@ -223,6 +220,5 @@ const styles = StyleSheet.create({
   pdf: { flex: 1, width: '100%', backgroundColor: '#FFFFFF' },
   reader: { flex: 1, width: '100%' },
   readerContent: { padding: 20, paddingBottom: 48 },
-  sourceLabel: { fontSize: Typography.body, fontWeight: '600', marginBottom: 12 },
   plainText: { fontFamily: MONOSPACE_FONT, fontSize: Typography.body, lineHeight: 23 },
 });

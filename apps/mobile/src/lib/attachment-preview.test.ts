@@ -125,7 +125,7 @@ test('fresh original bytes and generated PDFs are validated before publication',
   );
 });
 
-test('HTML uses the bounded original-text strategy while ZIP remains save-only', () => {
+test('HTML uses the bounded original-file preview strategy while ZIP remains save-only', () => {
   const script = new TextEncoder().encode('<script>alert(1)</script>');
   const html = document({ name: 'index.html', mime: 'text/html', bytes: script.byteLength });
   const spec = attachmentPreviewSpec(html);
