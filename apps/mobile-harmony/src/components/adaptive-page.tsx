@@ -23,7 +23,7 @@ export function AdaptivePage({
 }) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const layout = useResponsiveLayout();
+  const layout = useResponsiveLayout(master != null && master !== false);
 
   return (
     <View style={[styles.page, { backgroundColor: theme.background }]}>

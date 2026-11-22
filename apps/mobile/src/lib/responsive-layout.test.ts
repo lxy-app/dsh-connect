@@ -58,6 +58,33 @@ test('invalid and extreme sizes never produce a negative detail width', () => {
   assert.equal(resolveResponsiveLayout({ width: 320, height: 200 }).detailWidth, 320);
 });
 
+test('pages without a master reclaim the entire area beside the navigation rail', () => {
+  for (const size of [
+    { width: 744, height: 1024 },
+    { width: 834, height: 1194 },
+    { width: 1024, height: 768 },
+    { width: 1194, height: 834 },
+  ]) {
+    const single = resolveResponsiveLayout({ ...size, hasMaster: false });
+    assert.equal(single.navigationRailWidth, 76);
+    assert.equal(single.sessionMasterWidth, 0);
+    assert.equal(single.detailWidth, size.width - 76);
+    const session = resolveResponsiveLayout({ ...size, hasMaster: true });
+    assert.equal(single.detailWidth, session.detailWidth + session.sessionMasterWidth);
+  }
+});
+
+test('switching pages and shrinking into split view preserves compact widths', () => {
+  for (const hasMaster of [true, false]) {
+    for (const size of [{ width: 390, height: 844 }, { width: 700, height: 600 }]) {
+      const layout = resolveResponsiveLayout({ ...size, hasMaster });
+      assert.equal(layout.mode, 'compact');
+      assert.equal(layout.sessionMasterWidth, 0);
+      assert.equal(layout.detailWidth, size.width);
+    }
+  }
+});
+
 test('reading, form, sheet and touch tokens stay bounded', () => {
   const layout = resolveResponsiveLayout({ width: 1194, height: 834 });
   assert.equal(layout.readingMaxWidth, 760);

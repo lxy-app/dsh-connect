@@ -27,7 +27,9 @@ export function DevicesTab({
   onRefresh: () => void;
 }) {
   const theme = useAppTheme();
-  const layout = useResponsiveLayout();
+  const layout = useResponsiveLayout(false);
+  const contentWidth = Math.max(0, layout.detailWidth - 48);
+  const cardWidth = layout.isExpanded && contentWidth >= 576 ? (contentWidth - 16) / 2 : undefined;
 
   return (
     <ScrollView
@@ -62,7 +64,7 @@ export function DevicesTab({
         </View>
       ) : (
         desktops.map((desktop) => (
-          <View key={desktop.deviceId} style={layout.isExpanded ? styles.expandedCardItem : styles.fullWidth}>
+          <View key={desktop.deviceId} style={cardWidth === undefined ? styles.fullWidth : { width: cardWidth }}>
             <DesktopCard desktop={desktop} onOpenSessions={onOpenSessions} />
           </View>
         ))
@@ -140,16 +142,14 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   expandedContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    gap: 16,
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
   fullWidth: {
     width: '100%',
-  },
-  expandedCardItem: {
-    width: '48%',
-    minWidth: 280,
-    flexGrow: 1,
   },
   header: {
     gap: 4,

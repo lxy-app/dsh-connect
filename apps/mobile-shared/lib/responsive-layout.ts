@@ -22,7 +22,7 @@ export type ResponsiveLayout = {
  * Resolves layout from the current app window, never from a device model.
  * Narrow Split View / Stage Manager windows therefore keep the compact UI.
  */
-export function resolveResponsiveLayout({ width, height }: { width: number; height: number }): ResponsiveLayout {
+export function resolveResponsiveLayout({ width, height, hasMaster = true }: { width: number; height: number; hasMaster?: boolean }): ResponsiveLayout {
   const safeWidth = Number.isFinite(width) ? Math.max(0, width) : 0;
   const safeHeight = Number.isFinite(height) ? Math.max(0, height) : 0;
   const orientation: LayoutOrientation = safeWidth >= safeHeight ? 'landscape' : 'portrait';
@@ -30,7 +30,7 @@ export function resolveResponsiveLayout({ width, height }: { width: number; heig
     ? safeWidth >= EXPANDED_PORTRAIT_MIN_WIDTH
     : safeWidth >= EXPANDED_LANDSCAPE_MIN_WIDTH;
   const navigationRailWidth = isExpanded ? 76 : 0;
-  const sessionMasterWidth = isExpanded ? (orientation === 'landscape' ? 324 : 300) : 0;
+  const sessionMasterWidth = isExpanded && hasMaster ? (orientation === 'landscape' ? 324 : 300) : 0;
 
   return {
     mode: isExpanded ? 'expanded' : 'compact',
