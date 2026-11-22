@@ -18,6 +18,7 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError, getMobileAccessOverview } from '@/lib/mobile-api';
 import { useInteractions, type InteractionDecision } from '@/providers/interactions-provider';
 import { useMobileSession } from '@/providers/mobile-session-provider';
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import type { MobileDesktopAccess, MobileInteraction } from '@shared/types/mobile';
 
 import { InteractionCard } from './interaction-card';
@@ -35,6 +36,7 @@ function withheldApprovals(desktops: readonly MobileDesktopAccess[]): MobileDesk
 /** The phone's TODO inbox for approvals and questions raised by the desktop. */
 export function InteractionsScreen({ embedded = false }: { embedded?: boolean }) {
   const theme = useAppTheme();
+  const layout = useResponsiveLayout(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { interactions, busyId, refresh, decide } = useInteractions();
@@ -93,9 +95,8 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
 
   const content = (
     <View style={[styles.page, { backgroundColor: theme.background, paddingTop: embedded ? 0 : insets.top }]}>
-      {!embedded ? (
-      <View style={styles.head}>
-        <Pressable
+      <View style={[styles.head, embedded && styles.embeddedHead, layout.isExpanded && styles.expandedHead]}>
+        {!embedded ? <Pressable
           accessibilityRole="button"
           accessibilityLabel="返回"
           hitSlop={10}
@@ -107,18 +108,18 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
           ]}
         >
           <Text style={[styles.iconText, { color: theme.text }]}>‹</Text>
-        </Pressable>
+        </Pressable> : null}
         <View style={styles.headText}>
-          <Text style={[styles.title, { color: theme.text }]}>待处理</Text>
+          <Text style={[styles.title, (embedded || layout.isExpanded) && styles.pageTitle, { color: theme.text }]}>待处理{interactions.length > 0 ? ` · ${interactions.length}` : ''}</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            桌面上等待你决定的审批与提问
+            需要你确认的审批与提问
           </Text>
         </View>
       </View>
-      ) : null}
 
       <ScrollView
-        contentContainerStyle={styles.body}
+        style={layout.isExpanded ? styles.expandedScroll : undefined}
+        contentContainerStyle={[styles.body, layout.isExpanded && styles.expandedBody]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
         showsVerticalScrollIndicator={false}
       >
@@ -128,10 +129,11 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
 
         {interactions.length === 0 ? (
           withoutApproval.length > 0 ? null : (
-            <View style={styles.emptyState}>
+            <View style={[styles.emptyState, layout.isExpanded && styles.expandedEmptyState]}>
               <EmptyState
-                title="没有待处理事项"
-                description="DSH 需要你审批工具调用或回答问题时，会在这里出现；桌面端批准后会自动消失。"
+                plain={layout.isExpanded}
+                title="暂无待处理事项"
+                description="需要你审批或回答问题时，会显示在这里。"
               />
             </View>
           )
@@ -181,6 +183,37 @@ function ApprovalScopeNotice({ desktops }: { desktops: MobileDesktopAccess[] }) 
 const styles = StyleSheet.create({
   page: {
     flex: 1,
+  },
+  expandedScroll: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 768,
+  },
+  expandedBody: {
+    flexGrow: 1,
+    paddingHorizontal: 8,
+    paddingBottom: 32,
+  },
+  expandedEmptyState: {
+    paddingTop: 64,
+  },
+  embeddedHead: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  expandedHead: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 768,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 24,
+  },
+  pageTitle: {
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -0.6,
   },
   head: {
     flexDirection: 'row',

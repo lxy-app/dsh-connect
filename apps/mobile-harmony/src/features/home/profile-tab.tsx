@@ -33,7 +33,7 @@ export function ProfileTab({
   const theme = useAppTheme();
   const { preference, setPreference } = useThemeSettings();
   const router = useRouter();
-  const layout = useResponsiveLayout();
+  const layout = useResponsiveLayout(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
   const selectTheme = (next: ThemePreference) => {
@@ -64,7 +64,7 @@ export function ProfileTab({
   return (
     <ScrollView
       style={layout.isExpanded ? { alignSelf: 'center', width: '100%', maxWidth: layout.readingMaxWidth } : undefined}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, layout.isExpanded && styles.expandedContent]}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
@@ -236,6 +236,11 @@ function displayServer(serverUrl: string): string {
 }
 
 const styles = StyleSheet.create({
+  expandedContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    gap: 16,
+  },
   content: {
     paddingHorizontal: 20,
     paddingTop: 12,

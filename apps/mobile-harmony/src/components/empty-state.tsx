@@ -10,21 +10,23 @@ export function EmptyState({
   actionLabel,
   onAction,
   secondary,
+  plain = false,
 }: {
   title: string;
   description: string;
   actionLabel?: string;
   onAction?: () => void;
   secondary?: string;
+  plain?: boolean;
 }) {
   const theme = useAppTheme();
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }, plain && styles.plain]}>
       <View style={[styles.mark, { backgroundColor: theme.accentSoft }]}>
         <Text style={[styles.markText, { color: theme.accent }]}>DSH</Text>
       </View>
       <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-      <Text style={[styles.description, { color: theme.textSecondary }]}>{description}</Text>
+      <Text style={[styles.description, { color: theme.textSecondary }, plain && styles.plainDescription]}>{description}</Text>
       {actionLabel && onAction ? (
         <View style={styles.action}>
           <ActionButton label={actionLabel} onPress={onAction} />
@@ -38,6 +40,13 @@ export function EmptyState({
 }
 
 const styles = StyleSheet.create({
+  plain: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+  plainDescription: {
+    maxWidth: 400,
+  },
   card: {
     borderWidth: 1,
     borderRadius: 20,

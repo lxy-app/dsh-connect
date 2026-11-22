@@ -138,7 +138,7 @@ export function HomeScreen() {
           </Pressable>
         ) : null}
 
-        {interactions.length > 0 ? (
+        {interactions.length > 0 && tab !== 'interactions' ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${interactions.length} 个待处理的审批或提问`}
@@ -153,9 +153,14 @@ export function HomeScreen() {
         ) : null}
 
         {loading && !overview ? (
+          <View style={styles.page}>
+            <Text style={[styles.loadingTitle, layout.isExpanded && styles.expandedLoadingTitle, { color: theme.text }]}>
+              {{ sessions: '会话', interactions: '待处理', devices: '设备', profile: '我的' }[tab]}
+            </Text>
           <View style={styles.loading}>
             <ActivityIndicator color={theme.accent} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>正在同步权限与会话…</Text>
+          </View>
           </View>
         ) : tab === 'sessions' ? (
           <SessionsTab
@@ -234,6 +239,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
+  },
+  loadingTitle: {
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '700',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  expandedLoadingTitle: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
   },
   loadingText: {
     fontSize: Typography.body,

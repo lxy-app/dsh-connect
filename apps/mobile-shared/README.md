@@ -14,6 +14,7 @@
 - `lib/pending-reply.ts`：提示词发送后的持久进度对齐。
 - `lib/keyed-publish-queue.ts`：同 key 发布任务去重。
 - `lib/responsive-layout.ts`：按应用窗口宽高计算 compact / expanded、导航 rail、会话主栏和阅读宽度。
+- `useResponsiveLayout(false)` / `resolveResponsiveLayout({ width, height, hasMaster: false })` 用于无主栏页面，不扣除会话主栏宽度；默认保留会话布局兼容性。容器不改变详情树的位置，旋转时避免重建详情状态。
 - `components/app-navigation.tsx`：底部 Tab 与 Pad 导航 rail 的展示组件，图标和主题由壳注入。
 - `components/session-master-detail.tsx`：会话主栏与详情的通用容器，不持有路由或会话状态。
 - `hooks/use-responsive-layout.ts`：监听旋转、分屏和窗口尺寸变化。

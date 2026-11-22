@@ -15,7 +15,9 @@ export function SessionMasterDetail({
 }) {
   return (
     <View style={styles.row}>
-      <View style={[styles.master, { width: masterWidth, borderColor, borderRightWidth: masterWidth > 0 ? StyleSheet.hairlineWidth : 0 }]}>{master}</View>
+      {masterWidth > 0 ? (
+        <View style={[styles.master, { width: masterWidth, borderColor }]}>{master}</View>
+      ) : null}
       <View style={styles.detail}>{children}</View>
     </View>
   );
