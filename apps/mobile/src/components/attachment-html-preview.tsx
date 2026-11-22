@@ -20,6 +20,7 @@ export function AttachmentHtmlPreview({ fileUri }: { readonly fileUri: string })
         originWhitelist={['file://*', 'data:*', 'blob:*', 'about:blank']}
         javaScriptEnabled
         domStorageEnabled
+        allowFileAccess
         allowFileAccessFromFileURLs
         allowUniversalAccessFromFileURLs={false}
         allowingReadAccessToURL={htmlReadAccessDirectory(fileUri)}
