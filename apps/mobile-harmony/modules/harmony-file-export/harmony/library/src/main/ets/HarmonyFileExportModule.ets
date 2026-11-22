@@ -1,7 +1,9 @@
 import {
+  ExpoFunction,
   ExpoModule,
   ExpoModuleContext,
   ExpoModuleDefinition,
+  ExpoValueTypes,
 } from '@expo-harmony/expo-modules-core';
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
@@ -35,8 +37,12 @@ export class HarmonyFileExportModule extends ExpoModule {
       .constant('platform', 'harmony')
       .asyncFunction(
         'save',
-        async (sourceUri: string, suggestedName: string): Promise<string> =>
-          this.saveInternal(sourceUri, suggestedName),
+        ExpoFunction.typed2(
+          ExpoValueTypes.string(),
+          ExpoValueTypes.string(),
+          async (sourceUri: string, suggestedName: string): Promise<string> =>
+            this.saveInternal(sourceUri, suggestedName),
+        ),
       );
   }
 
