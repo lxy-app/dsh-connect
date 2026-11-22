@@ -220,6 +220,14 @@ apps/mobile/
 └── eslint.config.js       # Expo flat ESLint 配置
 ```
 
+## iOS HTML 预览
+
+HTML 使用文档下载器完成鉴权、长度校验和缓存复验后，通过 WebView 的 `source.html` 渲染；不直接导航到附件下载接口（该接口返回 `Content-Disposition: attachment`），也不向 WebView 传递服务器地址或登录凭据。支持页面脚本，拒绝外部导航、新窗口与本地文件访问；加载失败、超时或 Web 内容进程退出时回到文档重试入口。预览不会显示内部鉴权说明。
+
+原生文档阅读器与 Web 降级组件分别使用 `.native.tsx` / `.web.tsx`，默认入口仅供类型与静态工具解析。新增 WebView 依赖后必须重新构建原生 App；JS 导出与单测不能替代 iOS 真机验收。
+
+2026-11-22：基于已合并 PR #54 的 main 修复下载地址直连预览；主线 ESLint/TypeScript、147 项测试、iOS/Android JS bundle 导出通过。新增组件边界测试覆盖只传 HTML 文本、导航拒绝、加载超时与重试错误回调；本次未执行 iOS 原生构建或真机验收。
+
 ## 下一步
 
 1. 继续完善移动 WSS 的重连、错误状态和后台恢复体验。
