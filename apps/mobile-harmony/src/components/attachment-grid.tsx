@@ -25,18 +25,18 @@ export function AttachmentGrid({
       {attachments.map((attachment) => {
         const isImage = attachment.kind === 'image';
         const documentKind = attachmentDocumentKind(attachment);
-        const canPreview = isImage || (documentKind !== null && attachment.state !== 'unavailable');
+        const canOpen = isImage || attachment.state !== 'unavailable';
         return (
           <Pressable
             key={attachment.attachmentId}
-            accessibilityRole={isImage ? 'imagebutton' : canPreview ? 'button' : undefined}
-            accessibilityLabel={isImage ? `打开图片 ${attachment.name}` : canPreview ? `打开文档 ${attachment.name}` : attachment.name}
-            disabled={!canPreview}
+            accessibilityRole={isImage ? 'imagebutton' : canOpen ? 'button' : undefined}
+            accessibilityLabel={isImage ? `打开图片 ${attachment.name}` : canOpen ? `打开附件 ${attachment.name}` : attachment.name}
+            disabled={!canOpen}
             onPress={() => onOpen(attachment)}
             style={({ pressed }) => [
               styles.fileRow,
               { backgroundColor: theme.surfaceMuted, borderColor: theme.border },
-              pressed && canPreview && styles.pressed,
+              pressed && canOpen && styles.pressed,
             ]}
           >
             <Text style={[styles.fileKind, { color: theme.textSecondary }]}>
@@ -61,10 +61,10 @@ export function AttachmentGrid({
                           : ' · 点击查看 PDF'
                         : documentKind
                           ? ' · 点击查看文档'
-                          : ' · 暂不支持应用内预览'}
+                          : ' · 点击查看下载选项'}
               </Text>
             </View>
-            {canPreview ? (
+            {canOpen ? (
               <Text style={[styles.fileChevron, { color: theme.textSecondary }]}>›</Text>
             ) : null}
           </Pressable>

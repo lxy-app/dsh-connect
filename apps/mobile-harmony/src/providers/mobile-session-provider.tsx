@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Platform } from 'react-native';
 
 import { clearAttachmentDocumentCache } from '@/lib/attachment-document-loader';
+import { clearOriginalFileCache } from '@/lib/attachment-original';
 import {
   getMobileIdentity,
   isUnauthorizedError,
@@ -398,6 +399,7 @@ function appVersion(): string {
 
 function clearDocumentCacheBestEffort(): void {
   void clearAttachmentDocumentCache().catch(() => undefined);
+  void clearOriginalFileCache().catch(() => undefined);
 }
 
 /**

@@ -8,7 +8,6 @@ import { ReadAloudButton } from '@/components/read-aloud-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { markdownToPlainText } from '@/lib/markdown';
-import { attachmentDocumentKind } from '@/lib/attachment-documents';
 import {
   processGroupOpen,
   processGroupTitle,
@@ -61,10 +60,10 @@ export function TurnCard({
       setViewer({ kind: 'image', attachments: imageAttachments, initialIndex: index });
       return;
     }
-    const document = group.attachments.find(
-      (attachment) => attachment.attachmentId === attachmentId && attachmentDocumentKind(attachment) !== null,
-    );
-    if (document) setViewer({ kind: 'document', attachment: document });
+    const selected = group.attachments.find((attachment) => attachment.attachmentId === attachmentId);
+    // Unsupported formats still open the viewer's download-only state. Never
+    // silently ignore a delivered file link just because it has no previewer.
+    if (selected) setViewer({ kind: 'document', attachment: selected });
   }, [group.attachments, imageAttachments]);
 
   const elapsed = elapsedLabel(running ? now - group.startedAt : group.endedAt - group.startedAt);

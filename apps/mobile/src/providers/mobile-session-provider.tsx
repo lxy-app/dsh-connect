@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Platform } from 'react-native';
 
 import { clearAttachmentDocumentCache } from '@/lib/attachment-document';
+import { clearOriginalFileCache } from '@/lib/attachment-original';
 import {
   getMobileIdentity,
   isUnauthorizedError,
@@ -401,6 +402,9 @@ function appVersion(): string {
 function bestEffortClearAttachmentDocuments(): void {
   void clearAttachmentDocumentCache().catch(() => {
     // Cache cleanup is best-effort; no image cache or credential flow changes.
+  });
+  void clearOriginalFileCache().catch(() => {
+    // Original-file cache cleanup is also best-effort.
   });
 }
 

@@ -23,12 +23,17 @@ import type {
 } from '../types.js';
 import { errorCode, errorMessage, isRecord } from '../types.js';
 import { AttachmentIndex } from './attachment-index.js';
-import { rewriteAttachmentImageLinks } from './attachment-markdown.js';
-import { extractAttachmentCandidates, extractMessageAttachmentCandidates } from './attachment-extract.js';
+import {
+  isLocalMarkdownImagePath,
+  markdownImageDestinations,
+  resolveAttachmentLinkPath,
+  rewriteAttachmentLinks,
+} from './attachment-markdown.js';
+import { attachmentID, extractAttachmentCandidates, extractMessageAttachmentCandidates } from './attachment-extract.js';
 import type { AttachmentCandidate, MessageAttachmentCandidate } from './attachment-extract.js';
 import { AttachmentFetcher, guessKind, guessMime } from './attachment-fetch.js';
 import type { AttachmentByteReader, AttachmentUploader, MessageAttachmentByteReader } from './attachment-fetch.js';
-import { evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE, ATTACHMENT_ERROR_UNAVAILABLE } from './attachment-policy.js';
+import { displayName, evaluateAttachmentPath, ATTACHMENT_ERROR_TOO_LARGE, ATTACHMENT_ERROR_UNAVAILABLE } from './attachment-policy.js';
 import { CursorJournal } from './cursor-journal.js';
 import { modelCatalogInput, modelSelectInput, pageInput, promptInput, sessionAddress } from './input-validation.js';
 import type {
@@ -889,6 +894,33 @@ export class HostSessionAdapter {
       sessionId,
       ...(wiring.toolAllowlist ? { toolAllowlist: wiring.toolAllowlist } : {}),
     });
+    // DSH also lets an assistant embed a workspace image without calling
+    // present. Treat that Markdown image itself as delivery intent, while the
+    // normal path policy below still enforces workspace containment, sensitive
+    // names, symlink rejection and size limits. External URLs never qualify.
+    const declaredPaths = new Set(
+      candidates.map((candidate) => resolveAttachmentLinkPath(candidate.path, workspaceRoot)),
+    );
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      const turn = messageTurns.get(message) ?? 0;
+      markdownImageDestinations(message.text).forEach((destination, index) => {
+        if (!isLocalMarkdownImagePath(destination)) return;
+        const resolved = resolveAttachmentLinkPath(destination, workspaceRoot);
+        if (declaredPaths.has(resolved)) return;
+        declaredPaths.add(resolved);
+        candidates.push({
+          attachmentId: attachmentID(sessionId, 'deliverable', message.seq, index),
+          seq: message.seq,
+          turn,
+          index,
+          source: 'deliverable',
+          path: resolved,
+          name: displayName(resolved),
+          occurredAt: message.occurredAt,
+        });
+      });
+    }
     const seen = new Set<string>();
     for (const candidate of candidates.slice(0, MAX_ATTACHMENTS_PER_TRANSCRIPT)) {
       if (seen.has(candidate.attachmentId)) continue;
@@ -941,16 +973,23 @@ export class HostSessionAdapter {
       this.#mountAttachment(messages, messageTurns, candidate, attachment);
     }
 
-    // DSH writes delivered images as Markdown image links to desktop paths.
-    // Resolve only exact declarations from the same turn into opaque mobile
-    // references; never use a filename-only match or mutate the session log.
+    // DSH writes delivered files as Markdown links to desktop paths. Resolve
+    // only exact declarations from the same turn into opaque mobile references;
+    // never use a filename-only match or mutate the session log.
     for (const message of messages) {
-      if (message.role !== 'assistant' || !message.text.includes('![')) continue;
+      if (message.role !== 'assistant' || !message.text.includes('](')) continue;
       const turn = messageTurns.get(message) ?? 0;
-      if (turn <= 0) continue;
-      const rewritten = rewriteAttachmentImageLinks(
+      // A page can start in the middle of a turn, so its assistant message has
+      // no turn/start marker and is reported as turn 0. Fall back to the
+      // declarations already emitted at or before that message; never borrow a
+      // later turn's file to rewrite an older link.
+      const turnCandidates = turn > 0
+        ? candidates.filter((candidate) => candidate.turn === turn)
+        : candidates.filter((candidate) => candidate.turn <= 0 || candidate.seq <= message.seq);
+      const rewritten = rewriteAttachmentLinks(
         message.text,
-        candidates.filter((candidate) => candidate.turn === turn),
+        turnCandidates,
+        workspaceRoot,
       );
       if (rewritten !== message.text) Object.assign(message, { text: rewritten });
     }

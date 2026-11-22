@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Pdf from 'react-native-pdf';
 
+import { AttachmentHtmlPreview } from '@/components/attachment-html-preview';
 import { MarkdownText } from '@/components/markdown';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -10,7 +11,12 @@ import {
   type AttachmentDocumentAuth,
   type DownloadedAttachmentDocument,
 } from '@/lib/attachment-document';
-import { describeAttachmentPreviewError, type AttachmentPendingState } from '@/lib/attachment-preview';
+import {
+  describeAttachmentPreviewError,
+  attachmentPreviewKind,
+  isHtmlAttachment,
+  type AttachmentPendingState,
+} from '@/lib/attachment-preview';
 import type { MobileAttachment } from '@shared/types/mobile';
 
 const MONOSPACE_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
@@ -39,13 +45,15 @@ export function AttachmentDocumentPreview({
   const [loadState, setLoadState] = useState<KeyedLoadState | null>(null);
   const serverUrl = auth?.serverUrl;
   const accessToken = auth?.accessToken;
+  const previewKind = attachmentPreviewKind(attachment);
+  const htmlSource = isHtmlAttachment(attachment);
   const requestKey = `${attachment.attachmentId}:${attachment.sha256 ?? ''}:${serverUrl ?? ''}:${accessToken ?? ''}:${retryCount}`;
   const state: LoadState = loadState?.key === requestKey
     ? loadState
     : { status: 'loading', pending: null };
 
   useEffect(() => {
-    if (!serverUrl || !accessToken) return;
+    if (!serverUrl || !accessToken || previewKind === 'unsupported') return;
     let active = true;
     const controller = new AbortController();
     const load = async () => {
@@ -75,9 +83,22 @@ export function AttachmentDocumentPreview({
       active = false;
       controller.abort();
     };
-  }, [attachment, serverUrl, accessToken, retryCount, requestKey]);
+  }, [attachment, serverUrl, accessToken, retryCount, requestKey, previewKind]);
 
   const retry = () => setRetryCount((current) => current + 1);
+
+  if (previewKind === 'unsupported') {
+    return (
+      <View style={styles.status}>
+        <Text style={[styles.statusTitle, { color: theme.text }]}>暂不支持应用内预览</Text>
+        <Text style={[styles.statusDetail, { color: theme.textSecondary }]}>
+          {Platform.OS === 'android'
+            ? '可点击右上角“保存”，选择本地目录保存原始文件。'
+            : '可点击右上角“保存”，在系统面板中选择“存储到文件”。'}
+        </Text>
+      </View>
+    );
+  }
 
   if (!serverUrl || !accessToken) {
     return (
@@ -97,7 +118,9 @@ export function AttachmentDocumentPreview({
             ? '正在生成 PDF 预览…'
             : state.pending === 'fetching'
               ? '正在从桌面获取附件…'
-              : '正在准备文档…'}
+              : htmlSource
+                ? '正在准备 HTML 源码…'
+                : '正在准备文档…'}
         </Text>
         {state.pending === 'converting' ? (
           <Text style={[styles.statusDetail, { color: theme.textSecondary }]}>
@@ -111,11 +134,15 @@ export function AttachmentDocumentPreview({
   if (state.status === 'error') {
     return (
       <View style={styles.status}>
-        <Text style={[styles.errorTitle, { color: theme.danger }]}>无法预览文档</Text>
+        <Text style={[styles.errorTitle, { color: theme.danger }]}>
+          {htmlSource ? '无法读取 HTML 源码' : '无法预览文档'}
+        </Text>
         <Text style={[styles.statusDetail, { color: theme.textSecondary }]}>{state.message}</Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`重试预览 ${attachment.name}`}
+          accessibilityLabel={htmlSource
+            ? `重试读取 HTML 源码 ${attachment.name}`
+            : `重试预览 ${attachment.name}`}
           onPress={retry}
           style={({ pressed }) => [
             styles.retry,
@@ -130,6 +157,10 @@ export function AttachmentDocumentPreview({
   }
 
   const { downloaded, text } = state.result;
+  if (htmlSource) {
+    if (!auth) return null;
+    return <AttachmentHtmlPreview attachment={attachment} auth={auth} />;
+  }
   if (downloaded.spec.kind === 'office' || downloaded.spec.kind === 'pdf') {
     return (
       <Pdf

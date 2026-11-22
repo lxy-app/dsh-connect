@@ -20,13 +20,15 @@ DSH Connect 的 iOS / Android 移动客户端，基于 **Expo SDK 58、React Nat
 - 会话输入区使用单胶囊容器：空闲时显示语音入口与更多选项，聚焦或有草稿时显示圆形发送按钮；录音时收起输入框和底部导航，仅保留光晕、波形与手势提示。向上滑动可取消本次识别；正常松开后仍按既有链路等待最终转写并回填输入框，由用户确认后发送。
 - 会话模型通过 `/v1/mobile/sessions/{id}/model` 读取目录与当前选择；只读授权可直接查看，`prompt` 授权可从「＋ → 选择模型」切换模型和推理强度。切换只修改当前 Session，不改桌面默认；每个意图使用稳定 requestId，结果不确定时只允许同参数重试，切换待确认期间禁止发送。目录在进入会话和打开面板时主动刷新，活跃 WSS 的 `model/selection` 作为补充；迁移未完成时只读并提示先在桌面完成迁移。
 - 在 `approve` 授权下接收桌面转发的一次性审批与提问：首页横幅与“待处理”页展示，会话内也会固定显示待答卡片；审批只能 `allow-once` 或 `reject`，提问支持选项与自定义文本。
-- 会话中由 `present` 或 `dsh_im_return_file` 明确交付的图片随 transcript 展示：正文 Markdown 图片使用真实宽高比和 `contain` 完整显示，点击可进入全屏分页与应用内缩放；消息下方的附件区默认只展示文件卡，不渲染图片也不请求字节，点击卡片后才加载。MD/TXT/JSON/LOG 直接在应用内阅读，PDF 使用本地阅读器，Office 文档通过 Server 的可选 preview-worker 转 PDF；`202 fetching/converting` 有界重试，关闭预览会取消，失败可手动重试。附件字节使用带 Bearer Token 的独立 HTTPS 端点，不向手机暴露桌面路径；文档缓存按 Server 与不可变附件 ID 隔离；每次重开都携带 Bearer + `If-None-Match` 重新鉴权，只有 304 才复用缓存，401/403、退出或替换登录时清理，断网时不直接展示旧缓存。
+- 会话中由 `present` 或 `dsh_im_return_file` 明确交付的图片随 transcript 展示：正文 Markdown 图片使用真实宽高比和 `contain` 完整显示，点击可进入全屏分页与应用内缩放；消息下方的附件区默认只展示文件卡，不渲染图片也不请求字节，点击卡片后才加载。MD/TXT/JSON/LOG 直接在应用内阅读，HTML/HTM 下载到 App 私有缓存后通过本地 WebView 预览（限制 2 MiB），允许原型脚本运行、拦截外部导航且不注入凭据，PDF 使用本地阅读器，Office 文档通过 Server 的可选 preview-worker 转 PDF；`202 fetching/converting` 有界重试，关闭预览会取消，失败可手动重试。附件字节使用带 Bearer Token 的独立 HTTPS 端点，不向手机暴露桌面路径；文档缓存按 Server 与不可变附件 ID 隔离；每次重开都携带 Bearer + `If-None-Match` 重新鉴权，只有 304 才复用缓存，401/403、退出或替换登录时清理，断网时不直接展示旧缓存。
 - 支持撤销本机授权、断开本机并尽力吊销 Server 端手机凭据。
 - “我的 → 外观”支持跟随系统、浅色和深色三种模式，选择会持久保存；页面、Markdown、底部导航、状态栏与原生弹窗同步切换，深色启动页使用独立背景色。
 
 在会话输入框点击「＋」可拍照、选择照片或添加文件。所选附件进入待发送区，上传完成后可随指令发送。
 
-尚未实现：离线草稿、非图片文件下载/保存/分享（M2）、推送（APNs/FCM）、生物识别和 Web 端火山 ASR 中继。待处理列表由 2 秒轮询维持，App 回到前台会立即刷新，进入后台后停止轮询。
+附件查看器的“保存”在 Android 通过系统目录选择器和 SAF 创建、写入并校验真实本地文件，重名使用数字后缀且不覆盖；iOS 打开系统导出面板，由用户选择“存储到文件”，不宣称静默保存。ZIP 等不支持应用内预览的格式仍可保存原文件。
+
+尚未实现：离线草稿、推送（APNs/FCM）、生物识别和 Web 端火山 ASR 中继。待处理列表由 2 秒轮询维持，App 回到前台会立即刷新，进入后台后停止轮询。
 
 App 在前台轮询待处理项时，桌面会优先把审批交给手机（默认 6 秒窗口）；窗口内未作答则撤回手机卡片并改由桌面原生审批，因此两端不会同时出现两张卡。
 
@@ -42,7 +44,7 @@ App 在前台轮询待处理项时，桌面会优先把审批交给手机（默�
 - `expo-local-authentication`：后续用于应用解锁和敏感操作确认。
 - `expo-camera`：目前保留既有原生依赖与配置，扫码配对 UI 已移除；依赖清理由独立原生改动处理。
 - `expo-audio`：采集 16 kHz、单声道、Int16 PCM 麦克风音频流，并播放云端或系统音频。
-- `expo-file-system`：在缓存目录写入 TTS MP3 / PCM 和按需下载的预览文档；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
+- `expo-file-system`：在缓存目录写入 TTS MP3 / PCM 和按需下载的预览文档，并通过 Android SAF 将原附件保存到用户所选目录；`pako` 与 `base64-js` 处理 Agent Plan 线协议。
 - `react-native-pdf` + `react-native-blob-util`：显示本地 PDF 与 Office 转换结果；`@config-plugins/react-native-pdf` 负责 CNG 原生配置。它们不属于 Expo Go，变更后必须重新构建 Development Build。
 - `expo-sqlite`：后续保存草稿、游标和可重建缓存。
 - `expo-notifications`：后续接入原生 APNs/FCM token 与通知深链。远程推送尚未实现，`app.json` 中 `enableRemoteNotifications` 保持 `false`，不向 iOS 工程写入 `aps-environment`；未来启用时需同时在 Apple Developer 账号、App ID 和签名 Profile 中配置 Push Notifications 能力。

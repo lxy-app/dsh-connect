@@ -29,7 +29,7 @@ export function AttachmentGrid({
         const previewStatus = attachment.state === 'unavailable'
           ? '文件已在桌面删除或过期'
           : previewKind === 'unsupported'
-            ? '暂不支持应用内预览'
+            ? '点击查看下载选项'
             : attachment.state === 'failed'
               ? '加载失败，点击重试预览'
               : isImage

@@ -962,3 +962,69 @@ App 选择（ImagePicker / DocumentPicker）
 - 鸿蒙：ESLint、TypeScript、130 项单元测试、Hermes 导出与 unsigned HAP 原生构建通过；PDF/Blob HAR、CMake/C++ Package 已进入构建结果。
 - 协议与发布：OpenAPI YAML、Compose 配置、全部 GitHub Actions actionlint 通过。真实移动设备上的版式、缩放、中文显示、取消和缓存清理仍待验收。
 - 鸿蒙真机修正：初次白板日志确认文件已下载，但旧 PDF 包缺少匹配运行时实现。升级为 `@react-native-ohos/react-native-pdf@7.1.0` / 上游 `7.0.4` 后，兼容补丁必须保留其有效 ArkTS `PdfViewPackage`。已在 XYAO-W00（API 24）用签名 Release HAP 验证 DOCX 中文标题、正文、列表、表格显示及滚动到第二页；缩放、取消和撤权清理仍另行验收。
+
+## 22. 正文文件链接与原文件下载（2026-11-21）
+
+### 问题
+
+助手正文中以 Markdown 普通链接交付的文件（如 `[报告.docx](/work/a/报告.docx)`）在移动端点击后提示"无法打开链接"。根因：Connector 只改写 Markdown **图片**链接为 `dsh-attachment://<id>`，普通文件链接保留桌面路径；移动端 `openLink` 只接受 `http/https/mailto`，其他 scheme 直接拒绝。
+
+### 方案
+
+1. **Connector 普通链接投影**：`rewriteAttachmentLinks` 同时处理 `![image](path)` 和 `[file](path)`，仅对路径精确匹配、非歧义的交付声明改写为 `dsh-attachment://<id>`。相对路径在 Connector 内按受权工作区根目录解析，且不得逃出该根目录；跳过 inline code span 中的示例链接。DSH Session Log 不变，桌面路径不离开 Connector。
+2. **中途窗口兼容**：transcript 是滑动窗口，页面可能缺少 `turn/start`，助手消息 turn 为 0。此时回退到"该消息之前已声明的候选文件"做匹配，仍然只做精确路径匹配，不借用后续 turn 的文件。
+3. **正文工作区图片**：助手消息里的本地 `![alt](path)` 即使没有单独 `present`，也会被视为交付意图。Connector 仅接受 PNG/JPEG/WebP/GIF 本地路径，并继续执行工作区边界、敏感名称、符号链接和大小校验；外部 HTTP 图片、普通文件链接和代码示例不会因此变成附件。匹配成功后，独立成段的图片由两端 `MarkdownText` 直接内嵌显示。
+4. **Mobile 正文链接分发**：`openLink` 先解析 `dsh-attachment://` URI，在当前消息 `attachments[]` 中查找并调用 `onOpenAttachment`，复用现有查看器；未匹配时提示"附件不可用"，不退化为系统浏览器。普通 `http/https/mailto` 行为不变。
+5. **不支持格式的下载页**：ZIP 等没有应用内预览器的附件也必须打开统一查看器，显示"暂不支持应用内预览"并保留原文件下载按钮；不得在 `openAttachment` 中静默返回。附件卡同样可进入该下载页。
+6. **HTML 本地 WebView 预览**：HTML/HTM 与 `text/html` 先按原附件链路下载到 App 私有缓存并读取为文本，再用 WebView 的 `source.html` 直接渲染，避免鸿蒙 `file://` 访问受限导致黑屏；允许原型脚本运行，不注入 Token 或 Server 地址，外部导航被拦截，本地文件访问和通用跨域访问关闭。原附件大小限制仍为 2 MiB。
+7. **原文件下载**：新增 `downloadOriginalFile`，走 `GET /v1/mobile/attachments/{id}` 获取原始字节（非 PDF 预览衍生文件），支持 202 有界重试、ETag/304 缓存重验、字节校验和原子落盘。缓存键与文档预览缓存隔离。
+8. **真正保存到本地**：Android 通过 SAF 选择目录并创建真实文档；鸿蒙通过原生 `DocumentViewPicker` 选择保存位置并复制到返回 URI，两端均校验最终文件字节数。iOS 使用系统导出面板，由用户选择“存储到文件”。不得以 `Share.share` 或系统分享代替本地保存，也不得把 App 私有缓存显示为已下载。
+
+### 安全边界
+
+- 手机只持有不透明 `attachmentId`，不接触桌面路径。
+- 原文件缓存复用前携带 Bearer + `If-None-Match` 重新鉴权；仅授权后的 304 可以使用缓存。
+- 401/403 清理原文件缓存；登出/替换登录时同时清理文档预览和原文件缓存。
+- 用户已显式导出到系统目录的副本不反向删除。
+
+### 验证
+
+- Connector：类型检查通过，链接改写测试覆盖普通链接、angle-bracket、相对路径、混合图片+文件、code span 跳过、歧义拒绝、“窗口从中途开始”回退，以及未 `present` 的工作区 Markdown 图片；全量 147 项测试通过。
+- 真机日志：Connector 对真实会话的 `[wps-objectives-m1.html](prototypes/wps-objectives-m1.html)` 返回 `dsh-attachment://att_...`，确认相对路径与中途窗口两条链路均生效。
+- 主线 Mobile：ESLint、TypeScript、139 项单元测试、iOS/Android JS bundle 全部通过。
+- 鸿蒙：ESLint、TypeScript、130+3 项单元测试通过；签名 Release HAP 构建、安装和首屏启动通过。
+- 下载与原文件导出：已通过 DOCX 附件卡验证（PDF 预览 + 系统分享面板显示原始文件名）；正文链接的最终点按交互仍需真机手动确认。
+- 注意：长消息超过 700 字时默认折叠为纯文本预览，需先点“展开全文”进入 Markdown 渲染，正文链接才可点击。
+
+### 本地保存与 HTML 源码预览（2026-11-22）
+
+- Android 使用 `StorageAccessFramework` 选择目录、创建文档、写入并校验原文件，重名使用数字后缀，失败删除未完成文件；不再调用系统分享。
+- 鸿蒙新增可重复构建的 `modules/harmony-file-export` 原生模块，使用 `DocumentViewPicker` 与 `fs.copy` 保存，随后通过 `fs.open` / `fs.stat(fd)` 比较源和目标字节数，只有校验一致才返回 `saved`。保存 URI 不进入日志或返回给 JS。
+- iOS 保留系统导出面板，由用户明确选择“存储到文件”，不宣称静默保存成功。
+- 鸿蒙 HTML/HTM 先缓存到 App 私有目录并读取为文本，再使用已修补的 `@react-native-ohos/react-native-webview` 的 `source.html`，由 ArkWeb `loadData` 渲染；补丁同步写入构建使用的 HAR，使用空白页初始化并保护控制器生命周期。允许原型脚本运行，外部导航在原生层拦截，本地文件访问和通用跨域访问关闭，不注入凭据或远程站点地址。原文件大小上限 2 MiB；ZIP 等仍为“不支持预览+保存”。
+- 验证：主线 Mobile 146 项、鸿蒙 134+3 项测试及两端 ESLint/TypeScript 全部通过。原生保存面板、取消、真实落盘和本地 WebView 显示需通过原生构建与真机验收，不能以静态检查代替。
+
+### 鸿蒙 HTML 空白修复（2026-11-22）
+
+- 真机冷启动日志显示，RNOH 网络请求使用的 WebCookieManager 在 Worker 线程抢先加载 ArkWeb，随后主线程创建 Web 实例报 `Init nweb failed`。在 EntryAbility 主线程、RNOH 启动前同步调用 `initializeWebEngine()` 后，最小 HTML 正常显示，控制器绑定与页面完成事件均恢复。
+- 初始化通过 `plugins/with-arkweb.js` 配置插件生成；WebView 补丁同步覆盖 npm 源码、HAR 和 ohpm 副本，移除未经绑定的定时初始化、销毁时刷新等操作，并在原生层拦截 HTML 外部导航。
+- 预览使用已鉴权下载的文本，不直接导航到带 `Content-Disposition: attachment` 的下载接口；增加 15 秒加载超时和重新加载入口。开发模式补齐共享组件的 `react/jsx-dev-runtime` 映射。
+- 已通过鸿蒙 ESLint/TypeScript、134 项业务单测和 10 项构建脚本测试。Debug/Release 签名 HAP 构建和覆盖安装通过；PAD（API 24）实测最小页面的中文与样式、按钮 JavaScript、外部导航拦截及失败超时提示，用户确认原始 `html-preview-test.html` 已正常。临时诊断路由已移除；关闭 Metro 后，最终 Release 冷启动及原始附件渲染、脚本交互再次通过。旋转、分屏及其他附件格式本次未重新验收。
+
+### 鸿蒙文档预览展示优化（2026-11-22）
+
+- 顶部合并为“关闭 / 文件名 / 保存”工具栏，按实际安全区避让系统区域。取消固定大块黑色留白、底部文件名和 HTML 常驻限制说明，正文使用剩余空间，保留 HTML 文件自身样式。
+- 文件名单行中间省略；关闭与保存操作至少 44vp 点击区域。工具栏跟随 App 主题，图片查看器保留原有布局。
+- 外部导航仍在原生层拒绝，同时通知预览页短暂显示“预览中暂不支持打开外部链接”；通知不参与是否放行的决定。重复提示更新计时，关闭或重新加载时清理。
+- 加载失败显示“暂时无法预览”和重新加载入口；保存入口始终留在工具栏。保存成功提示“已保存到所选位置”，用户取消时不再弹窗。
+- 验证：鸿蒙 ESLint/TypeScript、134 项业务测试与 12 项脚本测试通过。原生通知测试覆盖外部网页、邮件、本地文件、允许的内联地址、通知异常和补丁升级幂等性。
+- Release 签名 HAP 构建、PAD 覆盖安装及启动通过；本次原始附件页面布局、链接提示、保存反馈及旋转/分屏仍待真机交互验收。
+
+### MD 预览长度不一致（2026-11-22）
+
+- PAD 日志确认 `README.md` 的界面元数据为 8,872 字节，HTTP `Content-Length` 与收到的字节均为 9,066；失败发生在下载完整性校验，尚未进入 Markdown 渲染。
+- 服务端回归测试复现：`UpsertSessionAttachments` 在保留已上传摘要和 ready 状态的同时，仍从后续 transcript 覆盖 bytes，使返回的附件元数据与已缓存原文件不一致。
+- 修复将上传后长度归属到摘要对应的 blob 索引，刷新时同时修复旧错误值，并使用摘要条件更新防止与上传完成竞态。零字节文件也覆盖旧声明大小。客户端长度校验保持不变，临时诊断代码已移除。
+- 生效需要更新 Go Server；更新后关闭旧预览、退出并重新进入会话再打开附件，以重新获取历史消息中的附件元数据（仅刷新最新消息可能保留已加载的旧消息）。用户完成部署后，PAD 上原始 `README.md` 的大小已由 8.7 KB 修正为 8.9 KB；重开预览、标题/列表/链接渲染及长文滚动均通过真机验证。HTML 展示此前已由用户确认正常。
+- 验证：`go vet ./...`、PostgreSQL/SQLite 全量服务端测试及两种数据库的 Connector E2E 通过；新增覆盖已上传大小不被覆盖、旧错误记录恢复、零字节文件以及 transcript 元数据与下载内容一致性。部署由用户手动完成。
+- 修复镜像：`lxyapp/dsh-connect:md-preview-fix-20261122`（`linux/amd64`），已通过项目 Docker smoke：后台与前端路由 200、未授权管理 API 401、healthy、非 root 用户及数据目录可写。构建使用本机 Go 交叉编译和 Admin 生产构建，运行层沿用仓库 Dockerfile；未导出离线包。

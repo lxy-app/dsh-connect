@@ -49,6 +49,7 @@ if (resolveRequest && resolveRequest.harmonyRuntime && !resolveRequest.harmonyRu
 const runtimeModules = new Map([
   ['react', path.resolve(projectRoot, 'node_modules/react-harmony/index.js')],
   ['react/jsx-runtime', path.resolve(projectRoot, 'node_modules/react-harmony/jsx-runtime.js')],
+  ['react/jsx-dev-runtime', path.resolve(projectRoot, 'node_modules/react-harmony/jsx-dev-runtime.js')],
   ['react/compiler-runtime', path.resolve(projectRoot, 'node_modules/react-harmony/compiler-runtime.js')],
   // 共享目录向上查找时看不到本壳 node_modules；精确入口固定到 RNOH，不能指回上游 RN。
   ['react-native', path.resolve(projectRoot, 'node_modules/@react-native-oh/react-native-harmony/index.js')],

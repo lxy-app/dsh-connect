@@ -11,9 +11,14 @@ import {
   View,
 } from 'react-native';
 
+import { AttachmentHtmlPreview } from '@/components/attachment-html-preview';
 import { MarkdownText } from '@/components/markdown';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import type { AttachmentDocumentPending } from '@/lib/attachment-documents';
+import {
+  attachmentDocumentKind,
+  isHtmlAttachment,
+  type AttachmentDocumentPending,
+} from '@/lib/attachment-documents';
 import {
   isAttachmentDocumentAbortError,
   loadAttachmentDocument,
@@ -43,11 +48,12 @@ export function AttachmentDocumentViewer({
   attachmentRef.current = attachment;
   const attachmentId = attachment.attachmentId;
   const sha256 = attachment.sha256;
+  const documentKind = attachmentDocumentKind(attachment);
   const serverUrl = auth?.serverUrl;
   const accessToken = auth?.accessToken;
 
   useEffect(() => {
-    if (!serverUrl || !accessToken) return;
+    if (!serverUrl || !accessToken || documentKind === null) return;
     let active = true;
     const controller = new AbortController();
     setState({ status: 'loading' });
@@ -68,13 +74,24 @@ export function AttachmentDocumentViewer({
       active = false;
       controller.abort();
     };
-  }, [attachmentId, sha256, serverUrl, accessToken, attempt]);
+  }, [attachmentId, sha256, serverUrl, accessToken, attempt, documentKind]);
+
+  if (documentKind === null) {
+    return (
+      <View style={[styles.status, { backgroundColor: theme.background }]}>
+        <Text style={[styles.statusTitle, { color: theme.text }]}>暂不支持应用内预览</Text>
+        <Text style={[styles.statusText, { color: theme.textSecondary }]}>
+          可点击右上角“保存”将原始文件保存到本机，再选择应用打开。
+        </Text>
+      </View>
+    );
+  }
 
   if (!serverUrl || !accessToken) {
     return (
       <View style={[styles.status, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={theme.accent} />
-        <Text style={[styles.statusText, { color: theme.textSecondary }]}>正在准备登录凭据…</Text>
+        <Text style={[styles.statusText, { color: theme.textSecondary }]}>正在准备文件…</Text>
       </View>
     );
   }
@@ -82,7 +99,7 @@ export function AttachmentDocumentViewer({
   if (state.status === 'error') {
     return (
       <View style={[styles.status, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorTitle, { color: theme.danger }]}>文档预览失败</Text>
+        <Text style={[styles.errorTitle, { color: theme.text }]}>暂时无法预览</Text>
         <Text style={[styles.errorDetail, { color: theme.textSecondary }]}>{state.message}</Text>
         <Pressable
           accessibilityRole="button"
@@ -105,18 +122,16 @@ export function AttachmentDocumentViewer({
       <View style={[styles.status, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={theme.accent} size="large" />
         <Text style={[styles.statusTitle, { color: theme.text }]}>
-          {state.pending?.state === 'converting' ? '正在生成 PDF 预览…' : '正在准备文档…'}
-        </Text>
-        <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-          {state.pending
-            ? '文件尚未就绪，会自动进行有限次重试；关闭预览可取消。'
-            : '正在安全下载并校验文档，关闭预览可取消。'}
+          {state.pending?.state === 'converting' ? '正在生成预览…' : '正在打开文件…'}
         </Text>
       </View>
     );
   }
 
   const document = state.document;
+  if (isHtmlAttachment(attachment)) {
+    return <AttachmentHtmlPreview key={`${document.file.uri}:${attempt}`} html={document.text ?? ''} />;
+  }
   if (document.kind === 'pdf') {
     return (
       <View style={[styles.document, { backgroundColor: theme.surfaceMuted }]}>

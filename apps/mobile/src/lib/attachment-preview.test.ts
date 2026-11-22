@@ -13,6 +13,7 @@ import {
   canOpenAttachment,
   canServeCachedAttachment,
   hasPdfMagic,
+  isHtmlAttachment,
   nextPendingRetryMs,
   normalizeAttachmentETag,
   parsePendingRetryMs,
@@ -50,10 +51,18 @@ test('MIME identifies document strategy and extensions only assist generic or pl
   assert.equal(attachmentPreviewKind(document({ name: 'sheet.xlsx', mime: '' })), 'office');
   assert.equal(attachmentPreviewKind(document({ name: 'report.pdf', mime: 'text/plain' })), 'text');
   assert.equal(attachmentPreviewKind(document({ name: 'archive.zip', mime: 'application/zip' })), 'unsupported');
+  assert.equal(attachmentPreviewKind(document({ name: 'index.html', mime: 'text/html; charset=utf-8' })), 'text');
+  assert.equal(attachmentPreviewKind(document({ name: 'index.htm', mime: 'application/octet-stream' })), 'text');
+  assert.equal(attachmentPreviewKind(document({ name: 'index.HTML', mime: '' })), 'text');
+  assert.equal(attachmentPreviewKind(document({ name: 'page.html', mime: 'application/json' })), 'text');
+  assert.equal(isHtmlAttachment(document({ name: 'page.html', mime: 'application/json' })), false);
+  assert.equal(isHtmlAttachment(document({ name: 'page.txt', mime: 'text/html' })), true);
+  assert.equal(isHtmlAttachment(document({ name: 'page.htm', mime: 'application/octet-stream' })), true);
+  assert.equal(isHtmlAttachment(document({ name: 'notes.md', mime: 'text/markdown' })), false);
   assert.equal(attachmentPreviewKind(document({ kind: 'image', name: 'x.pdf', mime: 'image/png' })), 'image');
   assert.equal(canOpenAttachment(document({ kind: 'image', mime: 'image/png', state: 'unavailable' })), true);
   assert.equal(canOpenAttachment(document({ state: 'unavailable' })), false);
-  assert.equal(canOpenAttachment(document({ name: 'archive.zip', mime: 'application/zip' })), false);
+  assert.equal(canOpenAttachment(document({ name: 'archive.zip', mime: 'application/zip' })), true);
 });
 
 test('preview URL is authorized separately and never contains a token or desktop path', () => {
@@ -114,6 +123,22 @@ test('fresh original bytes and generated PDFs are validated before publication',
     validateAttachmentPreviewBytes(new Uint8Array(50 * 1024 * 1024 + 1), office, pdfSpec)?.code,
     'payload_too_large',
   );
+});
+
+test('HTML uses the bounded original-file preview strategy while ZIP remains save-only', () => {
+  const script = new TextEncoder().encode('<script>alert(1)</script>');
+  const html = document({ name: 'index.html', mime: 'text/html', bytes: script.byteLength });
+  const spec = attachmentPreviewSpec(html);
+  assert.ok(spec);
+  assert.equal(spec.kind, 'text');
+  assert.equal(spec.source, 'original');
+  assert.equal(spec.maxBytes, 2 * 1024 * 1024);
+  assert.equal(validateAttachmentPreviewBytes(script, html, spec), null);
+  assert.equal(
+    validateAttachmentPreviewBytes(new Uint8Array(2 * 1024 * 1024 + 1), html, spec)?.code,
+    'payload_too_large',
+  );
+  assert.equal(attachmentPreviewSpec(document({ name: 'archive.zip', mime: 'application/zip' })), null);
 });
 
 test('202 retry honors server hints but remains bounded beyond a 90 second conversion', () => {

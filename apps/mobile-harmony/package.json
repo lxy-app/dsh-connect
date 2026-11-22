@@ -31,6 +31,7 @@
     "@react-native-ohos/react-native-gesture-handler": "file:./vendor/ohos-gesture-handler-har",
     "@react-native-ohos/react-native-pdf": "^7.1.0",
     "@react-native-ohos/react-native-screens": "file:./vendor/ohos-screens-har",
+    "@react-native-ohos/react-native-webview": "^13.16.4",
     "@react-native-ohos/react-native-worklets": "1.0.1",
     "base64-js": "1.5.1",
     "expo": "55.0.31",

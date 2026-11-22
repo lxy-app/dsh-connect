@@ -29,7 +29,7 @@ try {
 NODE
 )
 if [ "$CURRENT_MODE" != "$MODE" ]; then
-  echo "原生工程 autolink 模式为 ${CURRENT_MODE:-缺失}，正在切换为 $MODE。"
+  echo "原生工程 autolink 模式为 ${CURRENT_MODE:-缺失}，正在切换为 ${MODE}。"
   bash "$ROOT/scripts/setup-native.sh" "$MODE"
 fi
 

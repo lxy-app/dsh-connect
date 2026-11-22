@@ -373,7 +373,7 @@ function renderInline(
           <Text
             key={key}
             accessibilityRole="link"
-            onPress={() => openLink(node.href)}
+            onPress={() => openLink(node.href, context)}
             style={[styles.link, { color: context.theme.accent }]}
           >
             {renderInline(node.children, key, context)}
@@ -416,10 +416,22 @@ function openImage(
     context.onOpenAttachment(attachment.attachmentId);
     return;
   }
-  openLink(node.href);
+  openLink(node.href, context);
 }
 
-function openLink(href: string): void {
+function openLink(href: string, context: RenderContext): void {
+  // Delivered files use an opaque attachment URI; route them into the shared
+  // viewer instead of handing a desktop path to the system browser.
+  const attachmentId = attachmentIdFromHref(href);
+  if (attachmentId) {
+    const attachment = context.attachments.find((item) => item.attachmentId === attachmentId);
+    if (attachment && context.onOpenAttachment) {
+      context.onOpenAttachment(attachment.attachmentId);
+      return;
+    }
+    Alert.alert('附件不可用', '该文件未随消息交付或已失效，请在桌面端查看。');
+    return;
+  }
   if (!/^(https?:\/\/|mailto:)/i.test(href)) {
     Alert.alert(
       '无法打开链接',

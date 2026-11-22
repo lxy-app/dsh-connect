@@ -50,7 +50,6 @@ import {
   uploadPendingAttachments,
 } from '@shared/lib/prompt-attachments';
 import type { PromptAttachmentDraft } from '@shared/lib/prompt-attachments';
-import { attachmentDocumentKind } from '@/lib/attachment-documents';
 import { pickAttachments } from '@/lib/attachment-picker';
 import type { AttachmentSource } from '@/lib/attachment-picker';
 import {
@@ -1505,10 +1504,10 @@ function MessageRow({
       setViewer({ kind: 'image', attachments: imageAttachments, initialIndex: index });
       return;
     }
-    const document = (message.attachments ?? []).find(
-      (attachment) => attachment.attachmentId === attachmentId && attachmentDocumentKind(attachment) !== null,
-    );
-    if (document) setViewer({ kind: 'document', attachment: document });
+    const selected = (message.attachments ?? []).find((attachment) => attachment.attachmentId === attachmentId);
+    // Unsupported formats still open the viewer's download-only state. Never
+    // silently ignore a delivered file link just because it has no previewer.
+    if (selected) setViewer({ kind: 'document', attachment: selected });
   }, [imageAttachments, message.attachments]);
 
   return (
