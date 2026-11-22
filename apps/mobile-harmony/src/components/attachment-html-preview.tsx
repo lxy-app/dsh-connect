@@ -16,7 +16,7 @@ export function AttachmentHtmlPreview({ html }: { readonly html: string }) {
         </Text>
       </View>
       <WebView
-        source={{ html }}
+        source={{ html, baseUrl: 'about:blank' }}
         originWhitelist={['data:*', 'blob:*', 'about:blank']}
         javaScriptEnabled
         domStorageEnabled
@@ -26,6 +26,9 @@ export function AttachmentHtmlPreview({ html }: { readonly html: string }) {
         onShouldStartLoadWithRequest={(event) => canNavigateLocalHtml(event.url)}
         setSupportMultipleWindows={false}
         mixedContentMode="never"
+        renderMode="ASYNC_RENDER"
+        style={{ backgroundColor: theme.background }}
+        containerStyle={{ backgroundColor: theme.background }}
         startInLoadingState
         renderLoading={() => (
           <View style={styles.loading}>

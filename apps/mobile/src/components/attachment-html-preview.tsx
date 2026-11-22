@@ -16,7 +16,7 @@ export function AttachmentHtmlPreview({ html }: { readonly html: string }) {
         </Text>
       </View>
       <WebView
-        source={{ html }}
+        source={{ html, baseUrl: 'about:blank' }}
         originWhitelist={['data:*', 'blob:*', 'about:blank']}
         javaScriptEnabled
         domStorageEnabled
