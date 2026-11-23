@@ -212,11 +212,11 @@ func init() {
 	// mobiledevice.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
 	mobiledevice.UserIDValidator = mobiledeviceDescUserID.Validators[0].(func(string) error)
 	// mobiledeviceDescCreatedAt is the schema descriptor for created_at field.
-	mobiledeviceDescCreatedAt := mobiledeviceFields[10].Descriptor()
+	mobiledeviceDescCreatedAt := mobiledeviceFields[12].Descriptor()
 	// mobiledevice.DefaultCreatedAt holds the default value on creation for the created_at field.
 	mobiledevice.DefaultCreatedAt = mobiledeviceDescCreatedAt.Default.(func() time.Time)
 	// mobiledeviceDescUpdatedAt is the schema descriptor for updated_at field.
-	mobiledeviceDescUpdatedAt := mobiledeviceFields[11].Descriptor()
+	mobiledeviceDescUpdatedAt := mobiledeviceFields[13].Descriptor()
 	// mobiledevice.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	mobiledevice.DefaultUpdatedAt = mobiledeviceDescUpdatedAt.Default.(func() time.Time)
 	// mobiledevice.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

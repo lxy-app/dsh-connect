@@ -86,7 +86,7 @@ npm install --registry=https://registry.npmjs.org
 1. 管理员在 Web 管理后台创建用户，并在 **访问策略** 中为用户分配桌面、工作区和动作。无策略默认没有桌面权限。
 2. 在 App 首页点击“登录”，填写 Server 地址、用户邮箱和密码。密码只用于本次登录，不会写入 SecureStore、路由参数或日志。
 3. App 调用 `/v1/mobile/auth/login`，成功后把 Access/Refresh Token 写入 SecureStore，密码随即从登录页状态清除。
-4. 后续启动读取本机凭据并调用 `/v1/mobile/me` 验证；Access Token 临近过期时调用 `/v1/mobile/auth/refresh`，服务端同时轮换两枚 Token。启动恢复与页面请求共用单飞刷新任务，网络错误或超时会保留本机凭据供稍后重试。
+4. 后续启动读取本机凭据并调用 `/v1/mobile/me` 验证；Access Token 临近过期时调用 `/v1/mobile/auth/refresh`，服务端同时轮换两枚 Token。启动恢复与页面请求共用单飞刷新任务，网络错误或超时会保留本机凭据供稍后重试。服务端对刚被轮换掉的 Refresh Token 保留 24 小时宽限：手机若丢失了轮换响应，可用手里的旧令牌重试，只会换发新的 Access Token，不会强制重新登录。
 5. “退出登录”删除本机凭据，并尽力调用 `/v1/mobile/auth/logout` 吊销当前登录设备。管理员也可在 `/v1/admin/mobile-devices/{id}/revoke` 强制吊销。
 
 ## 用户级访问授权与会话

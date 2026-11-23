@@ -388,7 +388,7 @@ func TestDeviceStatusAndListing(t *testing.T) {
 	}
 }
 
-func TestMobileRefreshRotationHasSingleWinner(t *testing.T) {
+func TestMobileRefreshRotationHasSingleWinnerWithoutReuseGrace(t *testing.T) {
 	persistent := newStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Millisecond)
@@ -421,12 +421,12 @@ func TestMobileRefreshRotationHasSingleWinner(t *testing.T) {
 		index := index
 		go func() {
 			<-start
-			_, _, rotationError := persistent.RotateMobileRefresh(ctx, registered.RefreshTokenHash, store.MobileCredential{
+			_, _, _, rotationError := persistent.RotateMobileRefresh(ctx, registered.RefreshTokenHash, store.MobileCredential{
 				AccessTokenHash:  store.HashToken(fmt.Sprintf("access-after-%d", index)),
 				RefreshTokenHash: store.HashToken(fmt.Sprintf("refresh-after-%d", index)),
 				AccessExpiresAt:  now.Add(2 * time.Minute),
 				RefreshExpiresAt: now.Add(2 * time.Hour),
-			}, now)
+			}, 0, now)
 			results <- rotationError
 		}()
 	}
@@ -445,6 +445,95 @@ func TestMobileRefreshRotationHasSingleWinner(t *testing.T) {
 	}
 	if successes != 1 || invalid != 1 {
 		t.Fatalf("concurrent refresh successes=%d invalid=%d; want 1/1", successes, invalid)
+	}
+}
+
+func TestMobileRefreshAcceptsRetiredTokenWithinReuseGrace(t *testing.T) {
+	persistent := newStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	if _, err := persistent.CreateUser(ctx, "usr_mobile_grace", "mobile-grace@example.com", "Mobile Grace", "member-password", store.RoleMember); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if _, _, err := persistent.RegisterMobileDevice(ctx, store.MobileDeviceRecord{
+		Device: protocol.MobileDevice{
+			MobileDeviceID: "mob-store-grace",
+			UserID:         "usr_mobile_grace",
+			DeviceName:     "Store Grace Phone",
+			Platform:       "ios",
+			AppVersion:     "0.1.0",
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		},
+	}, store.MobileCredential{
+		AccessTokenHash:  store.HashToken("access-initial"),
+		RefreshTokenHash: store.HashToken("refresh-initial"),
+		AccessExpiresAt:  now.Add(time.Minute),
+		RefreshExpiresAt: now.Add(48 * time.Hour),
+	}, now); err != nil {
+		t.Fatalf("RegisterMobileDevice: %v", err)
+	}
+
+	first, _, rotated, err := persistent.RotateMobileRefresh(ctx, store.HashToken("refresh-initial"), store.MobileCredential{
+		AccessTokenHash:  store.HashToken("access-2"),
+		RefreshTokenHash: store.HashToken("refresh-2"),
+		AccessExpiresAt:  now.Add(2 * time.Minute),
+		RefreshExpiresAt: now.Add(72 * time.Hour),
+	}, time.Hour, now)
+	if err != nil {
+		t.Fatalf("first rotation: %v", err)
+	}
+	if !rotated || first.RefreshTokenHash != store.HashToken("refresh-2") || first.AccessTokenHash != store.HashToken("access-2") {
+		t.Fatalf("first rotation did not issue a fresh pair: rotated=%v record=%+v", rotated, first)
+	}
+
+	// The phone missed the first rotation response and retries with the token it
+	// still holds. Only the access token may change; a second refresh token
+	// would strand the client that received the first rotation.
+	replayTime := now.Add(30 * time.Minute)
+	replayed, _, rotated, err := persistent.RotateMobileRefresh(ctx, store.HashToken("refresh-initial"), store.MobileCredential{
+		AccessTokenHash:  store.HashToken("access-3"),
+		RefreshTokenHash: store.HashToken("refresh-3"),
+		AccessExpiresAt:  replayTime.Add(time.Minute),
+		RefreshExpiresAt: replayTime.Add(96 * time.Hour),
+	}, time.Hour, replayTime)
+	if err != nil {
+		t.Fatalf("reuse rotation: %v", err)
+	}
+	if rotated {
+		t.Fatal("reuse rotation minted a new refresh token; want the presented token kept")
+	}
+	if replayed.RefreshTokenHash != store.HashToken("refresh-initial") || replayed.AccessTokenHash != store.HashToken("access-3") {
+		t.Fatalf("reuse rotation record=%+v", replayed)
+	}
+	if replayed.RefreshExpiresAt == nil || !replayed.RefreshExpiresAt.Equal(replayTime.Add(96*time.Hour)) {
+		t.Fatalf("reuse rotation did not slide the refresh expiry: %v", replayed.RefreshExpiresAt)
+	}
+
+	// The client that received the first rotation keeps working because its
+	// token became the previous one.
+	secondTime := now.Add(45 * time.Minute)
+	second, _, rotated, err := persistent.RotateMobileRefresh(ctx, store.HashToken("refresh-2"), store.MobileCredential{
+		AccessTokenHash:  store.HashToken("access-4"),
+		RefreshTokenHash: store.HashToken("refresh-4"),
+		AccessExpiresAt:  secondTime.Add(time.Minute),
+		RefreshExpiresAt: secondTime.Add(120 * time.Hour),
+	}, time.Hour, secondTime)
+	if err != nil {
+		t.Fatalf("rotation with the first response token: %v", err)
+	}
+	if rotated || second.RefreshTokenHash != store.HashToken("refresh-2") || second.AccessTokenHash != store.HashToken("access-4") {
+		t.Fatalf("second reuse record=%+v rotated=%v", second, rotated)
+	}
+
+	// Once the grace window closes the retired token is rejected again.
+	if _, _, _, err := persistent.RotateMobileRefresh(ctx, store.HashToken("refresh-initial"), store.MobileCredential{
+		AccessTokenHash:  store.HashToken("access-5"),
+		RefreshTokenHash: store.HashToken("refresh-5"),
+		AccessExpiresAt:  now.Add(3 * time.Hour),
+		RefreshExpiresAt: now.Add(120 * time.Hour),
+	}, time.Hour, now.Add(2*time.Hour)); !errors.Is(err, store.ErrMobileSessionInvalid) {
+		t.Fatalf("retired token after grace error=%v; want ErrMobileSessionInvalid", err)
 	}
 }
 

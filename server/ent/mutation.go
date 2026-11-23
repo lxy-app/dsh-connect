@@ -2535,6 +2535,40 @@ func (m *MobileDeviceMutation) OldRefreshExpiresAt(ctx context.Context) (v *time
 	return oldValue.RefreshExpiresAt, nil
 }
 
+// OldPreviousRefreshTokenHash returns the old "previous_refresh_token_hash" field's value of the MobileDevice entity.
+// If the MobileDevice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MobileDeviceMutation) OldPreviousRefreshTokenHash(ctx context.Context) (v string, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldPreviousRefreshTokenHash is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldPreviousRefreshTokenHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPreviousRefreshTokenHash: %w", err)
+	}
+	return oldValue.PreviousRefreshTokenHash, nil
+}
+
+// OldPreviousRefreshExpiresAt returns the old "previous_refresh_expires_at" field's value of the MobileDevice entity.
+// If the MobileDevice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MobileDeviceMutation) OldPreviousRefreshExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.Op().Is(OpUpdateOne) {
+		return v, errors.New("OldPreviousRefreshExpiresAt is only allowed on UpdateOne operations")
+	}
+	if _, exists := m.ID(); !exists || m.oldValue == nil {
+		return v, errors.New("OldPreviousRefreshExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPreviousRefreshExpiresAt: %w", err)
+	}
+	return oldValue.PreviousRefreshExpiresAt, nil
+}
+
 // OldCreatedAt returns the old "created_at" field's value of the MobileDevice entity.
 // If the MobileDevice object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
@@ -2626,6 +2660,10 @@ func (m *MobileDeviceMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldAccessExpiresAt(ctx)
 	case mobiledevice.FieldRefreshExpiresAt:
 		return m.OldRefreshExpiresAt(ctx)
+	case mobiledevice.FieldPreviousRefreshTokenHash:
+		return m.OldPreviousRefreshTokenHash(ctx)
+	case mobiledevice.FieldPreviousRefreshExpiresAt:
+		return m.OldPreviousRefreshExpiresAt(ctx)
 	case mobiledevice.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case mobiledevice.FieldUpdatedAt:

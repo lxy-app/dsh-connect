@@ -105,7 +105,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
         if (isUnauthorizedError(error)) {
           const current = sessionRef.current;
           if (!active || operationGeneration.current !== hydrationGeneration ||
-            (current !== null && !isSameMobileCredential(current, stored))) {
+            (current !== null && !isSameStoredSession(current, stored))) {
             return;
           }
           clearDocumentCacheBestEffort();
@@ -149,7 +149,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
       if (Date.parse(stored.refreshTokenExpiresAt) <= Date.now()) {
         const current = sessionRef.current;
         if (!active || operationGeneration.current !== hydrationGeneration ||
-          (current !== null && !isSameMobileCredential(current, stored))) {
+          (current !== null && !isSameStoredSession(current, stored))) {
           return;
         }
         clearDocumentCacheBestEffort();
@@ -175,6 +175,13 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
 
       try {
         const identity = await getMobileIdentity(stored.serverUrl, stored.accessToken);
+        // A rotation or a newer login may finish while /me is in flight. Never
+        // publish the older credential over it.
+        const beforeWrite = sessionRef.current;
+        if (!active || operationGeneration.current !== hydrationGeneration ||
+          (beforeWrite !== null && !isSameStoredSession(beforeWrite, stored))) {
+          return;
+        }
         const updated: StoredMobileSession = {
           ...stored,
           mobileDeviceId: identity.mobileDevice.mobileDeviceId,
@@ -182,6 +189,12 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
           user: identity.user,
         };
         const notice = await persist(updated);
+        const afterWrite = sessionRef.current;
+        if (afterWrite !== null && !isSameStoredSession(afterWrite, stored)) {
+          // Repair the stored copy with whichever session won the race.
+          await persist(afterWrite);
+          return;
+        }
         setIfActive({ status: 'paired', session: updated, notice });
       } catch (error) {
         if (isUnauthorizedError(error)) {
@@ -271,8 +284,9 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
 
   const clearInvalidSession = useCallback(async (invalidated: StoredMobileSession): Promise<void> => {
     const current = sessionRef.current ?? state.session;
-    // A delayed 401 must not delete a newer rotation or a newer login.
-    if (!current || !isSameMobileCredential(current, invalidated)) return;
+    // A delayed 401 must not delete a newer rotation or a newer login. A grace
+    // replay keeps the refresh token, so the access token decides too.
+    if (!current || !isSameStoredSession(current, invalidated)) return;
     clearDocumentCacheBestEffort();
     try {
       await deleteStoredMobileSession();
@@ -280,7 +294,7 @@ export function MobileSessionProvider({ children }: { children: ReactNode }) {
       // The invalid credential is unusable even if stale data remains.
     }
     const latest = sessionRef.current ?? state.session;
-    if (!latest || !isSameMobileCredential(latest, invalidated)) return;
+    if (!latest || !isSameStoredSession(latest, invalidated)) return;
     sessionRef.current = null;
     setState({
       status: 'unpaired',
@@ -353,12 +367,28 @@ export function useMobileSession(): MobileSessionContextValue {
 }
 
 async function persist(session: StoredMobileSession): Promise<string | null> {
-  try {
-    await saveMobileSession(session);
-    return null;
-  } catch {
-    return '无法写入系统安全存储；关闭 App 后可能需要重新登录。';
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await saveMobileSession(session);
+      return null;
+    } catch {
+      if (attempt === 1) break;
+      // The keychain can be briefly unavailable right after a wake-up; one
+      // short retry keeps a valid rotation from being lost on the next launch.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
   }
+  return '无法写入系统安全存储；关闭 App 后可能需要重新登录。';
+}
+
+/**
+ * Identity for "the in-memory session is still the credential a caller used".
+ * The access token matters too: a grace replay keeps the refresh token and
+ * only replaces the access token, so refresh-token equality alone cannot tell
+ * a delayed 401 apart from a successful replay.
+ */
+function isSameStoredSession(left: StoredMobileSession, right: StoredMobileSession): boolean {
+  return isSameMobileCredential(left, right) && left.accessToken === right.accessToken;
 }
 
 function storedFromLogin(

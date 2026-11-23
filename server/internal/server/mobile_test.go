@@ -61,7 +61,8 @@ func TestMobileLoginRefreshAndLogoutLifecycle(t *testing.T) {
 		t.Fatalf("unexpected mobile me: %+v", me)
 	}
 
-	// Refreshing rotates both credentials and invalidates both old values.
+	// A normal refresh rotates both credentials and invalidates the old access
+	// token. The retired refresh token stays reusable for a bounded grace.
 	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/refresh", "", map[string]string{
 		"refreshToken": session.RefreshToken,
 	})
@@ -75,20 +76,38 @@ func TestMobileLoginRefreshAndLogoutLifecycle(t *testing.T) {
 	}
 	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", session.AccessToken, nil)
 	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	// A phone that lost the rotation response retries with the token it still
+	// holds. Inside the reuse grace the Server renews only the access token and
+	// keeps that refresh token, so the client that did receive the rotation is
+	// not stranded either.
 	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/refresh", "", map[string]string{
 		"refreshToken": session.RefreshToken,
 	})
-	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
-	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", refreshed.AccessToken, nil)
 	if status != http.StatusOK {
-		t.Fatalf("rotated access token status=%d body=%s", status, body)
+		t.Fatalf("mobile reuse refresh status=%d body=%s", status, body)
+	}
+	var replayed protocol.MobileSessionResponse
+	decodeTestJSON(t, body, &replayed)
+	if replayed.MobileDeviceID != session.MobileDeviceID || replayed.RefreshToken != session.RefreshToken ||
+		replayed.AccessToken == refreshed.AccessToken || replayed.AccessToken == session.AccessToken {
+		t.Fatalf("reuse refresh did not keep the presented refresh token: %+v", replayed)
+	}
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", refreshed.AccessToken, nil)
+	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", replayed.AccessToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("replayed access token status=%d body=%s", status, body)
 	}
 
-	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/logout", refreshed.AccessToken, nil)
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/logout", replayed.AccessToken, nil)
 	if status != http.StatusNoContent {
 		t.Fatalf("mobile logout status=%d body=%s", status, body)
 	}
-	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", refreshed.AccessToken, nil)
+	status, body = testRequest(t, http.MethodGet, environment.http.URL+"/v1/mobile/me", replayed.AccessToken, nil)
+	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
+	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/refresh", "", map[string]string{
+		"refreshToken": replayed.RefreshToken,
+	})
 	assertErrorResponse(t, status, body, http.StatusUnauthorized, protocol.CodeUnauthorized)
 	status, body = testRequest(t, http.MethodPost, environment.http.URL+"/v1/mobile/auth/refresh", "", map[string]string{
 		"refreshToken": refreshed.RefreshToken,

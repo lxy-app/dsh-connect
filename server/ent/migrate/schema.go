@@ -239,6 +239,8 @@ var (
 		{Name: "refresh_token_hash", Type: field.TypeString, Nullable: true},
 		{Name: "access_expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "refresh_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "previous_refresh_token_hash", Type: field.TypeString, Nullable: true},
+		{Name: "previous_refresh_expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "last_seen_at", Type: field.TypeTime, Nullable: true},
@@ -269,6 +271,11 @@ var (
 				Name:    "mobiledevice_refresh_token_hash",
 				Unique:  false,
 				Columns: []*schema.Column{MobileDevicesColumns[7]},
+			},
+			{
+				Name:    "mobiledevice_previous_refresh_token_hash",
+				Unique:  false,
+				Columns: []*schema.Column{MobileDevicesColumns[10]},
 			},
 		},
 	}

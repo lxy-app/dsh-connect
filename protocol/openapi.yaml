@@ -951,9 +951,14 @@ paths:
       operationId: refreshMobileSession
       summary: Rotate a mobile refresh token and access token
       description: |
-        The previous refresh token is invalidated in the same transaction. The
-        previous access token is also replaced. Reusing an old refresh token
-        returns 401.
+        Rotates the access token and, on a normal refresh, the refresh token.
+        The previous access token is always replaced. The retired refresh token
+        remains acceptable for a configurable reuse grace window (default 24h)
+        so a phone that lost the rotation response can retry with the token it
+        still holds; such a retry returns a new access token and keeps the
+        presented refresh token, so the client that received the first response
+        is not stranded either. After the grace window the retired refresh
+        token returns 401.
       security: []
       requestBody:
         required: true

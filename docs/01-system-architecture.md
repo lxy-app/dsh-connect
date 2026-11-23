@@ -318,7 +318,7 @@ App 发送 requestId
 1. 全链路 TLS/WSS。
 2. 一次性、短时配对码，桌面显式确认。
 3. 每设备独立身份、密钥和吊销。
-4. 短期 Access Token + 轮换 Refresh Token。
+4. 短期 Access Token + 轮换 Refresh Token；旧 Refresh Token 在 24 小时宽限内可用于重试，避免弱网丢失轮换响应后强制重新登录。
 5. 设备密钥保存在系统安全存储。
 6. `read`、`prompt`、`cancel`、`approve` 分权。
 7. 默认拒绝，按桌面、工作区和动作授权。

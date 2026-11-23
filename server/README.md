@@ -42,6 +42,7 @@ DSH_CONNECT_DATABASE_URL=sqlite://./data/dsh-connect.db
 | `DSH_CONNECT_ADMIN_DIR` | 空 | 可选的 Admin 构建产物目录；设置后同源托管静态文件与 SPA 路由 |
 | `DSH_CONNECT_MOBILE_ACCESS_TTL` | `15m` | 手机 Access Token 有效期，Go duration |
 | `DSH_CONNECT_MOBILE_REFRESH_TTL` | `720h` | 手机 Refresh Token 有效期，Go duration |
+| `DSH_CONNECT_MOBILE_REFRESH_REUSE_GRACE` | `24h` | 轮换后旧 Refresh Token 仍可重试的宽限窗口；`0` 表示立即失效 |
 | `DSH_CONNECT_LISTEN_ADDR` | `127.0.0.1:8787` | HTTP 监听地址 |
 | `DSH_CONNECT_SERVER_URL` | 按监听地址推导 | 配对码响应中的外部 URL |
 | `DSH_CONNECT_TLS_CERT_FILE` / `_KEY_FILE` | 空 | 同时设置后对外为 https/wss |

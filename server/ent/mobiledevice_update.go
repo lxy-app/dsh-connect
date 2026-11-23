@@ -178,6 +178,46 @@ func (_u *MobileDeviceUpdate) ClearRefreshExpiresAt() *MobileDeviceUpdate {
 	return _u
 }
 
+// SetPreviousRefreshTokenHash sets the "previous_refresh_token_hash" field.
+func (_u *MobileDeviceUpdate) SetPreviousRefreshTokenHash(v string) *MobileDeviceUpdate {
+	_u.mutation.SetPreviousRefreshTokenHash(v)
+	return _u
+}
+
+// SetNillablePreviousRefreshTokenHash sets the "previous_refresh_token_hash" field if the given value is not nil.
+func (_u *MobileDeviceUpdate) SetNillablePreviousRefreshTokenHash(v *string) *MobileDeviceUpdate {
+	if v != nil {
+		_u.SetPreviousRefreshTokenHash(*v)
+	}
+	return _u
+}
+
+// ClearPreviousRefreshTokenHash clears the value of the "previous_refresh_token_hash" field.
+func (_u *MobileDeviceUpdate) ClearPreviousRefreshTokenHash() *MobileDeviceUpdate {
+	_u.mutation.ClearPreviousRefreshTokenHash()
+	return _u
+}
+
+// SetPreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field.
+func (_u *MobileDeviceUpdate) SetPreviousRefreshExpiresAt(v time.Time) *MobileDeviceUpdate {
+	_u.mutation.SetPreviousRefreshExpiresAt(v)
+	return _u
+}
+
+// SetNillablePreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field if the given value is not nil.
+func (_u *MobileDeviceUpdate) SetNillablePreviousRefreshExpiresAt(v *time.Time) *MobileDeviceUpdate {
+	if v != nil {
+		_u.SetPreviousRefreshExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearPreviousRefreshExpiresAt clears the value of the "previous_refresh_expires_at" field.
+func (_u *MobileDeviceUpdate) ClearPreviousRefreshExpiresAt() *MobileDeviceUpdate {
+	_u.mutation.ClearPreviousRefreshExpiresAt()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MobileDeviceUpdate) SetUpdatedAt(v time.Time) *MobileDeviceUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -335,6 +375,18 @@ func (_u *MobileDeviceUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.RefreshExpiresAtCleared() {
 		_spec.ClearField(mobiledevice.FieldRefreshExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PreviousRefreshTokenHash(); ok {
+		_spec.SetField(mobiledevice.FieldPreviousRefreshTokenHash, field.TypeString, value)
+	}
+	if _u.mutation.PreviousRefreshTokenHashCleared() {
+		_spec.ClearField(mobiledevice.FieldPreviousRefreshTokenHash, field.TypeString)
+	}
+	if value, ok := _u.mutation.PreviousRefreshExpiresAt(); ok {
+		_spec.SetField(mobiledevice.FieldPreviousRefreshExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.PreviousRefreshExpiresAtCleared() {
+		_spec.ClearField(mobiledevice.FieldPreviousRefreshExpiresAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(mobiledevice.FieldUpdatedAt, field.TypeTime, value)
@@ -518,6 +570,46 @@ func (_u *MobileDeviceUpdateOne) SetNillableRefreshExpiresAt(v *time.Time) *Mobi
 // ClearRefreshExpiresAt clears the value of the "refresh_expires_at" field.
 func (_u *MobileDeviceUpdateOne) ClearRefreshExpiresAt() *MobileDeviceUpdateOne {
 	_u.mutation.ClearRefreshExpiresAt()
+	return _u
+}
+
+// SetPreviousRefreshTokenHash sets the "previous_refresh_token_hash" field.
+func (_u *MobileDeviceUpdateOne) SetPreviousRefreshTokenHash(v string) *MobileDeviceUpdateOne {
+	_u.mutation.SetPreviousRefreshTokenHash(v)
+	return _u
+}
+
+// SetNillablePreviousRefreshTokenHash sets the "previous_refresh_token_hash" field if the given value is not nil.
+func (_u *MobileDeviceUpdateOne) SetNillablePreviousRefreshTokenHash(v *string) *MobileDeviceUpdateOne {
+	if v != nil {
+		_u.SetPreviousRefreshTokenHash(*v)
+	}
+	return _u
+}
+
+// ClearPreviousRefreshTokenHash clears the value of the "previous_refresh_token_hash" field.
+func (_u *MobileDeviceUpdateOne) ClearPreviousRefreshTokenHash() *MobileDeviceUpdateOne {
+	_u.mutation.ClearPreviousRefreshTokenHash()
+	return _u
+}
+
+// SetPreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field.
+func (_u *MobileDeviceUpdateOne) SetPreviousRefreshExpiresAt(v time.Time) *MobileDeviceUpdateOne {
+	_u.mutation.SetPreviousRefreshExpiresAt(v)
+	return _u
+}
+
+// SetNillablePreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field if the given value is not nil.
+func (_u *MobileDeviceUpdateOne) SetNillablePreviousRefreshExpiresAt(v *time.Time) *MobileDeviceUpdateOne {
+	if v != nil {
+		_u.SetPreviousRefreshExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearPreviousRefreshExpiresAt clears the value of the "previous_refresh_expires_at" field.
+func (_u *MobileDeviceUpdateOne) ClearPreviousRefreshExpiresAt() *MobileDeviceUpdateOne {
+	_u.mutation.ClearPreviousRefreshExpiresAt()
 	return _u
 }
 
@@ -708,6 +800,18 @@ func (_u *MobileDeviceUpdateOne) sqlSave(ctx context.Context) (_node *MobileDevi
 	}
 	if _u.mutation.RefreshExpiresAtCleared() {
 		_spec.ClearField(mobiledevice.FieldRefreshExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PreviousRefreshTokenHash(); ok {
+		_spec.SetField(mobiledevice.FieldPreviousRefreshTokenHash, field.TypeString, value)
+	}
+	if _u.mutation.PreviousRefreshTokenHashCleared() {
+		_spec.ClearField(mobiledevice.FieldPreviousRefreshTokenHash, field.TypeString)
+	}
+	if value, ok := _u.mutation.PreviousRefreshExpiresAt(); ok {
+		_spec.SetField(mobiledevice.FieldPreviousRefreshExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.PreviousRefreshExpiresAtCleared() {
+		_spec.ClearField(mobiledevice.FieldPreviousRefreshExpiresAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(mobiledevice.FieldUpdatedAt, field.TypeTime, value)

@@ -32,6 +32,10 @@ const (
 	FieldAccessExpiresAt = "access_expires_at"
 	// FieldRefreshExpiresAt holds the string denoting the refresh_expires_at field in the database.
 	FieldRefreshExpiresAt = "refresh_expires_at"
+	// FieldPreviousRefreshTokenHash holds the string denoting the previous_refresh_token_hash field in the database.
+	FieldPreviousRefreshTokenHash = "previous_refresh_token_hash"
+	// FieldPreviousRefreshExpiresAt holds the string denoting the previous_refresh_expires_at field in the database.
+	FieldPreviousRefreshExpiresAt = "previous_refresh_expires_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -56,6 +60,8 @@ var Columns = []string{
 	FieldRefreshTokenHash,
 	FieldAccessExpiresAt,
 	FieldRefreshExpiresAt,
+	FieldPreviousRefreshTokenHash,
+	FieldPreviousRefreshExpiresAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldLastSeenAt,
@@ -185,6 +191,16 @@ func ByAccessExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 // ByRefreshExpiresAt orders the results by the refresh_expires_at field.
 func ByRefreshExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRefreshExpiresAt, opts...).ToFunc()
+}
+
+// ByPreviousRefreshTokenHash orders the results by the previous_refresh_token_hash field.
+func ByPreviousRefreshTokenHash(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPreviousRefreshTokenHash, opts...).ToFunc()
+}
+
+// ByPreviousRefreshExpiresAt orders the results by the previous_refresh_expires_at field.
+func ByPreviousRefreshExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPreviousRefreshExpiresAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

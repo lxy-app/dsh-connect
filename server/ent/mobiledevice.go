@@ -36,6 +36,10 @@ type MobileDevice struct {
 	AccessExpiresAt *time.Time `json:"access_expires_at,omitempty"`
 	// RefreshExpiresAt holds the value of the "refresh_expires_at" field.
 	RefreshExpiresAt *time.Time `json:"refresh_expires_at,omitempty"`
+	// SHA-256 hex of the refresh token retired by the last rotation
+	PreviousRefreshTokenHash string `json:"-"`
+	// Deadline for accepting the retired refresh token, so a lost rotation response can be retried
+	PreviousRefreshExpiresAt *time.Time `json:"previous_refresh_expires_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -52,9 +56,9 @@ func (*MobileDevice) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case mobiledevice.FieldID, mobiledevice.FieldUserID, mobiledevice.FieldDeviceName, mobiledevice.FieldPlatform, mobiledevice.FieldAppVersion, mobiledevice.FieldStatus, mobiledevice.FieldAccessTokenHash, mobiledevice.FieldRefreshTokenHash:
+		case mobiledevice.FieldID, mobiledevice.FieldUserID, mobiledevice.FieldDeviceName, mobiledevice.FieldPlatform, mobiledevice.FieldAppVersion, mobiledevice.FieldStatus, mobiledevice.FieldAccessTokenHash, mobiledevice.FieldRefreshTokenHash, mobiledevice.FieldPreviousRefreshTokenHash:
 			values[i] = new(sql.NullString)
-		case mobiledevice.FieldAccessExpiresAt, mobiledevice.FieldRefreshExpiresAt, mobiledevice.FieldCreatedAt, mobiledevice.FieldUpdatedAt, mobiledevice.FieldLastSeenAt, mobiledevice.FieldRevokedAt:
+		case mobiledevice.FieldAccessExpiresAt, mobiledevice.FieldRefreshExpiresAt, mobiledevice.FieldPreviousRefreshExpiresAt, mobiledevice.FieldCreatedAt, mobiledevice.FieldUpdatedAt, mobiledevice.FieldLastSeenAt, mobiledevice.FieldRevokedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -132,6 +136,19 @@ func (_m *MobileDevice) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.RefreshExpiresAt = new(time.Time)
 				*_m.RefreshExpiresAt = value.Time
+			}
+		case mobiledevice.FieldPreviousRefreshTokenHash:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field previous_refresh_token_hash", values[i])
+			} else if value.Valid {
+				_m.PreviousRefreshTokenHash = value.String
+			}
+		case mobiledevice.FieldPreviousRefreshExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field previous_refresh_expires_at", values[i])
+			} else if value.Valid {
+				_m.PreviousRefreshExpiresAt = new(time.Time)
+				*_m.PreviousRefreshExpiresAt = value.Time
 			}
 		case mobiledevice.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -221,6 +238,13 @@ func (_m *MobileDevice) String() string {
 	builder.WriteString(", ")
 	if v := _m.RefreshExpiresAt; v != nil {
 		builder.WriteString("refresh_expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("previous_refresh_token_hash=<sensitive>")
+	builder.WriteString(", ")
+	if v := _m.PreviousRefreshExpiresAt; v != nil {
+		builder.WriteString("previous_refresh_expires_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
