@@ -14,23 +14,25 @@ import (
 
 // Mutation represents an operation that mutates the MobileDevice nodes in the graph.
 type Mutation struct {
-	op                 ent.Op
-	typ                string
-	user_id            *string
-	device_name        *string
-	platform           *Platform
-	app_version        *string
-	status             *Status
-	access_token_hash  *string
-	refresh_token_hash *string
-	access_expires_at  *time.Time
-	refresh_expires_at *time.Time
-	created_at         *time.Time
-	updated_at         *time.Time
-	last_seen_at       *time.Time
-	revoked_at         *time.Time
-	clearedFields      map[string]struct{}
-	predicates         []predicate.MobileDevice
+	op                          ent.Op
+	typ                         string
+	user_id                     *string
+	device_name                 *string
+	platform                    *Platform
+	app_version                 *string
+	status                      *Status
+	access_token_hash           *string
+	refresh_token_hash          *string
+	access_expires_at           *time.Time
+	refresh_expires_at          *time.Time
+	previous_refresh_token_hash *string
+	previous_refresh_expires_at *time.Time
+	created_at                  *time.Time
+	updated_at                  *time.Time
+	last_seen_at                *time.Time
+	revoked_at                  *time.Time
+	clearedFields               map[string]struct{}
+	predicates                  []predicate.MobileDevice
 }
 
 // NewMutation creates a new Mutation for the MobileDevice entity.
@@ -270,6 +272,70 @@ func (m *Mutation) ResetRefreshExpiresAt() {
 	delete(m.clearedFields, FieldRefreshExpiresAt)
 }
 
+// SetPreviousRefreshTokenHash sets the "previous_refresh_token_hash" field.
+func (m *Mutation) SetPreviousRefreshTokenHash(s string) {
+	m.previous_refresh_token_hash = &s
+}
+
+// PreviousRefreshTokenHash returns the value of the "previous_refresh_token_hash" field in the mutation.
+func (m *Mutation) PreviousRefreshTokenHash() (r string, exists bool) {
+	v := m.previous_refresh_token_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPreviousRefreshTokenHash clears the value of the "previous_refresh_token_hash" field.
+func (m *Mutation) ClearPreviousRefreshTokenHash() {
+	m.previous_refresh_token_hash = nil
+	m.clearedFields[FieldPreviousRefreshTokenHash] = struct{}{}
+}
+
+// PreviousRefreshTokenHashCleared returns if the "previous_refresh_token_hash" field was cleared in this mutation.
+func (m *Mutation) PreviousRefreshTokenHashCleared() bool {
+	_, ok := m.clearedFields[FieldPreviousRefreshTokenHash]
+	return ok
+}
+
+// ResetPreviousRefreshTokenHash resets all changes to the "previous_refresh_token_hash" field.
+func (m *Mutation) ResetPreviousRefreshTokenHash() {
+	m.previous_refresh_token_hash = nil
+	delete(m.clearedFields, FieldPreviousRefreshTokenHash)
+}
+
+// SetPreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field.
+func (m *Mutation) SetPreviousRefreshExpiresAt(t time.Time) {
+	m.previous_refresh_expires_at = &t
+}
+
+// PreviousRefreshExpiresAt returns the value of the "previous_refresh_expires_at" field in the mutation.
+func (m *Mutation) PreviousRefreshExpiresAt() (r time.Time, exists bool) {
+	v := m.previous_refresh_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPreviousRefreshExpiresAt clears the value of the "previous_refresh_expires_at" field.
+func (m *Mutation) ClearPreviousRefreshExpiresAt() {
+	m.previous_refresh_expires_at = nil
+	m.clearedFields[FieldPreviousRefreshExpiresAt] = struct{}{}
+}
+
+// PreviousRefreshExpiresAtCleared returns if the "previous_refresh_expires_at" field was cleared in this mutation.
+func (m *Mutation) PreviousRefreshExpiresAtCleared() bool {
+	_, ok := m.clearedFields[FieldPreviousRefreshExpiresAt]
+	return ok
+}
+
+// ResetPreviousRefreshExpiresAt resets all changes to the "previous_refresh_expires_at" field.
+func (m *Mutation) ResetPreviousRefreshExpiresAt() {
+	m.previous_refresh_expires_at = nil
+	delete(m.clearedFields, FieldPreviousRefreshExpiresAt)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *Mutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -406,7 +472,7 @@ func (m *Mutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *Mutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 15)
 	if m.user_id != nil {
 		fields = append(fields, FieldUserID)
 	}
@@ -433,6 +499,12 @@ func (m *Mutation) Fields() []string {
 	}
 	if m.refresh_expires_at != nil {
 		fields = append(fields, FieldRefreshExpiresAt)
+	}
+	if m.previous_refresh_token_hash != nil {
+		fields = append(fields, FieldPreviousRefreshTokenHash)
+	}
+	if m.previous_refresh_expires_at != nil {
+		fields = append(fields, FieldPreviousRefreshExpiresAt)
 	}
 	if m.created_at != nil {
 		fields = append(fields, FieldCreatedAt)
@@ -472,6 +544,10 @@ func (m *Mutation) Field(name string) (ent.Value, bool) {
 		return m.AccessExpiresAt()
 	case FieldRefreshExpiresAt:
 		return m.RefreshExpiresAt()
+	case FieldPreviousRefreshTokenHash:
+		return m.PreviousRefreshTokenHash()
+	case FieldPreviousRefreshExpiresAt:
+		return m.PreviousRefreshExpiresAt()
 	case FieldCreatedAt:
 		return m.CreatedAt()
 	case FieldUpdatedAt:
@@ -559,6 +635,20 @@ func (m *Mutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRefreshExpiresAt(v)
 		return nil
+	case FieldPreviousRefreshTokenHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPreviousRefreshTokenHash(v)
+		return nil
+	case FieldPreviousRefreshExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPreviousRefreshExpiresAt(v)
+		return nil
 	case FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -629,6 +719,12 @@ func (m *Mutation) ClearedFields() []string {
 	if m.FieldCleared(FieldRefreshExpiresAt) {
 		fields = append(fields, FieldRefreshExpiresAt)
 	}
+	if m.FieldCleared(FieldPreviousRefreshTokenHash) {
+		fields = append(fields, FieldPreviousRefreshTokenHash)
+	}
+	if m.FieldCleared(FieldPreviousRefreshExpiresAt) {
+		fields = append(fields, FieldPreviousRefreshExpiresAt)
+	}
 	if m.FieldCleared(FieldLastSeenAt) {
 		fields = append(fields, FieldLastSeenAt)
 	}
@@ -660,6 +756,12 @@ func (m *Mutation) ClearField(name string) error {
 		return nil
 	case FieldRefreshExpiresAt:
 		m.ClearRefreshExpiresAt()
+		return nil
+	case FieldPreviousRefreshTokenHash:
+		m.ClearPreviousRefreshTokenHash()
+		return nil
+	case FieldPreviousRefreshExpiresAt:
+		m.ClearPreviousRefreshExpiresAt()
 		return nil
 	case FieldLastSeenAt:
 		m.ClearLastSeenAt()
@@ -701,6 +803,12 @@ func (m *Mutation) ResetField(name string) error {
 		return nil
 	case FieldRefreshExpiresAt:
 		m.ResetRefreshExpiresAt()
+		return nil
+	case FieldPreviousRefreshTokenHash:
+		m.ResetPreviousRefreshTokenHash()
+		return nil
+	case FieldPreviousRefreshExpiresAt:
+		m.ResetPreviousRefreshExpiresAt()
 		return nil
 	case FieldCreatedAt:
 		m.ResetCreatedAt()

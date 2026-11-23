@@ -45,6 +45,14 @@ func (MobileDevice) Fields() []ent.Field {
 		field.Time("refresh_expires_at").
 			Optional().
 			Nillable(),
+		field.String("previous_refresh_token_hash").
+			Optional().
+			Sensitive().
+			Comment("SHA-256 hex of the refresh token retired by the last rotation"),
+		field.Time("previous_refresh_expires_at").
+			Optional().
+			Nillable().
+			Comment("Deadline for accepting the retired refresh token, so a lost rotation response can be retried"),
 		field.Time("created_at").
 			Immutable().
 			Default(time.Now),
@@ -66,5 +74,6 @@ func (MobileDevice) Indexes() []ent.Index {
 		index.Fields("status"),
 		index.Fields("access_token_hash"),
 		index.Fields("refresh_token_hash"),
+		index.Fields("previous_refresh_token_hash"),
 	}
 }

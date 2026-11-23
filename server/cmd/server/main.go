@@ -48,6 +48,7 @@ func main() {
 		AdminOrigin:             os.Getenv("DSH_CONNECT_ADMIN_ORIGIN"),
 		MobileAccessTokenTTL:    envDuration("DSH_CONNECT_MOBILE_ACCESS_TTL", 15*time.Minute),
 		MobileRefreshTokenTTL:   envDuration("DSH_CONNECT_MOBILE_REFRESH_TTL", 30*24*time.Hour),
+		MobileRefreshReuseGrace: envNonNegativeDuration("DSH_CONNECT_MOBILE_REFRESH_REUSE_GRACE", 24*time.Hour),
 		AttachmentsMode:         envOrDefault("DSH_CONNECT_ATTACHMENTS", "read"),
 		MaxAttachmentBytes:      envInt64("DSH_CONNECT_MAX_ATTACHMENT_BYTES", 20<<20),
 		MaxAttachmentStoreBytes: envInt64("DSH_CONNECT_MAX_ATTACHMENT_STORE_BYTES", 2<<30),
@@ -131,6 +132,20 @@ func envDuration(name string, fallback time.Duration) time.Duration {
 	value, err := time.ParseDuration(raw)
 	if err != nil || value <= 0 {
 		log.Fatalf("%s must be a positive Go duration, got %q", name, raw)
+	}
+	return value
+}
+
+// envNonNegativeDuration allows zero so an operator can retire a rotated
+// refresh token immediately instead of keeping the reuse grace.
+func envNonNegativeDuration(name string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil || value < 0 {
+		log.Fatalf("%s must be a non-negative Go duration, got %q", name, raw)
 	}
 	return value
 }

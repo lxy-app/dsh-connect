@@ -29,10 +29,21 @@ type adminEnvironment struct {
 
 func newAdminEnvironment(t *testing.T) *adminEnvironment {
 	t.Helper()
+	return newAdminEnvironmentWith(t)
+}
+
+// newAdminEnvironmentWith seeds the owner and mirrors the production mobile
+// refresh reuse grace unless a test overrides it.
+func newAdminEnvironmentWith(t *testing.T, change ...func(*Config)) *adminEnvironment {
+	t.Helper()
 	environment := newTestEnvironment(t, func(config *Config) {
 		config.BootstrapOwnerEmail = testOwnerEmail
 		config.BootstrapOwnerPassword = testOwnerPassword
 		config.BootstrapOwnerName = "Test Owner"
+		config.MobileRefreshReuseGrace = 24 * time.Hour
+		for _, apply := range change {
+			apply(config)
+		}
 	})
 	return &adminEnvironment{testEnvironment: environment, ownerEmail: testOwnerEmail, ownerPassword: testOwnerPassword}
 }

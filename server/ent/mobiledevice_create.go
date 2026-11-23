@@ -117,6 +117,34 @@ func (_c *MobileDeviceCreate) SetNillableRefreshExpiresAt(v *time.Time) *MobileD
 	return _c
 }
 
+// SetPreviousRefreshTokenHash sets the "previous_refresh_token_hash" field.
+func (_c *MobileDeviceCreate) SetPreviousRefreshTokenHash(v string) *MobileDeviceCreate {
+	_c.mutation.SetPreviousRefreshTokenHash(v)
+	return _c
+}
+
+// SetNillablePreviousRefreshTokenHash sets the "previous_refresh_token_hash" field if the given value is not nil.
+func (_c *MobileDeviceCreate) SetNillablePreviousRefreshTokenHash(v *string) *MobileDeviceCreate {
+	if v != nil {
+		_c.SetPreviousRefreshTokenHash(*v)
+	}
+	return _c
+}
+
+// SetPreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field.
+func (_c *MobileDeviceCreate) SetPreviousRefreshExpiresAt(v time.Time) *MobileDeviceCreate {
+	_c.mutation.SetPreviousRefreshExpiresAt(v)
+	return _c
+}
+
+// SetNillablePreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field if the given value is not nil.
+func (_c *MobileDeviceCreate) SetNillablePreviousRefreshExpiresAt(v *time.Time) *MobileDeviceCreate {
+	if v != nil {
+		_c.SetPreviousRefreshExpiresAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *MobileDeviceCreate) SetCreatedAt(v time.Time) *MobileDeviceCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -343,6 +371,14 @@ func (_c *MobileDeviceCreate) createSpec() (*MobileDevice, *sqlgraph.CreateSpec)
 		_spec.SetField(mobiledevice.FieldRefreshExpiresAt, field.TypeTime, value)
 		_node.RefreshExpiresAt = &value
 	}
+	if value, ok := _c.mutation.PreviousRefreshTokenHash(); ok {
+		_spec.SetField(mobiledevice.FieldPreviousRefreshTokenHash, field.TypeString, value)
+		_node.PreviousRefreshTokenHash = value
+	}
+	if value, ok := _c.mutation.PreviousRefreshExpiresAt(); ok {
+		_spec.SetField(mobiledevice.FieldPreviousRefreshExpiresAt, field.TypeTime, value)
+		_node.PreviousRefreshExpiresAt = &value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(mobiledevice.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -540,6 +576,42 @@ func (u *MobileDeviceUpsert) UpdateRefreshExpiresAt() *MobileDeviceUpsert {
 // ClearRefreshExpiresAt clears the value of the "refresh_expires_at" field.
 func (u *MobileDeviceUpsert) ClearRefreshExpiresAt() *MobileDeviceUpsert {
 	u.SetNull(mobiledevice.FieldRefreshExpiresAt)
+	return u
+}
+
+// SetPreviousRefreshTokenHash sets the "previous_refresh_token_hash" field.
+func (u *MobileDeviceUpsert) SetPreviousRefreshTokenHash(v string) *MobileDeviceUpsert {
+	u.Set(mobiledevice.FieldPreviousRefreshTokenHash, v)
+	return u
+}
+
+// UpdatePreviousRefreshTokenHash sets the "previous_refresh_token_hash" field to the value that was provided on create.
+func (u *MobileDeviceUpsert) UpdatePreviousRefreshTokenHash() *MobileDeviceUpsert {
+	u.SetExcluded(mobiledevice.FieldPreviousRefreshTokenHash)
+	return u
+}
+
+// ClearPreviousRefreshTokenHash clears the value of the "previous_refresh_token_hash" field.
+func (u *MobileDeviceUpsert) ClearPreviousRefreshTokenHash() *MobileDeviceUpsert {
+	u.SetNull(mobiledevice.FieldPreviousRefreshTokenHash)
+	return u
+}
+
+// SetPreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field.
+func (u *MobileDeviceUpsert) SetPreviousRefreshExpiresAt(v time.Time) *MobileDeviceUpsert {
+	u.Set(mobiledevice.FieldPreviousRefreshExpiresAt, v)
+	return u
+}
+
+// UpdatePreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field to the value that was provided on create.
+func (u *MobileDeviceUpsert) UpdatePreviousRefreshExpiresAt() *MobileDeviceUpsert {
+	u.SetExcluded(mobiledevice.FieldPreviousRefreshExpiresAt)
+	return u
+}
+
+// ClearPreviousRefreshExpiresAt clears the value of the "previous_refresh_expires_at" field.
+func (u *MobileDeviceUpsert) ClearPreviousRefreshExpiresAt() *MobileDeviceUpsert {
+	u.SetNull(mobiledevice.FieldPreviousRefreshExpiresAt)
 	return u
 }
 
@@ -793,6 +865,48 @@ func (u *MobileDeviceUpsertOne) UpdateRefreshExpiresAt() *MobileDeviceUpsertOne 
 func (u *MobileDeviceUpsertOne) ClearRefreshExpiresAt() *MobileDeviceUpsertOne {
 	return u.Update(func(s *MobileDeviceUpsert) {
 		s.ClearRefreshExpiresAt()
+	})
+}
+
+// SetPreviousRefreshTokenHash sets the "previous_refresh_token_hash" field.
+func (u *MobileDeviceUpsertOne) SetPreviousRefreshTokenHash(v string) *MobileDeviceUpsertOne {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.SetPreviousRefreshTokenHash(v)
+	})
+}
+
+// UpdatePreviousRefreshTokenHash sets the "previous_refresh_token_hash" field to the value that was provided on create.
+func (u *MobileDeviceUpsertOne) UpdatePreviousRefreshTokenHash() *MobileDeviceUpsertOne {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.UpdatePreviousRefreshTokenHash()
+	})
+}
+
+// ClearPreviousRefreshTokenHash clears the value of the "previous_refresh_token_hash" field.
+func (u *MobileDeviceUpsertOne) ClearPreviousRefreshTokenHash() *MobileDeviceUpsertOne {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.ClearPreviousRefreshTokenHash()
+	})
+}
+
+// SetPreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field.
+func (u *MobileDeviceUpsertOne) SetPreviousRefreshExpiresAt(v time.Time) *MobileDeviceUpsertOne {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.SetPreviousRefreshExpiresAt(v)
+	})
+}
+
+// UpdatePreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field to the value that was provided on create.
+func (u *MobileDeviceUpsertOne) UpdatePreviousRefreshExpiresAt() *MobileDeviceUpsertOne {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.UpdatePreviousRefreshExpiresAt()
+	})
+}
+
+// ClearPreviousRefreshExpiresAt clears the value of the "previous_refresh_expires_at" field.
+func (u *MobileDeviceUpsertOne) ClearPreviousRefreshExpiresAt() *MobileDeviceUpsertOne {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.ClearPreviousRefreshExpiresAt()
 	})
 }
 
@@ -1221,6 +1335,48 @@ func (u *MobileDeviceUpsertBulk) UpdateRefreshExpiresAt() *MobileDeviceUpsertBul
 func (u *MobileDeviceUpsertBulk) ClearRefreshExpiresAt() *MobileDeviceUpsertBulk {
 	return u.Update(func(s *MobileDeviceUpsert) {
 		s.ClearRefreshExpiresAt()
+	})
+}
+
+// SetPreviousRefreshTokenHash sets the "previous_refresh_token_hash" field.
+func (u *MobileDeviceUpsertBulk) SetPreviousRefreshTokenHash(v string) *MobileDeviceUpsertBulk {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.SetPreviousRefreshTokenHash(v)
+	})
+}
+
+// UpdatePreviousRefreshTokenHash sets the "previous_refresh_token_hash" field to the value that was provided on create.
+func (u *MobileDeviceUpsertBulk) UpdatePreviousRefreshTokenHash() *MobileDeviceUpsertBulk {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.UpdatePreviousRefreshTokenHash()
+	})
+}
+
+// ClearPreviousRefreshTokenHash clears the value of the "previous_refresh_token_hash" field.
+func (u *MobileDeviceUpsertBulk) ClearPreviousRefreshTokenHash() *MobileDeviceUpsertBulk {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.ClearPreviousRefreshTokenHash()
+	})
+}
+
+// SetPreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field.
+func (u *MobileDeviceUpsertBulk) SetPreviousRefreshExpiresAt(v time.Time) *MobileDeviceUpsertBulk {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.SetPreviousRefreshExpiresAt(v)
+	})
+}
+
+// UpdatePreviousRefreshExpiresAt sets the "previous_refresh_expires_at" field to the value that was provided on create.
+func (u *MobileDeviceUpsertBulk) UpdatePreviousRefreshExpiresAt() *MobileDeviceUpsertBulk {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.UpdatePreviousRefreshExpiresAt()
+	})
+}
+
+// ClearPreviousRefreshExpiresAt clears the value of the "previous_refresh_expires_at" field.
+func (u *MobileDeviceUpsertBulk) ClearPreviousRefreshExpiresAt() *MobileDeviceUpsertBulk {
+	return u.Update(func(s *MobileDeviceUpsert) {
+		s.ClearPreviousRefreshExpiresAt()
 	})
 }
 

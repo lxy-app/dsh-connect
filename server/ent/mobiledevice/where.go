@@ -99,6 +99,16 @@ func RefreshExpiresAt(v time.Time) predicate.MobileDevice {
 	return predicate.MobileDevice(sql.FieldEQ(FieldRefreshExpiresAt, v))
 }
 
+// PreviousRefreshTokenHash applies equality check predicate on the "previous_refresh_token_hash" field. It's identical to PreviousRefreshTokenHashEQ.
+func PreviousRefreshTokenHash(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldEQ(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshExpiresAt applies equality check predicate on the "previous_refresh_expires_at" field. It's identical to PreviousRefreshExpiresAtEQ.
+func PreviousRefreshExpiresAt(v time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldEQ(FieldPreviousRefreshExpiresAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.MobileDevice {
 	return predicate.MobileDevice(sql.FieldEQ(FieldCreatedAt, v))
@@ -602,6 +612,131 @@ func RefreshExpiresAtIsNil() predicate.MobileDevice {
 // RefreshExpiresAtNotNil applies the NotNil predicate on the "refresh_expires_at" field.
 func RefreshExpiresAtNotNil() predicate.MobileDevice {
 	return predicate.MobileDevice(sql.FieldNotNull(FieldRefreshExpiresAt))
+}
+
+// PreviousRefreshTokenHashEQ applies the EQ predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashEQ(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldEQ(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashNEQ applies the NEQ predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashNEQ(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldNEQ(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashIn applies the In predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashIn(vs ...string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldIn(FieldPreviousRefreshTokenHash, vs...))
+}
+
+// PreviousRefreshTokenHashNotIn applies the NotIn predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashNotIn(vs ...string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldNotIn(FieldPreviousRefreshTokenHash, vs...))
+}
+
+// PreviousRefreshTokenHashGT applies the GT predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashGT(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldGT(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashGTE applies the GTE predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashGTE(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldGTE(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashLT applies the LT predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashLT(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldLT(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashLTE applies the LTE predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashLTE(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldLTE(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashContains applies the Contains predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashContains(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldContains(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashHasPrefix applies the HasPrefix predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashHasPrefix(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldHasPrefix(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashHasSuffix applies the HasSuffix predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashHasSuffix(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldHasSuffix(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashIsNil applies the IsNil predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashIsNil() predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldIsNull(FieldPreviousRefreshTokenHash))
+}
+
+// PreviousRefreshTokenHashNotNil applies the NotNil predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashNotNil() predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldNotNull(FieldPreviousRefreshTokenHash))
+}
+
+// PreviousRefreshTokenHashEqualFold applies the EqualFold predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashEqualFold(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldEqualFold(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshTokenHashContainsFold applies the ContainsFold predicate on the "previous_refresh_token_hash" field.
+func PreviousRefreshTokenHashContainsFold(v string) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldContainsFold(FieldPreviousRefreshTokenHash, v))
+}
+
+// PreviousRefreshExpiresAtEQ applies the EQ predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtEQ(v time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldEQ(FieldPreviousRefreshExpiresAt, v))
+}
+
+// PreviousRefreshExpiresAtNEQ applies the NEQ predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtNEQ(v time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldNEQ(FieldPreviousRefreshExpiresAt, v))
+}
+
+// PreviousRefreshExpiresAtIn applies the In predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtIn(vs ...time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldIn(FieldPreviousRefreshExpiresAt, vs...))
+}
+
+// PreviousRefreshExpiresAtNotIn applies the NotIn predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtNotIn(vs ...time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldNotIn(FieldPreviousRefreshExpiresAt, vs...))
+}
+
+// PreviousRefreshExpiresAtGT applies the GT predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtGT(v time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldGT(FieldPreviousRefreshExpiresAt, v))
+}
+
+// PreviousRefreshExpiresAtGTE applies the GTE predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtGTE(v time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldGTE(FieldPreviousRefreshExpiresAt, v))
+}
+
+// PreviousRefreshExpiresAtLT applies the LT predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtLT(v time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldLT(FieldPreviousRefreshExpiresAt, v))
+}
+
+// PreviousRefreshExpiresAtLTE applies the LTE predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtLTE(v time.Time) predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldLTE(FieldPreviousRefreshExpiresAt, v))
+}
+
+// PreviousRefreshExpiresAtIsNil applies the IsNil predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtIsNil() predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldIsNull(FieldPreviousRefreshExpiresAt))
+}
+
+// PreviousRefreshExpiresAtNotNil applies the NotNil predicate on the "previous_refresh_expires_at" field.
+func PreviousRefreshExpiresAtNotNil() predicate.MobileDevice {
+	return predicate.MobileDevice(sql.FieldNotNull(FieldPreviousRefreshExpiresAt))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

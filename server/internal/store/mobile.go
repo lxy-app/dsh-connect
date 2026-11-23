@@ -112,75 +112,112 @@ func (s *Store) AuthenticateMobileAccess(ctx context.Context, tokenHash string, 
 	return toMobileDeviceRecord(record), toUser(userRecord), nil
 }
 
-// RotateMobileRefresh atomically replaces both tokens. Using the previous
-// refresh token after a successful rotation fails; concurrent rotations have
-// exactly one winner.
+// RotateMobileRefresh issues a new access token and, for a normal refresh,
+// rotates the refresh token. The token retired by that rotation stays
+// acceptable until reuseGrace elapses, so a client that lost the rotation
+// response can retry with the refresh token it still holds. A retry inside the
+// window only renews the access token and keeps the presented refresh token
+// current; it never mints another refresh token, which would strand a client
+// that did receive the first response. Concurrent calls for the same token mint
+// at most one refresh token; with reuseGrace zero exactly one call wins.
 func (s *Store) RotateMobileRefresh(
 	ctx context.Context,
 	refreshTokenHash string,
 	credential MobileCredential,
+	reuseGrace time.Duration,
 	now time.Time,
-) (MobileDeviceRecord, User, error) {
+) (MobileDeviceRecord, User, bool, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
-		return MobileDeviceRecord{}, User{}, fmt.Errorf("begin mobile refresh transaction: %w", err)
+		return MobileDeviceRecord{}, User{}, false, fmt.Errorf("begin mobile refresh transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	record, err := tx.MobileDevice.Query().
 		Where(
-			mobiledevice.RefreshTokenHash(refreshTokenHash),
-			mobiledevice.RefreshTokenHashNEQ(""),
 			mobiledevice.StatusEQ(mobiledevice.StatusActive),
+			mobiledevice.Or(
+				mobiledevice.RefreshTokenHash(refreshTokenHash),
+				mobiledevice.And(
+					mobiledevice.PreviousRefreshTokenHash(refreshTokenHash),
+					mobiledevice.PreviousRefreshExpiresAtGT(now),
+				),
+			),
 		).
 		Only(ctx)
 	if ent.IsNotFound(err) {
-		return MobileDeviceRecord{}, User{}, ErrMobileSessionInvalid
+		return MobileDeviceRecord{}, User{}, false, ErrMobileSessionInvalid
 	}
 	if err != nil {
-		return MobileDeviceRecord{}, User{}, fmt.Errorf("load mobile refresh session: %w", err)
+		return MobileDeviceRecord{}, User{}, false, fmt.Errorf("load mobile refresh session: %w", err)
 	}
-	if record.RefreshExpiresAt == nil || !now.Before(*record.RefreshExpiresAt) {
-		return MobileDeviceRecord{}, User{}, ErrMobileSessionInvalid
+	rotated := record.RefreshTokenHash == refreshTokenHash
+	if rotated {
+		if record.RefreshExpiresAt == nil || !now.Before(*record.RefreshExpiresAt) {
+			return MobileDeviceRecord{}, User{}, false, ErrMobileSessionInvalid
+		}
+	} else if record.PreviousRefreshExpiresAt == nil || !now.Before(*record.PreviousRefreshExpiresAt) ||
+		record.RefreshTokenHash == "" {
+		return MobileDeviceRecord{}, User{}, false, ErrMobileSessionInvalid
 	}
 	userRecord, err := tx.User.Query().Where(user.IDEQ(record.UserID)).Only(ctx)
 	if ent.IsNotFound(err) {
-		return MobileDeviceRecord{}, User{}, ErrMobileSessionInvalid
+		return MobileDeviceRecord{}, User{}, false, ErrMobileSessionInvalid
 	}
 	if err != nil {
-		return MobileDeviceRecord{}, User{}, fmt.Errorf("load mobile refresh user: %w", err)
+		return MobileDeviceRecord{}, User{}, false, fmt.Errorf("load mobile refresh user: %w", err)
 	}
 	if userRecord.Status != user.StatusActive {
-		return MobileDeviceRecord{}, User{}, ErrMobileSessionInvalid
+		return MobileDeviceRecord{}, User{}, false, ErrMobileSessionInvalid
 	}
 
-	updated, err := tx.MobileDevice.Update().
+	// The retired token keeps whatever remains of its own lifetime, capped by
+	// the reuse grace. Zero grace retires it immediately.
+	retiredDeadline := now.Add(reuseGrace)
+	if record.RefreshExpiresAt != nil && record.RefreshExpiresAt.Before(retiredDeadline) {
+		retiredDeadline = *record.RefreshExpiresAt
+	}
+	update := tx.MobileDevice.Update().
 		Where(
 			mobiledevice.IDEQ(record.ID),
-			mobiledevice.RefreshTokenHash(refreshTokenHash),
 			mobiledevice.StatusEQ(mobiledevice.StatusActive),
 		).
 		SetAccessTokenHash(credential.AccessTokenHash).
-		SetRefreshTokenHash(credential.RefreshTokenHash).
 		SetAccessExpiresAt(credential.AccessExpiresAt).
-		SetRefreshExpiresAt(credential.RefreshExpiresAt).
 		SetLastSeenAt(now).
-		SetUpdatedAt(now).
-		Save(ctx)
+		SetUpdatedAt(now)
+	if rotated {
+		update = update.
+			Where(mobiledevice.RefreshTokenHash(refreshTokenHash)).
+			SetRefreshTokenHash(credential.RefreshTokenHash).
+			SetRefreshExpiresAt(credential.RefreshExpiresAt).
+			SetPreviousRefreshTokenHash(refreshTokenHash).
+			SetPreviousRefreshExpiresAt(retiredDeadline)
+	} else {
+		// A retry inside the grace window revives the presented token and keeps
+		// the token issued by the first rotation acceptable as the new previous.
+		update = update.
+			Where(mobiledevice.PreviousRefreshTokenHash(refreshTokenHash)).
+			SetRefreshTokenHash(refreshTokenHash).
+			SetRefreshExpiresAt(credential.RefreshExpiresAt).
+			SetPreviousRefreshTokenHash(record.RefreshTokenHash).
+			SetPreviousRefreshExpiresAt(retiredDeadline)
+	}
+	updated, err := update.Save(ctx)
 	if err != nil {
-		return MobileDeviceRecord{}, User{}, fmt.Errorf("rotate mobile refresh token: %w", err)
+		return MobileDeviceRecord{}, User{}, false, fmt.Errorf("rotate mobile refresh token: %w", err)
 	}
 	if updated == 0 {
-		return MobileDeviceRecord{}, User{}, ErrMobileSessionInvalid
+		return MobileDeviceRecord{}, User{}, false, ErrMobileSessionInvalid
 	}
 	persisted, err := tx.MobileDevice.Query().Where(mobiledevice.IDEQ(record.ID)).Only(ctx)
 	if err != nil {
-		return MobileDeviceRecord{}, User{}, fmt.Errorf("reload mobile refresh session: %w", err)
+		return MobileDeviceRecord{}, User{}, false, fmt.Errorf("reload mobile refresh session: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return MobileDeviceRecord{}, User{}, fmt.Errorf("commit mobile refresh transaction: %w", err)
+		return MobileDeviceRecord{}, User{}, false, fmt.Errorf("commit mobile refresh transaction: %w", err)
 	}
-	return toMobileDeviceRecord(persisted), toUser(userRecord), nil
+	return toMobileDeviceRecord(persisted), toUser(userRecord), rotated, nil
 }
 
 // RevokeMobileDevice invalidates all mobile credentials while retaining the row
@@ -191,8 +228,10 @@ func (s *Store) RevokeMobileDevice(ctx context.Context, mobileDeviceID string, n
 		SetStatus(mobiledevice.StatusRevoked).
 		SetAccessTokenHash("").
 		SetRefreshTokenHash("").
+		SetPreviousRefreshTokenHash("").
 		ClearAccessExpiresAt().
 		ClearRefreshExpiresAt().
+		ClearPreviousRefreshExpiresAt().
 		SetRevokedAt(now).
 		SetUpdatedAt(now).
 		Save(ctx)

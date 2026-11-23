@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -176,7 +177,9 @@ func (s *Server) handleMobileRefresh(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not generate mobile credentials", true))
 		return
 	}
-	device, user, err := s.store.RotateMobileRefresh(r.Context(), store.HashToken(request.RefreshToken), credential, now)
+	device, user, rotated, err := s.store.RotateMobileRefresh(
+		r.Context(), store.HashToken(request.RefreshToken), credential, s.config.MobileRefreshReuseGrace, now,
+	)
 	if err != nil {
 		if errors.Is(err, store.ErrMobileSessionInvalid) || errors.Is(err, store.ErrUserNotFound) {
 			s.audit(store.AuditEntry{
@@ -187,11 +190,17 @@ func (s *Server) handleMobileRefresh(w http.ResponseWriter, r *http.Request) {
 				ErrorCode:  protocol.CodeUnauthorized,
 				SourceIP:   sourceIP(r),
 			})
-			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "refresh token is invalid, expired, or already used", false))
+			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "refresh token is invalid, expired, or outside its reuse window", false))
 			return
 		}
 		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not refresh mobile session", true))
 		return
+	}
+	if !rotated {
+		// The phone lost the first rotation response and retried with the token
+		// it still held. Its refresh token stays current; only the access token
+		// was renewed.
+		log.Printf("mobile.token.refresh reused retired token deviceId=%s", device.Device.MobileDeviceID)
 	}
 	s.audit(store.AuditEntry{
 		OccurredAt: now,
@@ -201,6 +210,15 @@ func (s *Server) handleMobileRefresh(w http.ResponseWriter, r *http.Request) {
 		Result:     "success",
 		SourceIP:   sourceIP(r),
 	})
+	if !rotated {
+		refreshToken = request.RefreshToken
+	}
+	if device.AccessExpiresAt != nil {
+		credential.AccessExpiresAt = *device.AccessExpiresAt
+	}
+	if device.RefreshExpiresAt != nil {
+		credential.RefreshExpiresAt = *device.RefreshExpiresAt
+	}
 	writeJSON(w, http.StatusOK, mobileSessionResponse(device, user, accessToken, refreshToken, credential))
 }
 

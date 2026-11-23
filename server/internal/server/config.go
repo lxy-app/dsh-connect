@@ -15,13 +15,18 @@ type Config struct {
 	PairingChallengeTTL   time.Duration
 	MobileAccessTokenTTL  time.Duration
 	MobileRefreshTokenTTL time.Duration
-	CommandTimeout        time.Duration
-	MaxPayloadBytes       int64
-	HeartbeatInterval     time.Duration
-	WriteTimeout          time.Duration
-	EventBuffer           int
-	AdminSessionTTL       time.Duration
-	AdminOrigin           string
+	// MobileRefreshReuseGrace keeps the refresh token retired by the last
+	// rotation acceptable for a retry, so a lost rotation response does not
+	// force the phone to log in again. Zero retires it immediately; cmd/server
+	// defaults it to 24h.
+	MobileRefreshReuseGrace time.Duration
+	CommandTimeout          time.Duration
+	MaxPayloadBytes         int64
+	HeartbeatInterval       time.Duration
+	WriteTimeout            time.Duration
+	EventBuffer             int
+	AdminSessionTTL         time.Duration
+	AdminOrigin             string
 
 	// AttachmentsMode is off | read | readwrite. "read" lets a phone download
 	// files a session declared; anything else is rejected at startup.
@@ -119,6 +124,9 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if c.MobileAccessTokenTTL <= 0 || c.MobileRefreshTokenTTL <= 0 {
 		return Config{}, errors.New("invalid mobile token TTL configuration")
+	}
+	if c.MobileRefreshReuseGrace < 0 {
+		return Config{}, errors.New("invalid mobile refresh reuse grace")
 	}
 	if c.MaxPayloadBytes < 1024 || c.HeartbeatInterval <= 0 || c.WriteTimeout <= 0 || c.EventBuffer < 1 {
 		return Config{}, errors.New("invalid payload, heartbeat, or buffer configuration")
