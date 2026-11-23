@@ -215,7 +215,7 @@ export function ModelSheet({
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.42)' },
-  expandedOverlay: { justifyContent: 'center', padding: 32 },
+  expandedOverlay: { justifyContent: 'center', alignItems: 'center', padding: 32 },
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   sheet: { maxHeight: '88%', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 16, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, marginBottom: 12 },

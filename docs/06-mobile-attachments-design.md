@@ -1061,3 +1061,8 @@ App 选择（ImagePicker / DocumentPicker）
 - 鸿蒙 ESLint、TypeScript、144 项业务测试与 12 项构建脚本测试通过；新增覆盖空/localhost/bundle authority URI、非法原生结果和附件模式错误文案。
 - Release prebuild 与签名 HAP 构建成功，`verify-app` 校验代码签名、证书链及 debug Profile 后覆盖安装到 XYAO-W00（API 24）。产物 SHA256 为 `7463ab1ca456dc002b49f1dbc782756e5bdb56cbd5b28a4e673a515011b732e2`。
 - 真机复验通过系统 PhotoPicker 选择一张图片后成功进入上传 ready 状态，JPG 文件卡显示约 510 KB 且发送按钮可用，未再出现 `decodeFileUri` authority 异常。复验只选择并上传附件，没有发送 prompt 或修改会话正文。
+
+## 25. 鸿蒙 Pad 会话弹层居中（2026-11-23）
+
+- expanded 的附件与模型弹层原先只设置 `justifyContent: 'center'`，在默认纵向 flex 下仅控制垂直位置，限宽 sheet 会贴左。两处 overlay 增加 `alignItems: 'center'`，保持 compact 底部弹层不变。
+- 真机复验确认附件弹层在 expanded 下水平、垂直居中；与上一节的实际上传使用同一 Release 签名 HAP。
