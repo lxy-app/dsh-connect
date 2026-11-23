@@ -25,6 +25,7 @@ import { AttachmentDraftBar } from '@/components/attachment-draft-bar';
 import { InteractionCard } from '@/features/interactions/interaction-card';
 import { ModelSheet } from '@/features/session/model-sheet';
 import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
+import { usePickedAttachmentCache } from '@/features/session/use-picked-attachment-cache';
 import { SessionModelProvider, useSessionModel } from '@/features/session/session-model-provider';
 import { SessionDrawer } from '@/features/navigation/session-drawer';
 import { SessionMaster } from '@/features/navigation/session-master';
@@ -148,6 +149,7 @@ function ChatScreenContent() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [attachments, setAttachments] = useState<PromptAttachmentDraft[]>([]);
+  const pickedAttachmentCache = usePickedAttachmentCache();
   const attachmentUploads = useRef(new KeyedPublishQueue<PromptAttachmentDraft>());
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
@@ -655,6 +657,7 @@ function ChatScreenContent() {
           ...item,
           state: 'ready',
           attachmentId: staged.attachmentId,
+          kind: staged.kind,
           mime: staged.mime,
           bytes: staged.bytes,
           error: undefined,
@@ -680,6 +683,7 @@ function ChatScreenContent() {
         Alert.alert('无法添加附件', picked.reason);
         return;
       }
+      if (!pickedAttachmentCache.own(picked.drafts)) return;
       const accepted: PromptAttachmentDraft[] = [];
       let rejected: string | null = null;
       const next = [...attachments];
@@ -688,7 +692,10 @@ function ChatScreenContent() {
         if (admission.ok) {
           next.push(admission.draft);
           accepted.push(admission.draft);
-        } else rejected = admission.reason;
+        } else {
+          pickedAttachmentCache.release([candidate]);
+          rejected = admission.reason;
+        }
       }
       // A state updater must stay pure and may run after this function resumes.
       // Merge the independently collected picks so their uploads always start.
@@ -705,12 +712,14 @@ function ChatScreenContent() {
         setUploadingAttachments(false);
       }
     },
-    [attachments, uploadAttachment],
+    [attachments, pickedAttachmentCache, uploadAttachment],
   );
 
   const removeAttachment = useCallback((localId: string) => {
-    setAttachments((current) => current.filter((item) => item.localId !== localId));
-  }, []);
+    const item = attachments.find((entry) => entry.localId === localId);
+    if (item) pickedAttachmentCache.release([item]);
+    setAttachments((current) => current.filter((entry) => entry.localId !== localId));
+  }, [attachments, pickedAttachmentCache]);
 
   const retryAttachment = useCallback(
     (localId: string) => {
@@ -774,6 +783,7 @@ function ChatScreenContent() {
           ...(stagedIds.length > 0 ? { attachmentIds: stagedIds } : {}),
         }),
       );
+      pickedAttachmentCache.release(stagedAttachments);
       setPendingReply({ since: Date.now(), afterSeq, text });
       setNowTick(Date.now());
       await loadLatest('silent');

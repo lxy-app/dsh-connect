@@ -40,7 +40,7 @@ export function MoreOptionsSheet({
   const pickersDisabled = attachmentSlots <= 0;
   const tiles: readonly { source: AttachmentSource; label: string; glyph: string }[] = [
     { source: 'camera', label: '拍照', glyph: '◎' },
-    { source: 'library', label: '照片 / 视频', glyph: '▣' },
+    { source: 'library', label: '选择照片', glyph: '▣' },
     { source: 'document', label: '添加文件', glyph: '⎘' },
   ];
   return (

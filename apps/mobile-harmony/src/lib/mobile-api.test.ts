@@ -366,3 +366,10 @@ test('rate limited login has a specific retry message', () => {
     '登录尝试过多，请稍后重试。',
   );
 });
+
+test('disabled attachment uploads explain the required Server mode', () => {
+  assert.match(
+    describeMobileApiError(new MobileApiError('not_found', 'attachment upload is disabled', 404)),
+    /readwrite/,
+  );
+});

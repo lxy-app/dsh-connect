@@ -1,0 +1,13 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "harmony_attachment_picker-harmony",
+  "version": "1.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "harmony-attachment-picker": "./library"
+  },
+  "overrides": {
+    "@expo-harmony/expo-modules-core": "55.0.26-harmony.3",
+    "@rnoh/react-native-openharmony": "0.84.1"
+  }
+}
