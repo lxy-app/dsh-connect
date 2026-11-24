@@ -1034,6 +1034,37 @@ paths:
               schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileWorkspaceListResponse}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "500": {$ref: "#/components/responses/InternalError"}
+  /v1/mobile/workspaces/{workspaceId}/model:
+    get:
+      tags: [mobileAccess]
+      operationId: getMobileWorkspaceModel
+      summary: Read the available model catalog for a new-session draft
+      description: |
+        Requires an effective user-policy `read` scope for the device and workspace.
+        The Connector calls the Host model catalog with only `workspaceId`; it does not
+        create a Session, resolve an Agent, or read Session projections. The response
+        omits `sessionId`, uses `projectionKind=new-session`, sets both `default` and
+        `effective` to the deployment default, and returns null `lastUsed` and `next`.
+      security:
+        - mobileBearer: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema: {type: string, minLength: 1}
+        - {$ref: "#/components/parameters/DeviceIdQuery"}
+      responses:
+        "200":
+          description: Display-safe model catalog for a new-session draft.
+          content:
+            application/json:
+              schema: {$ref: schemas/v1/mobile.schema.json#/$defs/MobileModelCatalogResponse}
+        "400": {$ref: "#/components/responses/InvalidRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/DeviceOffline"}
+        "504": {$ref: "#/components/responses/CommandTimeout"}
+        "500": {$ref: "#/components/responses/InternalError"}
   /v1/mobile/sessions:
     get:
       tags: [mobileAccess]

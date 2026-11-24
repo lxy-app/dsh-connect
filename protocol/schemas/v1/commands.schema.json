@@ -177,7 +177,6 @@
     "SessionModelCatalogParams": {
       "type": "object",
       "required": [
-        "sessionId",
         "workspaceId"
       ],
       "properties": {

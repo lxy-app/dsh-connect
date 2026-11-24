@@ -37,9 +37,11 @@ App REST         POST /v1/mobile/interactions/{interactionId}/decision
 
 `session.create`、`session.prompt` 与 `session.model.select` 都使用持久 `requestId` 幂等。不同命令必须使用不同的 requestId；相同 ID 搭配不同 method、device 或 params 会返回 `idempotency_conflict`。相同并发或完成后的重放返回首次结果，不会再次到达 Connector。模型选择的 `sessionId/workspaceId/provider/model/reasoningEffort` 都进入 command params 与请求哈希。
 
-在 Server 确认设备不在线、尚未向 Connector 提交时，创建、提示词和模型选择请求均返回 `device_offline`，并携带 `error.details.submitted=false`。该结果不写入持久幂等 Store，设备恢复后客户端必须沿用原 `requestId` 重试。命令已经写出后发生断线或 timeout 时结果不确定，Server 仍持久化首次结果，重试不会再次提交。移动端“创建并发送首条指令”依次调用 create 与 prompt，并分别保留两个请求 ID；create 成功后的 prompt 重试不得重新创建会话。模型选择使用另一枚独立 requestId。
+在 Server 确认设备不在线、尚未向 Connector 提交时，创建、提示词和模型选择请求均返回 `device_offline`，并携带 `error.details.submitted=false`。该结果不写入持久幂等 Store，设备恢复后客户端必须沿用原 `requestId` 重试。命令已经写出后发生断线或 timeout 时结果不确定，Server 仍持久化首次结果，重试不会再次提交。移动端“创建并发送首条指令”依次调用 create、可选的模型选择与 prompt，并分别保留独立请求 ID；create 成功后的后续重试不得重新创建会话，模型已确认后的附件或 prompt 重试不得重复切换。模型未确认时不得继续附件或 prompt。
 
 `GET /v1/mobile/sessions/{id}/model` 复用 `read` scope，组合 Host `modelCatalog` 与 Session `modelSelection` 投影，不激活冷 Agent。POST 同路径复用 `prompt` scope，Connector 校验模型后直接调用公开 `agent.model.select`，不调用会保存部署默认值的 `sessionController.selectModel`，也不读写 DSH profile。模型不可用返回 `model_unavailable`，会话需先迁移返回 `session_migration_required`。
+
+`GET /v1/mobile/workspaces/{workspaceId}/model?deviceId=...` 同样复用 `session.model.catalog` 与 `read` scope，但 command params 仅含 `workspaceId`，用于新建会话草稿目录。Connector 只校验工作区 read grant 并调用 Host `modelCatalog`，不创建 Session、不 resolve Agent、不读 projections；响应省略 `sessionId`，`projectionKind=new-session`，`default=effective=catalog.default`，且 `lastUsed=next=null`。
 
 ## App follow 生命周期
 
@@ -97,6 +99,7 @@ GET  /v1/mobile/workspaces         → 用户有效工作区目录
 GET  /v1/mobile/sessions           → 仅有效 read 工作区内的会话
 POST /v1/mobile/sessions           → 需要 prompt scope，持久 requestId 幂等创建
 GET  /v1/mobile/sessions/{id}/messages → 稳定 transcript
+GET  /v1/mobile/workspaces/{id}/model  → 需要 read scope，新建会话草稿目录
 GET  /v1/mobile/sessions/{id}/model    → 需要 read scope，目录 + 当前会话模型
 POST /v1/mobile/sessions/{id}/model    → 需要 prompt scope，只改会话模型
 POST /v1/mobile/sessions/{id}/prompt   → 需要 prompt scope
@@ -107,7 +110,7 @@ POST /v1/mobile/sessions/{id}/cancel   → 需要 cancel scope
 
 - 不再存在手机申请、桌面逐手机 allow/deny 或 `mobileDeviceId` grant。
 - 用户策略变更会关闭该用户所有手机的事件流；Connector 收窄桌面范围会关闭该桌面事件流。
-- 每次创建、历史、模型、prompt、cancel、审批和附件操作都由 Server 校验用户有效权限，再由 Connector 校验桌面授权及会话真实归属，双重 fail-closed。
+- 每次创建、历史、模型、prompt、cancel、审批和附件操作都由 Server 校验用户有效权限，再由 Connector 校验桌面授权及会话真实归属，双重 fail-closed；新建会话草稿模型目录没有 Session，只在 Connector 侧校验 workspace read grant。
 - 单个手机可访问策略内的多个桌面；会话列表按桌面聚合，离线桌面只产生 warning，不阻塞其他桌面。
 
 **边界：** `/v1/devices`、`/v1/sessions`、`/v1/events/ws` 等调试 API 仍只接受 bootstrap token。移动 Access Token 只能访问上述 `/v1/mobile/*` 接口，且受用户策略约束；移动端通过 `/v1/mobile/events/ws` 订阅 `assistant.stream` 增量（Connector 已归一化为 `start/delta/end`），HTTP transcript 仍作为断线恢复和最终消息的兜底。原生 App 使用 `Authorization` 头；浏览器不能在 WebSocket 握手中设置自定义头，因此该路径额外接受短时 `accessToken` 查询参数，生产必须使用 WSS 并避免记录完整 URL。
