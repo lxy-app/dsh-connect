@@ -304,6 +304,20 @@ export async function getMobileTranscript(
   return parseTranscript(payload);
 }
 
+export async function getMobileWorkspaceModel(
+  serverUrl: string,
+  accessToken: string,
+  input: { deviceId: string; workspaceId: string },
+): Promise<MobileSessionModelCatalog> {
+  const query = new URLSearchParams({ deviceId: input.deviceId });
+  const payload = await requestJSON(
+    serverUrl,
+    `/v1/mobile/workspaces/${encodeURIComponent(input.workspaceId)}/model?${query.toString()}`,
+    { method: 'GET', accessToken },
+  );
+  return parseMobileSessionModelCatalog(payload, true);
+}
+
 export async function getMobileSessionModel(
   serverUrl: string,
   accessToken: string,
@@ -757,15 +771,16 @@ function parseSessionCreate(value: unknown): MobileSessionCreateResult {
   };
 }
 
-function parseMobileSessionModelCatalog(value: unknown): MobileSessionModelCatalog {
+function parseMobileSessionModelCatalog(value: unknown, workspaceDraft = false): MobileSessionModelCatalog {
   if (!isRecord(value) || !Array.isArray(value.groups) || !Array.isArray(value.failures)) {
     throw invalidResponse();
   }
-  if (value.projectionKind !== 'sequenced' && value.projectionKind !== 'migration-required') {
-    throw invalidResponse();
-  }
+  const validProjection = workspaceDraft
+    ? value.projectionKind === 'new-session'
+    : value.projectionKind === 'sequenced' || value.projectionKind === 'migration-required';
+  if (!validProjection || (workspaceDraft && value.sessionId !== undefined)) throw invalidResponse();
   return {
-    sessionId: requiredString(value.sessionId),
+    sessionId: workspaceDraft ? '' : requiredString(value.sessionId),
     deviceId: requiredString(value.deviceId),
     workspaceId: requiredString(value.workspaceId),
     default: parseModelSelection(value.default),
@@ -775,7 +790,7 @@ function parseMobileSessionModelCatalog(value: unknown): MobileSessionModelCatal
     routableProviders: parseStringArray(value.routableProviders),
     groups: value.groups.map(parseMobileModelProviderGroup),
     failures: value.failures.map(parseMobileModelCatalogFailure),
-    projectionKind: value.projectionKind,
+    projectionKind: workspaceDraft ? 'new-session' : value.projectionKind === 'sequenced' ? 'sequenced' : 'migration-required',
   };
 }
 

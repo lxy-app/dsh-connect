@@ -40,6 +40,7 @@ export function ModelSheet({
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const migrationRequired = catalog?.projectionKind === 'migration-required';
+  const newSessionDraft = catalog?.projectionKind === 'new-session';
   const effectiveUnavailable = catalog !== null && !selectionInCatalog(catalog, catalog.effective);
 
   const canAttempt = (selection: MobileModelSelection): boolean => {
@@ -61,7 +62,7 @@ export function ModelSheet({
           <View style={styles.heading}>
             <View style={styles.headingCopy}>
               <Text style={[styles.title, { color: theme.text }]}>选择模型</Text>
-              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>仅对当前会话生效</Text>
+              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{newSessionDraft ? '创建后仅对新会话生效' : '仅对当前会话生效'}</Text>
             </View>
             {refreshing ? <ActivityIndicator color={theme.accent} size="small" /> : null}
           </View>
@@ -197,7 +198,9 @@ export function ModelSheet({
           ) : null}
 
           <Text style={[styles.footerHint, { color: theme.textSecondary }]}>
-            不修改桌面默认模型。已经准备的步骤保持不变，后续尚未准备的步骤使用新模型。
+            {newSessionDraft
+              ? '不修改桌面默认模型。创建会话后、首条指令发送前应用所选模型。'
+              : '不修改桌面默认模型。已经准备的步骤保持不变，后续尚未准备的步骤使用新模型。'}
           </Text>
           <Pressable accessibilityRole="button" onPress={onClose} style={[styles.done, { backgroundColor: theme.accent }]}>
             <Text style={[styles.doneText, { color: theme.onAccent }]}>完成</Text>

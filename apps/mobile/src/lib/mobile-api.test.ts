@@ -7,6 +7,7 @@ import {
   getMobileAccessOverview,
   getMobileSessionModel,
   getMobileTranscript,
+  getMobileWorkspaceModel,
   getMobileWorkspaces,
   loginMobileDevice,
   MobileApiError,
@@ -203,6 +204,34 @@ test('mobile model catalog uses the granted query and parses nested reasoning me
   assert.deepEqual(catalog.groups[0]?.models[0]?.badge, {
     text: { en: 'Reasoning', 'zh-CN': '推理' }, tone: 'blue',
   });
+});
+
+test('mobile workspace model catalog has no session identity and keeps the desktop default', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let requestedUrl = '';
+  globalThis.fetch = async (input) => {
+    requestedUrl = String(input);
+    return new Response(JSON.stringify({
+      deviceId: 'dev-1', workspaceId: 'ws-1',
+      default: { provider: 'deepseek', model: 'deepseek-chat' },
+      lastUsed: null, next: null,
+      effective: { provider: 'deepseek', model: 'deepseek-chat' },
+      routableProviders: ['deepseek'], groups: [], failures: [], projectionKind: 'new-session',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const catalog = await getMobileWorkspaceModel('https://connect.example.com/', 'mobile-token', {
+    deviceId: 'dev-1', workspaceId: 'ws-1',
+  });
+  const url = new URL(requestedUrl);
+  assert.equal(url.pathname, '/v1/mobile/workspaces/ws-1/model');
+  assert.equal(url.searchParams.get('deviceId'), 'dev-1');
+  assert.equal(url.searchParams.has('workspaceId'), false);
+  assert.equal(catalog.sessionId, '');
+  assert.equal(catalog.projectionKind, 'new-session');
+  assert.deepEqual(catalog.effective, catalog.default);
+  assert.equal(catalog.next, null);
 });
 
 test('mobile model selection posts the complete stable request without exposing the token', async (t) => {

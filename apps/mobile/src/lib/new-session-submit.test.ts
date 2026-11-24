@@ -103,6 +103,77 @@ test('a prompt retry skips already staged uploads', async () => {
   assert.equal(prompts, 2);
 });
 
+test('new session applies the draft model before attachments and the first prompt', async () => {
+  const calls: string[] = [];
+  const result = await submitNewSessionDraft({
+    created: null,
+    attachments: [image()],
+    createSession: async () => { calls.push('create'); return created; },
+    selectModel: async (sessionId) => {
+      assert.equal(sessionId, created.sessionId);
+      calls.push('model');
+    },
+    uploadAttachment: async (item) => {
+      calls.push('upload');
+      return { ...item, state: 'ready', attachmentId: 'atu_ready' };
+    },
+    prompt: async () => { calls.push('prompt'); },
+  });
+
+  assert.deepEqual(calls, ['create', 'model', 'upload', 'prompt']);
+  assert.equal(result.modelSelected, true);
+});
+
+test('an unconfirmed model selection blocks attachments and prompt across retries', async () => {
+  let createdAttempt: MobileSessionCreateResult | null = null;
+  let creates = 0;
+  let selections = 0;
+  let uploads = 0;
+  let prompts = 0;
+  const input = {
+    attachments: [image()],
+    createSession: async () => { creates += 1; return created; },
+    selectModel: async () => { selections += 1; throw new Error('model timeout'); },
+    uploadAttachment: async (item: PromptAttachmentDraft) => { uploads += 1; return item; },
+    prompt: async () => { prompts += 1; },
+    onCreated: (value: MobileSessionCreateResult) => { createdAttempt = value; },
+  };
+
+  await assert.rejects(submitNewSessionDraft({ ...input, created: createdAttempt, modelSelected: false }), /model timeout/);
+  await assert.rejects(submitNewSessionDraft({ ...input, created: createdAttempt, modelSelected: false }), /model timeout/);
+  assert.equal(creates, 1);
+  assert.equal(selections, 2);
+  assert.equal(uploads, 0);
+  assert.equal(prompts, 0);
+});
+
+test('a prompt retry does not repeat a confirmed model selection', async () => {
+  let createdAttempt: MobileSessionCreateResult | null = null;
+  let modelSelected = false;
+  let creates = 0;
+  let selections = 0;
+  let prompts = 0;
+  const input = {
+    attachments: [],
+    createSession: async () => { creates += 1; return created; },
+    selectModel: async () => { selections += 1; },
+    uploadAttachment: async (item: PromptAttachmentDraft) => item,
+    prompt: async () => {
+      prompts += 1;
+      if (prompts === 1) throw new Error('prompt failed');
+    },
+    onCreated: (value: MobileSessionCreateResult) => { createdAttempt = value; },
+    onModelSelected: () => { modelSelected = true; },
+  };
+
+  await assert.rejects(submitNewSessionDraft({ ...input, created: createdAttempt, modelSelected }), /prompt failed/);
+  const result = await submitNewSessionDraft({ ...input, created: createdAttempt, modelSelected });
+  assert.equal(result.sent, true);
+  assert.equal(creates, 1);
+  assert.equal(selections, 1);
+  assert.equal(prompts, 2);
+});
+
 test('voice transcription only edits the bounded new-session draft', () => {
   assert.equal(appendNewSessionTranscript('', '  第一条指令。 '), '第一条指令。');
   assert.equal(appendNewSessionTranscript('已有文字', '语音补充'), '已有文字\n语音补充');

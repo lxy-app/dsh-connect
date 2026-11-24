@@ -219,7 +219,7 @@ export type MobileSessionModelCatalog = {
   routableProviders: string[];
   groups: MobileModelProviderGroup[];
   failures: MobileModelCatalogFailure[];
-  projectionKind: 'sequenced' | 'migration-required';
+  projectionKind: 'sequenced' | 'migration-required' | 'new-session';
 };
 
 export type MobileModelSelectInput = {
