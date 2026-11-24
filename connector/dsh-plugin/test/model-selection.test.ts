@@ -63,7 +63,10 @@ function setup(options: SetupOptions = {}) {
         }],
       };
     },
-    async create() { return { sessionId: 'unused' }; },
+    async create() {
+      calls.push('create');
+      return { sessionId: 'unused' };
+    },
     async events() { return { cursor: 0, records: [], hasMore: false }; },
     async prompt(request, signal) {
       calls.push('prompt');
@@ -164,6 +167,77 @@ test('model catalog combines catalog and projection without resolving an Agent',
   assert.equal(result.failures[0]?.message, 'Credentials are not configured');
   assert.equal(calls.includes('resolveAgent'), false);
   assert.equal(calls.includes('agent.model.select'), false);
+});
+
+test('workspace-only model catalog returns new-session defaults without Session access', async () => {
+  const { adapter, calls } = setup();
+  const result = await adapter['model.catalog']({ workspaceId: 'ws-1' }, { signal: context.signal });
+  assert.equal(result.sessionId, '');
+  assert.equal(result.deviceId, 'dev-1');
+  assert.equal(result.workspaceId, 'ws-1');
+  assert.deepEqual(result.default, defaultSelection);
+  assert.deepEqual(result.effective, defaultSelection);
+  assert.equal(result.lastUsed, null);
+  assert.equal(result.next, null);
+  assert.equal(result.projectionKind, 'new-session');
+  assert.deepEqual(calls, ['modelCatalog']);
+  assert.equal(calls.includes('create'), false);
+  assert.equal(calls.includes('projections'), false);
+  assert.equal(calls.includes('resolveAgent'), false);
+});
+
+test('workspace-only model catalog enforces read and workspace grants before Host access', async (t) => {
+  await t.test('read scope is required', async () => {
+    const { adapter, calls } = setup({ scopes: ['prompt'] });
+    await assert.rejects(
+      adapter['model.catalog']({ workspaceId: 'ws-1' }, { signal: context.signal }),
+      { code: 'permission_denied' },
+    );
+    assert.deepEqual(calls, []);
+  });
+  await t.test('the workspace must be granted', async () => {
+    const { adapter, calls } = setup();
+    await assert.rejects(
+      adapter['model.catalog']({ workspaceId: 'ws-2' }, { signal: context.signal }),
+      { code: 'workspace_forbidden' },
+    );
+    assert.deepEqual(calls, []);
+  });
+});
+
+test('workspace-only model catalog rejects invalid input before Host access', async (t) => {
+  const cases: readonly unknown[] = [
+    {},
+    { workspaceId: '' },
+    { workspaceId: 'ws-1', sessionId: '' },
+    { workspaceId: 'ws-1', sessionId: null },
+  ];
+  for (const [index, params] of cases.entries()) {
+    await t.test(`invalid input ${index + 1}`, async () => {
+      const { adapter, calls } = setup();
+      await assert.rejects(
+        adapter['model.catalog'](params as { workspaceId: string }, { signal: context.signal }),
+        { code: 'invalid_request' },
+      );
+      assert.deepEqual(calls, []);
+    });
+  }
+});
+
+test('model select still requires sessionId', async () => {
+  const { adapter, calls } = setup();
+  await assert.rejects(
+    adapter['model.select']({
+      workspaceId: 'ws-1', provider: 'deepseek', model: 'deepseek-chat',
+    } as unknown as {
+      sessionId: string;
+      workspaceId: string;
+      provider: string;
+      model: string;
+    }, { signal: context.signal, requestId: 'model-missing-session' }),
+    { code: 'invalid_request' },
+  );
+  assert.deepEqual(calls, []);
 });
 
 test('read-only grants can inspect but cannot select a model', async () => {

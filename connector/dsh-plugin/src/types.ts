@@ -150,7 +150,7 @@ export interface SessionModelCatalogResult {
   readonly routableProviders: readonly string[];
   readonly groups: readonly SessionModelProviderGroup[];
   readonly failures: readonly SessionModelCatalogFailure[];
-  readonly projectionKind: 'sequenced' | 'migration-required';
+  readonly projectionKind: 'sequenced' | 'migration-required' | 'new-session';
 }
 
 export interface SessionModelSelectResult {
