@@ -192,3 +192,16 @@ Connector 必须先做投影前置检查；若为 `migration-required`，返回�
 3. **Development Build 真机**：只读可看不可切、prompt 可切模型与强度、加载/错误/空目录/迁移状态、跨会话隔离、不确定重试同 requestId、后台恢复与桌面并发切换。
 
 因此，当前结论是**方案 D 的 P0 + P1 已实现并通过分层与仿真验证**，但不能把上述结果描述成真实 DSH 生命周期、真实 Agent 请求或真机验收已经通过。上游 `persistDefault` 不再是阻塞项；若未来上游提供同等的公开会话级组合命令，可再简化 Connector，并优先复用其串行化语义。
+
+## 9. 新建会话模型草稿（2026-11-24）
+
+新建页不能复用已有 Session 的目录接口，否则浏览模型就会提前创建空 Session。为此增加 `GET /v1/mobile/workspaces/{workspaceId}/model?deviceId=...`：Connector 仅校验工作区 `read` 授权并读取 `modelCatalog()`，不读取 Session projections、不解析或唤醒 Agent；响应使用 `projectionKind: new-session`，`default` 与 `effective` 均为桌面目录默认值，`lastUsed/next` 为空，且不返回 `sessionId`。
+
+新建页在「＋ → 选择模型」中编辑本地模型与推理强度草稿，切换设备或工作区会清除旧草稿。点击「创建并发送」后，提交顺序为：
+
+1. 使用原创建 requestId 创建 Session；
+2. 有模型草稿时，使用独立且稳定的模型 requestId 调用现有 Session-only 选择接口；
+3. 上传尚未就绪的附件；
+4. 使用原首条 prompt requestId 发送指令。
+
+模型结果未确认时不得继续附件或 prompt；模型已确认而后续步骤重试时不得重复切换。设备、工作区、模型、正文与附件在提交后保持锁定，所有不确定重试沿用原请求标识。整个流程不调用默认模型保存接口，也不读写 DSH profile。真实 DSH 默认值不变与双端真机交互仍属于发布验收，不能由静态检查或 Host 仿真替代。
