@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,6 +32,10 @@ export function MoreOptionsSheet({
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const layout = useResponsiveLayout();
+  const modelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (modelTimer.current !== null) clearTimeout(modelTimer.current);
+  }, []);
   const diverged = catalog !== null && !sameModelSelection(catalog.effective, catalog.default);
   const pickersDisabled = attachmentSlots <= 0;
   const tiles: readonly { source: AttachmentSource; label: string; glyph: string }[] = [
@@ -74,7 +79,15 @@ export function MoreOptionsSheet({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="选择会话模型"
-              onPress={onOpenModel}
+              onPress={() => {
+                if (modelTimer.current !== null) return;
+                onClose();
+                // RNOH must finish dismissing the current native Modal before presenting ModelSheet.
+                modelTimer.current = setTimeout(() => {
+                  modelTimer.current = null;
+                  onOpenModel?.();
+                }, 250);
+              }}
               style={({ pressed }) => [styles.modelAction, { backgroundColor: pressed ? theme.surfaceMuted : 'transparent' }]}
             >
               <View style={styles.actionCopy}>

@@ -133,7 +133,7 @@ export function pageInput(params: PageInputParams): SessionPageRequest {
 }
 
 export interface SessionModelCatalogInputParams {
-  readonly sessionId: unknown;
+  readonly sessionId?: unknown;
   readonly workspaceId: unknown;
 }
 
@@ -144,12 +144,12 @@ export interface SessionModelSelectInputParams extends SessionModelCatalogInputP
 }
 
 export function modelCatalogInput(params: SessionModelCatalogInputParams): {
-  readonly sessionId: string;
+  readonly sessionId?: string;
   readonly workspaceId: string;
 } {
   assertAllowedKeys(params, ['sessionId', 'workspaceId']);
   return {
-    sessionId: sessionAddress(params.sessionId).sessionId,
+    ...params.sessionId === undefined ? {} : { sessionId: sessionAddress(params.sessionId).sessionId },
     workspaceId: requiredText(params.workspaceId, 'workspaceId', 128),
   };
 }

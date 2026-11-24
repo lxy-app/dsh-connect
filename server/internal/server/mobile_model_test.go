@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/deepseek/dsh-connect/server/internal/protocol"
@@ -62,6 +64,20 @@ func serveModelCommand(connection *websocket.Conn, method string, expectedParams
 		})
 	}()
 	return done
+}
+
+func workspaceModelCatalogResult(deviceID string) map[string]any {
+	selection := func() map[string]any {
+		return map[string]any{"provider": "deepseek", "model": "deepseek-chat"}
+	}
+	return map[string]any{
+		"sessionId": "", "deviceId": deviceID, "workspaceId": "ws-1",
+		"default": selection(), "lastUsed": nil, "next": nil, "effective": selection(),
+		"routableProviders": nil,
+		"groups":            []any{map[string]any{"id": "deepseek", "name": "DeepSeek", "models": nil}},
+		"failures":          nil,
+		"projectionKind":    "new-session",
+	}
 }
 
 func TestMobileModelCatalogSelectionIdempotencyAndRestart(t *testing.T) {
@@ -247,4 +263,104 @@ func TestMobileModelReadOnlyPolicyCannotSelect(t *testing.T) {
 		"provider": "deepseek", "model": "deepseek-reasoner",
 	})
 	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+}
+
+func TestMobileWorkspaceModelCatalog(t *testing.T) {
+	fixture := newMobileModelFixture(t, []string{"read"})
+	modelURL := fixture.environment.http.URL + "/v1/mobile/workspaces/ws-1/model?deviceId=" + fixture.connector.deviceID
+	commandErr := serveModelCommand(fixture.connector.connection, protocol.MethodSessionModelCatalog, map[string]any{
+		"workspaceId": "ws-1",
+	}, workspaceModelCatalogResult(fixture.connector.deviceID))
+	status, body := testRequest(t, http.MethodGet, modelURL, fixture.phone.AccessToken, nil)
+	if err := <-commandErr; err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("workspace model catalog status=%d body=%s", status, body)
+	}
+	var wire map[string]json.RawMessage
+	decodeTestJSON(t, body, &wire)
+	if _, exists := wire["sessionId"]; exists {
+		t.Fatalf("workspace model catalog must omit sessionId: %s", body)
+	}
+	var catalog protocol.MobileModelCatalogResponse
+	decodeTestJSON(t, body, &catalog)
+	if catalog.SessionID != "" || catalog.DeviceID != fixture.connector.deviceID || catalog.WorkspaceID != "ws-1" ||
+		catalog.ProjectionKind != "new-session" || catalog.LastUsed != nil || catalog.Next != nil ||
+		!sameModelSelection(catalog.Default, catalog.Effective) || catalog.Effective.Model != "deepseek-chat" {
+		t.Fatalf("unexpected workspace model catalog: %+v", catalog)
+	}
+	if catalog.RoutableProviders == nil || catalog.Groups == nil || catalog.Failures == nil ||
+		len(catalog.Groups) != 1 || catalog.Groups[0].Models == nil {
+		t.Fatalf("workspace catalog arrays were not normalized: %+v", catalog)
+	}
+}
+
+func TestMobileWorkspaceModelCatalogValidatesConnectorResponse(t *testing.T) {
+	fixture := newMobileModelFixture(t, []string{"read"})
+	modelURL := fixture.environment.http.URL + "/v1/mobile/workspaces/ws-1/model?deviceId=" + fixture.connector.deviceID
+	selection := func() map[string]any {
+		return map[string]any{"provider": "deepseek", "model": "deepseek-reasoner"}
+	}
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "session id", mutate: func(result map[string]any) { result["sessionId"] = "sess-1" }},
+		{name: "device id", mutate: func(result map[string]any) { result["deviceId"] = "dev-other" }},
+		{name: "workspace id", mutate: func(result map[string]any) { result["workspaceId"] = "ws-other" }},
+		{name: "projection kind", mutate: func(result map[string]any) { result["projectionKind"] = "sequenced" }},
+		{name: "last used", mutate: func(result map[string]any) { result["lastUsed"] = selection() }},
+		{name: "next", mutate: func(result map[string]any) { result["next"] = selection() }},
+		{name: "effective differs from default", mutate: func(result map[string]any) { result["effective"] = selection() }},
+		{name: "invalid default", mutate: func(result map[string]any) {
+			result["default"] = map[string]any{"provider": "", "model": "deepseek-chat"}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := workspaceModelCatalogResult(fixture.connector.deviceID)
+			test.mutate(result)
+			commandErr := serveModelCommand(fixture.connector.connection, protocol.MethodSessionModelCatalog, map[string]any{
+				"workspaceId": "ws-1",
+			}, result)
+			status, body := testRequest(t, http.MethodGet, modelURL, fixture.phone.AccessToken, nil)
+			if err := <-commandErr; err != nil {
+				t.Fatal(err)
+			}
+			assertErrorResponse(t, status, body, http.StatusInternalServerError, protocol.CodeInternalError)
+		})
+	}
+}
+
+func TestMobileWorkspaceModelCatalogDeniesBeforeConnectorCall(t *testing.T) {
+	fixture := newMobileModelFixture(t, []string{"prompt"})
+	modelURL := fixture.environment.http.URL + "/v1/mobile/workspaces/ws-1/model?deviceId=" + fixture.connector.deviceID
+	status, body := testRequest(t, http.MethodGet, modelURL, fixture.phone.AccessToken, nil)
+	assertErrorResponse(t, status, body, http.StatusForbidden, protocol.CodeForbidden)
+
+	readCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, data, err := fixture.connector.connection.Read(readCtx)
+	if err == nil {
+		t.Fatalf("denied request produced a Connector command: %s", data)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("checking for Connector commands: %v", err)
+	}
+}
+
+func TestMobileSessionModelCatalogRejectsNewSessionProjection(t *testing.T) {
+	fixture := newMobileModelFixture(t, []string{"read"})
+	result := workspaceModelCatalogResult(fixture.connector.deviceID)
+	result["sessionId"] = "sess-1"
+	commandErr := serveModelCommand(fixture.connector.connection, protocol.MethodSessionModelCatalog, map[string]any{
+		"sessionId": "sess-1", "workspaceId": "ws-1",
+	}, result)
+	modelURL := fixture.environment.http.URL + "/v1/mobile/sessions/sess-1/model?deviceId=" + fixture.connector.deviceID + "&workspaceId=ws-1"
+	status, body := testRequest(t, http.MethodGet, modelURL, fixture.phone.AccessToken, nil)
+	if err := <-commandErr; err != nil {
+		t.Fatal(err)
+	}
+	assertErrorResponse(t, status, body, http.StatusInternalServerError, protocol.CodeInternalError)
 }

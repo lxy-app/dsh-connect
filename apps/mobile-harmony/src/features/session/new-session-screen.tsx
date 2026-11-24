@@ -20,7 +20,9 @@ import { AdaptivePage } from '@/components/adaptive-page';
 import { AttachmentDraftBar } from '@/components/attachment-draft-bar';
 import { ChatIcon } from '@/components/chat-icon';
 import { EmptyState } from '@/components/empty-state';
+import { ModelSheet } from '@/features/session/model-sheet';
 import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
+import { useNewSessionModel } from '@/features/session/use-new-session-model';
 import { SessionMaster } from '@/features/navigation/session-master';
 import { useVoiceTranscription } from '@/features/session/use-voice-transcription';
 import { Typography } from '@/constants/theme';
@@ -33,11 +35,13 @@ import {
   describeMobileApiError,
   getMobileAccessOverview,
   promptMobileSession,
+  selectMobileSessionModel,
   uploadMobileAttachment,
 } from '@/lib/mobile-api';
 import { KeyedPublishQueue } from '@shared/lib/keyed-publish-queue';
 import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
 import { appendNewSessionTranscript, newSessionTitle, submitNewSessionDraft } from '@shared/lib/new-session-submit';
+import { modelLabel, sameModelSelection } from '@shared/lib/session-model';
 import {
   admitAttachment,
   canSubmitPrompt,
@@ -49,6 +53,7 @@ import { useMobileSession } from '@/providers/mobile-session-provider';
 import type {
   MobileAccessOverview,
   MobileDesktopAccess,
+  MobileModelSelection,
   MobileSession,
   MobileSessionCreateResult,
 } from '@shared/types/mobile';
@@ -60,6 +65,8 @@ type CreateAttempt = {
   workspaceId: string;
   text: string;
   attachments: PromptAttachmentDraft[];
+  modelSelection: MobileModelSelection | null;
+  modelRequestId: string | null;
   createRequestId: string;
   promptRequestId: string;
 };
@@ -80,6 +87,8 @@ export function NewSessionScreen() {
   const attachmentUploads = useRef(new KeyedPublishQueue<PromptAttachmentDraft>());
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  const [modelSelected, setModelSelected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [attemptStarted, setAttemptStarted] = useState(false);
@@ -136,6 +145,19 @@ export function NewSessionScreen() {
       : undefined);
   const workspace = workspaces.find((item) => item.id === requestedWorkspaceId) ?? workspaces[0];
   const locked = attemptStarted || creating;
+  const {
+    catalog: modelCatalog,
+    selection: modelSelection,
+    loading: modelLoading,
+    refreshing: modelRefreshing,
+    error: modelError,
+    refresh: refreshModel,
+    selectModel: selectDraftModel,
+  } = useNewSessionModel(desktop?.deviceId, workspace?.id);
+  const openModelSheet = useCallback(() => {
+    setModelSheetOpen(true);
+    void refreshModel();
+  }, [refreshModel]);
 
   const selectDevice = (next: MobileDesktopAccess) => {
     if (locked) return;
@@ -230,6 +252,7 @@ export function NewSessionScreen() {
       currentAttempt.deviceId !== desktop.deviceId
       || currentAttempt.workspaceId !== workspace.id
       || currentAttempt.text !== text
+      || !sameModelSelection(currentAttempt.modelSelection, modelSelection)
     )) {
       setError('本次创建参数已变化。请返回后重新进入本页，避免重复创建或发送。');
       return;
@@ -239,6 +262,8 @@ export function NewSessionScreen() {
       workspaceId: workspace.id,
       text,
       attachments,
+      modelSelection,
+      modelRequestId: modelSelection ? createRequestId('mmod') : null,
       createRequestId: createRequestId('mcr'),
       promptRequestId: createRequestId('mpr'),
     };
@@ -253,6 +278,7 @@ export function NewSessionScreen() {
     try {
       const result = await submitNewSessionDraft({
         created,
+        modelSelected: modelSelected || attempt.modelSelection === null,
         attachments: attempt.attachments,
         createSession: () => authorized((serverUrl, token) =>
           createMobileSession(serverUrl, token, {
@@ -262,6 +288,20 @@ export function NewSessionScreen() {
           }),
         ),
         onCreated: setCreated,
+        selectModel: async (sessionId) => {
+          const selection = attempt.modelSelection;
+          const requestId = attempt.modelRequestId;
+          if (!selection || !requestId) return;
+          await authorized((serverUrl, token) => selectMobileSessionModel(serverUrl, token, sessionId, {
+            requestId,
+            deviceId: attempt.deviceId,
+            workspaceId: attempt.workspaceId,
+            provider: selection.provider,
+            model: selection.model,
+            ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+          }));
+        },
+        onModelSelected: () => setModelSelected(true),
         uploadAttachment: (item, sessionId) => uploadAttachment(item, {
           sessionId,
           deviceId: attempt.deviceId,
@@ -282,6 +322,7 @@ export function NewSessionScreen() {
         ),
       });
       setCreated(result.created);
+      setModelSelected(result.modelSelected);
       if (!result.sent) {
         setError('附件尚未全部上传成功，首条指令尚未发送。可只重试失败附件，或点击重试继续。');
         return;
@@ -563,13 +604,15 @@ export function NewSessionScreen() {
                 </Pressable>
               </View>
               <Text style={[styles.promptMeta, { color: theme.textSecondary, borderTopColor: theme.border }]}>
-                {voice.voiceMode ? '语音转写后仍可编辑 · 创建前请确认内容' : '创建后立即发送 · Agent 与模型跟随桌面默认'}
+                {voice.voiceMode
+                  ? '语音转写后仍可编辑 · 创建前请确认内容'
+                  : `创建后立即发送 · ${modelCatalog ? `模型：${modelLabel(modelCatalog, modelCatalog.effective)}` : '模型跟随桌面默认'}`}
               </Text>
             </View>
             <Text style={[styles.promptHint, { color: promptError ? theme.danger : theme.textSecondary }]}>
               {promptError ?? '建议写清任务目标、范围和验收标准。'}
             </Text>
-            {locked ? <Text style={[styles.lockedHint, { color: theme.textSecondary }]}>为避免重复提交，本次设备、工作区、首条指令和附件已锁定；失败附件仍可单独重试。</Text> : null}
+            {locked ? <Text style={[styles.lockedHint, { color: theme.textSecondary }]}>为避免重复提交，本次设备、工作区、模型、首条指令和附件已锁定；失败附件仍可单独重试。</Text> : null}
             <Text style={[styles.security, { color: theme.textSecondary }]}>仅使用已授权工作区，桌面审批策略保持不变。</Text>
           </ScrollView>
 
@@ -590,12 +633,28 @@ export function NewSessionScreen() {
 
       <MoreOptionsSheet
         visible={moreOptionsOpen}
-        catalog={null}
-        refreshing={false}
+        catalog={modelCatalog}
+        refreshing={modelRefreshing}
         attachmentSlots={MAX_PROMPT_ATTACHMENTS - attachments.length}
         attachmentPurpose="first"
         onPickAttachments={(source) => void addAttachments(source)}
         onClose={() => setMoreOptionsOpen(false)}
+        onOpenModel={() => {
+          setMoreOptionsOpen(false);
+          openModelSheet();
+        }}
+      />
+      <ModelSheet
+        visible={modelSheetOpen}
+        catalog={modelCatalog}
+        loading={modelLoading}
+        refreshing={modelRefreshing}
+        error={modelError}
+        pending={null}
+        canSelect={!locked}
+        onClose={() => setModelSheetOpen(false)}
+        onRefresh={refreshModel}
+        onSelect={selectDraftModel}
       />
       </KeyboardAvoidingView>
     </AdaptivePage>

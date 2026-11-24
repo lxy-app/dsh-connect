@@ -29,26 +29,36 @@ export function newSessionTitle(text: string, attachments: readonly PromptAttach
  */
 export async function submitNewSessionDraft(input: {
   readonly created: MobileSessionCreateResult | null;
+  readonly modelSelected?: boolean;
   readonly attachments: readonly PromptAttachmentDraft[];
   readonly createSession: () => Promise<MobileSessionCreateResult>;
+  readonly selectModel?: (sessionId: string) => Promise<void>;
   readonly uploadAttachment: (item: PromptAttachmentDraft, sessionId: string) => Promise<PromptAttachmentDraft>;
   readonly prompt: (sessionId: string, attachmentIds: readonly string[]) => Promise<void>;
   readonly onCreated?: (created: MobileSessionCreateResult) => void;
+  readonly onModelSelected?: () => void;
   readonly onAttachments?: (attachments: readonly PromptAttachmentDraft[]) => void;
 }): Promise<{
   readonly created: MobileSessionCreateResult;
+  readonly modelSelected: boolean;
   readonly attachments: readonly PromptAttachmentDraft[];
   readonly sent: boolean;
 }> {
   const created = input.created ?? await input.createSession();
   input.onCreated?.(created);
+  let modelSelected = input.modelSelected ?? input.selectModel === undefined;
+  if (!modelSelected) {
+    await input.selectModel?.(created.sessionId);
+    modelSelected = true;
+    input.onModelSelected?.();
+  }
   const staged = await uploadPendingAttachments(
     input.attachments,
     (item) => input.uploadAttachment(item, created.sessionId),
   );
   input.onAttachments?.(staged);
-  if (!readyToSend(staged)) return { created, attachments: staged, sent: false };
+  if (!readyToSend(staged)) return { created, modelSelected, attachments: staged, sent: false };
 
   await input.prompt(created.sessionId, attachmentIds(staged));
-  return { created, attachments: staged, sent: true };
+  return { created, modelSelected, attachments: staged, sent: true };
 }

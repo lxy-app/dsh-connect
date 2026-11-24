@@ -3,6 +3,7 @@ import type {
   HostFileUploads,
   HostPromptContentPart,
   LlmRuntime,
+  ModelCatalog,
   ModelSelection,
   SessionController,
   SessionFollowFrame,
@@ -480,16 +481,30 @@ export class HostSessionAdapter {
     { signal }: { readonly signal: AbortSignal },
   ): Promise<SessionModelCatalogResult> {
     const input = modelCatalogInput(params);
-    const workspaceId = await this.#authorizeSession(input.sessionId, 'read', input.workspaceId);
-    const [catalog, projections] = await Promise.all([
-      this.#controller.modelCatalog(),
-      this.#controller.projections({ sessionId: input.sessionId }, signal),
-    ]);
-    if (projections === null) throw protocolError('not_found', `Session "${input.sessionId}" was not found`);
-    const lastUsed = projections.values.modelSelection?.lastUsed ?? null;
-    const next = projections.values.modelSelection?.next ?? null;
+    let catalog: ModelCatalog;
+    let workspaceId: string;
+    let lastUsed: ModelSelection | null = null;
+    let next: ModelSelection | null = null;
+    let projectionKind: SessionModelCatalogResult['projectionKind'];
+    if (input.sessionId === undefined) {
+      this.#policy.authorize(input.workspaceId, 'read');
+      workspaceId = input.workspaceId;
+      catalog = await this.#controller.modelCatalog();
+      projectionKind = 'new-session';
+    } else {
+      workspaceId = await this.#authorizeSession(input.sessionId, 'read', input.workspaceId);
+      const [sessionCatalog, projections] = await Promise.all([
+        this.#controller.modelCatalog(),
+        this.#controller.projections({ sessionId: input.sessionId }, signal),
+      ]);
+      if (projections === null) throw protocolError('not_found', `Session "${input.sessionId}" was not found`);
+      catalog = sessionCatalog;
+      lastUsed = projections.values.modelSelection?.lastUsed ?? null;
+      next = projections.values.modelSelection?.next ?? null;
+      projectionKind = projections.kind;
+    }
     return {
-      sessionId: input.sessionId,
+      sessionId: input.sessionId ?? '',
       deviceId: this.#deviceId,
       workspaceId,
       default: projectModelSelection(catalog.default),
@@ -525,7 +540,7 @@ export class HostSessionAdapter {
         name: failure.name,
         message: truncate(failure.message || 'Provider models unavailable', 500),
       })),
-      projectionKind: projections.kind,
+      projectionKind,
     };
   }
 

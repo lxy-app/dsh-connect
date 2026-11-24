@@ -13,7 +13,7 @@
 - `session.list/create/page/transcript/prompt/follow/unfollow/cancel` Host 适配；`session.transcript` 保留 user/assistant 对话文本，并把 `tool/call` + `tool/result` 投影成单行步骤（`toolName`、脱敏摘要、状态、耗时、turn）；工具参数、命令输出、推理内容以及注入的 runtime/time/skill context 不进入移动 transcript；历史分页未显式指定 cut 时省略 `throughSeq`，由 Host `events()` 在观察到的日志末尾读取并返回精确 `cursor`；list 的 cached/sequenced projection 只用于列表投影和运行状态，不再作为历史水位，超出体积预算时优先保留最新消息。
 - 使用 `workspaceRegistry.sessionIds` 校验真实 session → workspace 归属，默认拒绝；归属变化会撤销旧权限和 active follow。
 - prompt 与模型选择全链路 `requestId` 去重，超时后不盲目重新提交。
-- `session.model.catalog` 组合 `modelCatalog + projections`，只读目录不唤醒冷 Agent；`session.model.select` 重新校验 provider/model/reasoningEffort 后直接调用公开 `agent.model.select`，prompt 与切换按 sessionId 串行，迁移未完成时失败关闭。
+- `session.model.catalog` 组合 `modelCatalog + projections`，只读目录不唤醒冷 Agent；省略 `sessionId` 时仅校验 workspace read grant 并调用 `modelCatalog`，返回 `new-session` 草稿投影，不创建 Session、不读 projections 或 resolve Agent；`session.model.select` 重新校验 provider/model/reasoningEffort 后直接调用公开 `agent.model.select`，prompt 与切换按 sessionId 串行，迁移未完成时失败关闭。
 - follow opening snapshot、持久事件去重/空洞检测、assistant stream 独立坐标；移动端 follow 使用 `compact` 省略大快照，assistant stream 归一化为 `start/delta/end` 文本增量；最后一个 App 事件连接关闭后显式 unfollow。
 - 插件卸载/断连时取消 Host 调用和旧 follow；恢复以 DSH snapshot 为准。
 - 通过同一条已认证出站 WSS 发送 `request` 信封：`pair.updateGrants` 更新桌面自身授权范围，`interaction.audience` 查询具备用户级 `approve` 权限且正在轮询的手机。

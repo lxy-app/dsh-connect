@@ -829,7 +829,6 @@
     "MobileModelCatalogResponse": {
       "type": "object",
       "required": [
-        "sessionId",
         "deviceId",
         "workspaceId",
         "default",
@@ -904,7 +903,8 @@
           "type": "string",
           "enum": [
             "sequenced",
-            "migration-required"
+            "migration-required",
+            "new-session"
           ]
         }
       },

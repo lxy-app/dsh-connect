@@ -483,7 +483,7 @@ type MobileModelCatalogFailure struct {
 }
 
 type MobileModelCatalogResponse struct {
-	SessionID         string                      `json:"sessionId"`
+	SessionID         string                      `json:"sessionId,omitempty"`
 	DeviceID          string                      `json:"deviceId"`
 	WorkspaceID       string                      `json:"workspaceId"`
 	Default           ModelSelection              `json:"default"`

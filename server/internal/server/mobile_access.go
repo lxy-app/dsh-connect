@@ -19,6 +19,7 @@ import (
 func (s *Server) mobileAccessRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/mobile/access", s.mobileAuth(s.handleMobileAccessOverview))
 	mux.HandleFunc("GET /v1/mobile/workspaces", s.mobileAuth(s.handleMobileWorkspaces))
+	mux.HandleFunc("GET /v1/mobile/workspaces/{workspaceId}/model", s.mobileAuth(s.handleMobileWorkspaceModel))
 	mux.HandleFunc("GET /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionList))
 	mux.HandleFunc("POST /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionCreate))
 	mux.HandleFunc("GET /v1/mobile/sessions/{sessionId}/messages", s.mobileAuth(s.handleMobileSessionMessages))
@@ -416,6 +417,46 @@ func (s *Server) handleMobileSessionMessages(w http.ResponseWriter, r *http.Requ
 		TurnEndSeq:  transcript.TurnEndSeq,
 		Truncated:   transcript.Truncated,
 	})
+}
+
+// handleMobileWorkspaceModel returns the display-safe catalog for a new-session
+// draft. No Session is created and no Session projection or Agent is resolved.
+func (s *Server) handleMobileWorkspaceModel(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.PathValue("workspaceId")
+	deviceID := r.URL.Query().Get("deviceId")
+	if !validID(workspaceID) || !validID(deviceID) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInvalidRequest, "workspaceId and deviceId are required", false))
+		return
+	}
+	if _, commandError := s.authorizeMobileSession(r, deviceID, workspaceID, "", "read"); commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	requestID, err := randomToken("req_")
+	if err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "could not generate requestId", true))
+		return
+	}
+	params := map[string]string{"workspaceId": workspaceID}
+	result, commandError := s.router.Execute(r.Context(), protocol.MethodSessionModelCatalog, deviceID, requestID, params, s.config.CommandTimeout)
+	if commandError != nil {
+		writeAPIError(w, *commandError)
+		return
+	}
+	var catalog protocol.MobileModelCatalogResponse
+	if err := json.Unmarshal(result, &catalog); err != nil {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "desktop returned an invalid model catalog", false))
+		return
+	}
+	normalizeMobileModelCatalog(&catalog)
+	if catalog.SessionID != "" || catalog.DeviceID != deviceID || catalog.WorkspaceID != workspaceID ||
+		catalog.ProjectionKind != "new-session" || catalog.LastUsed != nil || catalog.Next != nil ||
+		!validModelSelection(catalog.Default) || !validModelSelection(catalog.Effective) ||
+		!sameModelSelection(catalog.Default, catalog.Effective) {
+		writeAPIError(w, protocol.NewError(protocol.CodeInternalError, "desktop returned an inconsistent model catalog", false))
+		return
+	}
+	writeJSON(w, http.StatusOK, catalog)
 }
 
 // handleMobileSessionModel returns the current Session selection and the

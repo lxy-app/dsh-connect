@@ -18,6 +18,26 @@ func TestMobileSchemaSupportsEffectiveWorkspaceScopes(t *testing.T) {
 	requireSchemaEnum(t, workspaceScopes, "read", "prompt", "approve", "cancel")
 }
 
+func TestModelCatalogSchemaSupportsNewSessionDrafts(t *testing.T) {
+	params := readSchemaNode(t, "commands.schema.json", "$defs", "SessionModelCatalogParams")
+	required, ok := params["required"].([]any)
+	if !ok || len(required) != 1 || required[0] != "workspaceId" {
+		t.Fatalf("model catalog params must require only workspaceId: %+v", params["required"])
+	}
+	response := readSchemaNode(t, "mobile.schema.json", "$defs", "MobileModelCatalogResponse")
+	responseRequired, ok := response["required"].([]any)
+	if !ok {
+		t.Fatalf("model catalog response has no required list: %+v", response)
+	}
+	for _, field := range responseRequired {
+		if field == "sessionId" {
+			t.Fatalf("new-session response must allow an omitted sessionId: %+v", responseRequired)
+		}
+	}
+	projectionKind := readSchemaNode(t, "mobile.schema.json", "$defs", "MobileModelCatalogResponse", "properties", "projectionKind")
+	requireSchemaEnum(t, projectionKind, "sequenced", "migration-required", "new-session")
+}
+
 func readSchemaNode(t *testing.T, name string, path ...string) map[string]any {
 	t.Helper()
 	raw, err := os.ReadFile("../../../protocol/schemas/v1/" + name)
