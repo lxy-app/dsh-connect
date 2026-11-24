@@ -146,6 +146,7 @@ Admin 概览的 prompt 指标只统计幂等表中 `method=session.prompt`、无
 | GET | `/v1/mobile/sessions` | 聚合授权桌面会话；离线桌面返回 warning |
 | POST | `/v1/mobile/sessions` | 创建会话，需 `prompt`，沿用独立 requestId 幂等 |
 | GET | `/v1/mobile/sessions/{id}/messages` | 稳定 transcript，需 `read`；WSS 断开时的兜底 |
+| GET | `/v1/mobile/workspaces/{id}/model` | 新建会话草稿的可用模型目录，需 `read`；不创建会话、不读投影或激活 Agent |
 | GET | `/v1/mobile/sessions/{id}/model` | 当前会话模型与可用目录，需 `read`；不激活冷 Agent |
 | POST | `/v1/mobile/sessions/{id}/model` | 只切换当前会话模型，需 `prompt`，持久幂等 |
 | GET | `/v1/mobile/events/ws` | 需用户有效 `read`；compact follow 并过滤原始工具 payload |
