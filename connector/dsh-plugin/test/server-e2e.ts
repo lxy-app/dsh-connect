@@ -46,6 +46,7 @@ const mobilePromptRequestId = `mobile-prompt-e2e-${Date.now()}-${process.pid}`;
 const mobileAttachmentPromptRequestId = `mobile-attachment-prompt-e2e-${Date.now()}-${process.pid}`;
 const mobileCreateRequestId = `mobile-create-e2e-${Date.now()}-${process.pid}`;
 const mobileModelRequestId = `mobile-model-e2e-${Date.now()}-${process.pid}`;
+const mobileNewSessionModelRequestId = `mobile-new-session-model-e2e-${Date.now()}-${process.pid}`;
 const existingSessionId = `existing-session-${Date.now()}-${process.pid}`;
 const binary = join(temp, process.platform === 'win32' ? 'server.exe' : 'server');
 let server: ChildProcess | null = null;
@@ -237,6 +238,27 @@ async function main(): Promise<void> {
     assert.ok(desktopAccess.availableWorkspaces.find((workspace) => workspace.id === 'ws-1')?.scopes?.includes('prompt'));
     assert.ok(desktopAccess.availableScopes.includes('read'));
     assert.ok(desktopAccess.availableScopes.includes('prompt'));
+    type ModelCatalogResponse = {
+      readonly sessionId?: string;
+      readonly projectionKind: string;
+      readonly lastUsed: ModelSelection | null;
+      readonly next: ModelSelection | null;
+      readonly default: ModelSelection;
+      readonly effective: ModelSelection;
+      readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
+    };
+    const draftCatalog = await mobileRequest<ModelCatalogResponse>(
+      `/v1/mobile/workspaces/ws-1/model?deviceId=${deviceId}`, phone.accessToken,
+    );
+    assert.equal(draftCatalog.sessionId, undefined, 'workspace catalog must not create or expose a draft Session');
+    assert.equal(draftCatalog.projectionKind, 'new-session');
+    assert.deepEqual(draftCatalog.default, host.defaultModel);
+    assert.deepEqual(draftCatalog.effective, host.defaultModel);
+    assert.equal(draftCatalog.lastUsed, null);
+    assert.equal(draftCatalog.next, null);
+    assert.equal(draftCatalog.groups[0]?.models.length, 2);
+    assert.equal(host.modelSelectCalls, 0, 'workspace catalog must not resolve or mutate an Agent');
+
     const mobileCreateBody = { requestId: mobileCreateRequestId, deviceId, workspaceId: 'ws-1' };
     const mobileCreated = await mobileRequest<{ readonly sessionId: string; readonly workspaceId: string }>(
       '/v1/mobile/sessions', phone.accessToken, { method: 'POST', body: mobileCreateBody },
@@ -280,11 +302,6 @@ async function main(): Promise<void> {
     await mobileEvents.open();
 
     const modelUrl = `/v1/mobile/sessions/${existingSessionId}/model?deviceId=${deviceId}&workspaceId=ws-1`;
-    type ModelCatalogResponse = {
-      readonly default: ModelSelection;
-      readonly effective: ModelSelection;
-      readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
-    };
     const initialCatalog = await mobileRequest<ModelCatalogResponse>(modelUrl, phone.accessToken);
     assert.deepEqual(initialCatalog.default, host.defaultModel);
     assert.deepEqual(initialCatalog.effective, host.defaultModel);
@@ -339,6 +356,23 @@ async function main(): Promise<void> {
     assert.equal(host.attachmentReads, 1, 'concurrent pending downloads must share one Host read');
     await mobileEvents.waitFor((message) => message.kind === 'attachment.ready');
     mobileEvents.close();
+
+    const newSessionModelBody = { ...modelBody, requestId: mobileNewSessionModelRequestId };
+    assert.equal(host.prompts.some((prompt) => prompt.sessionId === mobileCreated.sessionId), false);
+    const newSessionSelected = await mobileRequest<{ readonly requestId: string; readonly selected: ModelSelection }>(
+      `/v1/mobile/sessions/${mobileCreated.sessionId}/model`, phone.accessToken,
+      { method: 'POST', body: newSessionModelBody },
+    );
+    assert.equal(newSessionSelected.requestId, mobileNewSessionModelRequestId);
+    assert.equal(host.modelSelectCalls, 2, 'new Session model is applied before its first prompt');
+    const newSessionModelReplay = await mobileRequest<{ readonly requestId: string; readonly selected: ModelSelection }>(
+      `/v1/mobile/sessions/${mobileCreated.sessionId}/model`, phone.accessToken,
+      { method: 'POST', body: newSessionModelBody },
+    );
+    assert.deepEqual(newSessionModelReplay, newSessionSelected);
+    assert.equal(host.modelSelectCalls, 2, 'new Session model replay must not reach Host twice');
+    assert.deepEqual(host.defaultModel, initialCatalog.default, 'both Session selections preserve the deployment default');
+
     const mobilePrompt = await mobileRequest<{ readonly status: string }>(
       `/v1/mobile/sessions/${mobileCreated.sessionId}/prompt`, phone.accessToken,
       {
@@ -403,6 +437,7 @@ async function main(): Promise<void> {
         'durable events and assistant stream',
         'Host unfollow after App disconnect',
         'create + prompt + model selection idempotency',
+        'mobile workspace draft catalog + new Session model before first prompt + idempotent replay',
         'mobile model catalog + Session-only selection + model/selection event',
         'device token reconnect',
         'mobile email/password login + user-policy/desktop-grant intersection',
