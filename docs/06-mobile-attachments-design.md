@@ -926,7 +926,7 @@ App 选择（ImagePicker / DocumentPicker）
 
 ### 未完成与边界
 
-- 鸿蒙壳可编译，但 RNOH 暂无 `expo-image-picker` / `expo-document-picker` 的 JS API（`@expo-harmony` 版只提供原生模块桩），当前明确提示「鸿蒙版暂不支持选择附件」，需另做鸿蒙原生选择器模块。
+- 当时鸿蒙壳可编译，但 RNOH 暂无 `expo-image-picker` / `expo-document-picker` 的 JS API（`@expo-harmony` 版只提供原生模块桩），只能明确提示「鸿蒙版暂不支持选择附件」；2026-11-23 已通过独立鸿蒙原生选择器模块补齐，见第 23 节。
 - 未做 iOS/Android 真机验收；附件选择、相机权限与上传只在静态检查、单元测试和受控 Host 跨端测试中验证。
 - 未做真实 DSH 0.2.2-rc.1 的完整 Agent 冒烟；图片完整解码、持久消息内容与真机相机仍需在安装更新后的桌面 Connector 和手机 App 后验收。
 
@@ -1028,3 +1028,41 @@ App 选择（ImagePicker / DocumentPicker）
 - 生效需要更新 Go Server；更新后关闭旧预览、退出并重新进入会话再打开附件，以重新获取历史消息中的附件元数据（仅刷新最新消息可能保留已加载的旧消息）。用户完成部署后，PAD 上原始 `README.md` 的大小已由 8.7 KB 修正为 8.9 KB；重开预览、标题/列表/链接渲染及长文滚动均通过真机验证。HTML 展示此前已由用户确认正常。
 - 验证：`go vet ./...`、PostgreSQL/SQLite 全量服务端测试及两种数据库的 Connector E2E 通过；新增覆盖已上传大小不被覆盖、旧错误记录恢复、零字节文件以及 transcript 元数据与下载内容一致性。部署由用户手动完成。
 - 修复镜像：`lxyapp/dsh-connect:md-preview-fix-20261122`（`linux/amd64`），已通过项目 Docker smoke：后台与前端路由 200、未授权管理 API 401、healthy、非 root 用户及数据目录可写。构建使用本机 Go 交叉编译和 Admin 生产构建，运行层沿用仓库 Dockerfile；未导出离线包。
+
+## 23. 鸿蒙原生附件选择（2026-11-23）
+
+### 实现
+
+- 新增可重复构建的 `apps/mobile-harmony/modules/harmony-attachment-picker`，由 Expo Harmony autolinking 生成并链接 HAR；不修改 CNG 生成的 `harmony/`，不引入主线 SDK 58 的 picker 依赖，也不改协议、Server、Connector 或共享上传逻辑。
+- 拍照使用系统 `cameraPicker`，只生成图片并写入预创建的应用缓存文件，不额外写入系统相册；相册使用未废弃的 `photoAccessHelper.PhotoViewPicker` 多选图片；普通文件使用 `DocumentViewPicker` 多选任意类型。相册与文档的系统临时 URI 不直接交给 JS，而是复制到应用缓存并比较源/目标字节数；超过 20 MiB 在复制前拒绝。
+- 原生返回缓存 `file://` URI、原始显示名、MIME 和大小。缓存路径使用随机 UUID 与受限扩展名；MIME 优先由 Uniform Type Descriptor 推导，无法识别时为 `application/octet-stream`，不把未知图片伪标为 JPEG。
+- JS 严格解析原生 JSON 结果，沿用 `createAttachmentDraft` 和现有 6 项、20 MiB、重名去重、上传、失败单项重试及 prompt 门槛。原生异常在选择器边界统一转成「无法添加附件」提示，取消不报错；旧 HAP 缺少模块时明确要求重新构建并安装。
+- `PhotoAccessHelper` 在整批复制后释放，多选中途失败清理本批已生成缓存；发送前和失败重试期间保留缓存，不把临时授权 URI 当作持久文件。每个页面用所有权集合管理成功选择结果，未准入、移除、页面放弃和 prompt 成功均释放对应缓存，晚于页面退出返回的选择直接丢弃；删除只接受原生模块生成的 UUID 缓存文件名，JSON 严格解析失败也回收其有效缓存 URI。
+- 上传完成会采用 Server 返回的权威 `kind`，HEIC 等非 PNG/JPEG/WebP/GIF 格式按普通文件展示，避免本地 `PhotoType.IMAGE` 与乐观消息类型不一致。
+- 两个 Composer 入口不变；文件草稿卡补齐 188 宽度和卡内重试布局，相册入口文案收敛为「选择照片」，与实际能力一致。
+
+### 验证边界
+
+- 鸿蒙 ESLint、TypeScript、142 项业务测试与 12 项构建脚本测试通过；新增覆盖原生结果映射、数量截断、取消、非法 URI/MIME/大小、错误信息、缓存删除路径白名单及既有附件/新建会话回归。
+- 完整 `setup:native` 与 unsigned HAP 构建通过，新模块已进入自动生成的 Expo host provider、OHPM HAR 依赖和运行时能力清单；ArkTS、C++/CMake 与 HAP 打包成功。构建未配置签名，未据此宣称安装或真机验收。
+- 主线 Mobile ESLint、TypeScript、149 项测试与 iOS/Android 生产 JS bundle 导出通过；本次未修改主线或共享业务代码。
+- 系统选择器、临时授权复制、相机写入、缓存读取和真实移动上传必须经新 HAP 的真机交互验收。静态检查、单元测试、模块自动链接或原生构建本身均不等于这些真机路径已通过。
+
+## 24. 鸿蒙上传 URI 修正（2026-11-23）
+
+### 真机问题与修复
+
+- Release HAP 上选择图片后已出现草稿，但上传在读取本地文件时失败。Pad 日志明确给出 `ExpoModuleError: Only an empty or localhost file authority is allowed`，调用栈位于 `new File(uri)` 的 `decodeFileUri`；请求尚未发往 Server，因此这次失败不能归因于附件模式、反向代理或上传权限。
+- 原生 `fileUri.getUriFromPath` 会生成带 bundle/provider authority 的系统 URI，适用于系统 Picker 与 `fs.copy`，但不能直接传给 Expo File System。修复后原生文件操作继续使用该系统 URI，返回 JS 的缓存地址改用 Expo Core 公共 `fileUriFromPath`，生成无 authority、正确转义的绝对 `file:///...`；JS 解析同步拒绝非空且非 localhost 的 authority，形成回归防线。
+- 鸿蒙 `describeMobileApiError` 与主线对齐：若后续 Server 明确返回 `attachment upload is disabled`，提示管理员开启 `readwrite`，不再误报为找不到用户或授权。
+
+### 验证
+
+- 鸿蒙 ESLint、TypeScript、144 项业务测试与 12 项构建脚本测试通过；新增覆盖空/localhost/bundle authority URI、非法原生结果和附件模式错误文案。
+- Release prebuild 与签名 HAP 构建成功，`verify-app` 校验代码签名、证书链及 debug Profile 后覆盖安装到 XYAO-W00（API 24）。产物 SHA256 为 `7463ab1ca456dc002b49f1dbc782756e5bdb56cbd5b28a4e673a515011b732e2`。
+- 真机复验通过系统 PhotoPicker 选择一张图片后成功进入上传 ready 状态，JPG 文件卡显示约 510 KB 且发送按钮可用，未再出现 `decodeFileUri` authority 异常。复验只选择并上传附件，没有发送 prompt 或修改会话正文。
+
+## 25. 鸿蒙 Pad 会话弹层居中（2026-11-23）
+
+- expanded 的附件与模型弹层原先只设置 `justifyContent: 'center'`，在默认纵向 flex 下仅控制垂直位置，限宽 sheet 会贴左。两处 overlay 增加 `alignItems: 'center'`，保持 compact 底部弹层不变。
+- 真机复验确认附件弹层在 expanded 下水平、垂直居中；与上一节的实际上传使用同一 Release 签名 HAP。

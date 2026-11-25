@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/empty-state';
 import { ModelSheet } from '@/features/session/model-sheet';
 import { MoreOptionsSheet } from '@/features/session/more-options-sheet';
 import { useNewSessionModel } from '@/features/session/use-new-session-model';
+import { usePickedAttachmentCache } from '@/features/session/use-picked-attachment-cache';
 import { SessionMaster } from '@/features/navigation/session-master';
 import { useVoiceTranscription } from '@/features/session/use-voice-transcription';
 import { Typography } from '@/constants/theme';
@@ -84,6 +85,7 @@ export function NewSessionScreen() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [attachments, setAttachments] = useState<PromptAttachmentDraft[]>([]);
+  const pickedAttachmentCache = usePickedAttachmentCache();
   const attachmentUploads = useRef(new KeyedPublishQueue<PromptAttachmentDraft>());
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
@@ -188,7 +190,7 @@ export function NewSessionScreen() {
               bytes,
             }),
           );
-          result = { ...item, state: 'ready', attachmentId: staged.attachmentId, mime: staged.mime, bytes: staged.bytes, error: undefined };
+          result = { ...item, state: 'ready', attachmentId: staged.attachmentId, kind: staged.kind, mime: staged.mime, bytes: staged.bytes, error: undefined };
         } catch (cause) {
           result = { ...item, state: 'failed', error: describeMobileApiError(cause) };
         }
@@ -210,6 +212,7 @@ export function NewSessionScreen() {
       Alert.alert('无法添加附件', picked.reason);
       return;
     }
+    if (!pickedAttachmentCache.own(picked.drafts)) return;
     const accepted: PromptAttachmentDraft[] = [];
     let rejected: string | null = null;
     const next = [...attachments];
@@ -218,7 +221,10 @@ export function NewSessionScreen() {
       if (admission.ok) {
         next.push(admission.draft);
         accepted.push(admission.draft);
-      } else rejected = admission.reason;
+      } else {
+        pickedAttachmentCache.release([candidate]);
+        rejected = admission.reason;
+      }
     }
     setAttachments((current) => [
       ...current,
@@ -226,7 +232,13 @@ export function NewSessionScreen() {
     ]);
     if (accepted.length > 0) setPromptError(null);
     if (rejected) Alert.alert('部分附件未添加', rejected);
-  }, [attachments, locked]);
+  }, [attachments, locked, pickedAttachmentCache]);
+
+  const removeAttachment = useCallback((localId: string) => {
+    const item = attachments.find((entry) => entry.localId === localId);
+    if (item) pickedAttachmentCache.release([item]);
+    setAttachments((current) => current.filter((entry) => entry.localId !== localId));
+  }, [attachments, pickedAttachmentCache]);
 
   const retryAttachment = useCallback((localId: string) => {
     const attempt = attemptRef.current;
@@ -339,6 +351,7 @@ export function NewSessionScreen() {
         scopes: desktop.grant?.scopes ?? ['read', 'prompt'],
         updatedAt: new Date().toISOString(),
       };
+      pickedAttachmentCache.release(attempt.attachments);
       rememberSession(nextSession);
       router.replace({
         pathname: '/session/[sessionId]',
@@ -523,7 +536,7 @@ export function NewSessionScreen() {
                   disabled={creating || uploadingAttachments}
                   compositionLocked={attemptStarted}
                   onAdd={() => setMoreOptionsOpen(true)}
-                  onRemove={(localId) => setAttachments((current) => current.filter((item) => item.localId !== localId))}
+                  onRemove={removeAttachment}
                   onRetry={retryAttachment}
                 />
               )}

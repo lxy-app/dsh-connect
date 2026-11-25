@@ -4,7 +4,7 @@ DSH Connect 的鸿蒙运行时壳。与 `apps/mobile/` 的 iOS/Android 主线并
 
 当前基线为 Expo SDK 55.0.31 + RNOH 0.84.1，已在 HUAWEI Mate 80 Pro（HarmonyOS 7 / API 26）上完成签名 HAP 构建、安装、用户登录和真实远程 DSH 会话验证。
 
-新建会话与主线共用“创建 → 可选会话模型应用 → 附件上传 → 首条 prompt”编排和语音转写 Hook。新建页从工作区模型目录读取可选模型，选择先保存为本地草稿，提交时使用独立稳定 requestId 应用到新 Session，不修改桌面默认；失败重试不会重复已确认的模型切换。火山 ASR 依赖实时音频原生模块；附件选择器仍按现有能力明确提示不支持，不以静态检查代替 HAP 与真机验收。
+新建会话与主线共用“创建 → 可选会话模型应用 → 附件上传 → 首条 prompt”编排和语音转写 Hook。新建页从工作区模型目录读取可选模型，选择先保存为本地草稿，提交时使用独立稳定 requestId 应用到新 Session，不修改桌面默认；失败重试不会重复已确认的模型切换。火山 ASR 依赖实时音频原生模块；拍照、相册图片与普通文件通过 `harmony-attachment-picker` 原生模块进入同一附件草稿和上传链路，不以静态检查代替 HAP 与真机验收。
 
 会话过程与主线共用有序分组：整轮标题只显示状态和用时，不提供整轮折叠；相邻工具步骤形成可独立折叠的过程组，可见中间回复与最终回复始终留在折叠区外。组身份使用首个成员的事件 seq，手动开合状态优先于运行态默认值。
 
@@ -109,6 +109,7 @@ apps/mobile-harmony/
 ├── src/platform/      # 平台实现与适配边界
 ├── src/shims/         # 鸿蒙 API 兼容与明确降级
 ├── modules/harmony-audio-stream/ # ArkTS AudioCapturer 实时 PCM 原生模块
+├── modules/harmony-attachment-picker/ # 系统拍照、相册图片与文件选择模块
 ├── modules/harmony-file-export/  # DocumentViewPicker 原附件本地保存模块
 ├── scripts/           # 可重复的补丁、prebuild 和 HAP 构建脚本
 ├── vendor/            # 固定版本的上游 JS 与鸿蒙 HAR 提供包
@@ -119,8 +120,9 @@ apps/mobile-harmony/
 
 通用业务代码放在 `apps/mobile-shared/`。平台差异不要写进共享目录；主线也不要为了鸿蒙修改 SDK 版本。
 
-## 附件文档预览
+## 附件选择与文档预览
 
+- 会话与新建会话的“更多输入选项”支持拍照、选择照片和添加文件。`harmony-attachment-picker` 使用系统 CameraPicker / PhotoViewPicker / DocumentViewPicker；相册与文档先复制到 App 私有缓存并校验字节数，拍照直接写入预创建缓存文件。JS 只接收缓存 URI、名称、MIME 和大小，再复用现有 6 项、20 MiB、上传、单项重试与 prompt 链路；缓存在未准入、移除、页面放弃或发送成功后回收。该原生模块必须经 `setup:native`、重新构建并安装 HAP 后才能验收。
 - 文件卡点击后才下载；MD/TXT/JSON/LOG 在应用内阅读，HTML/HTM 与 `text/html` 下载到 App 私有缓存后，读取为文本后通过 `@react-native-ohos/react-native-webview` 的 `source.html` 预览（最大 2 MiB），允许原型脚本运行、在原生层拦截外部导航且不注入凭据。预览加载超过 15 秒会显示重试和保存提示。PDF 与 Office 转换结果使用本地 `react-native-pdf`。Office 预览依赖 Server 的可选 preview-worker，不需要桌面安装办公套件。缓存重开必须经 Bearer + `If-None-Match` 鉴权并收到 304，401/403 或断网不会直接展示旧缓存。
 - 所有附件的“保存”按钮复用原附件下载与校验缓存，再由 `harmony-file-export` 打开系统 `DocumentViewPicker` 并复制到用户选择的 URI；复制后校验字节数，取消或失败不提示成功，不使用 `Share.share` 代替本地保存。该原生模块必须经 `setup:native`、重新构建并安装 HAP 后才能验收。
 - PDF 原生依赖锁定为 `@react-native-ohos/react-native-pdf@7.1.0`（上游 `react-native-pdf@7.0.4`）与对应 BlobUtil；该版本提供面向 RNOH 0.84 的 ArkTS `PdfViewPackage`。Expo/RNOH 版本保持 SDK 55.0.31 + RNOH 0.84.1。修改这些依赖后必须重新执行 `setup:native` 和 HAP 构建。
