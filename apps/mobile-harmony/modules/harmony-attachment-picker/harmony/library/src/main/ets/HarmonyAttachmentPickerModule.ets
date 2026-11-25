@@ -124,9 +124,11 @@ export class HarmonyAttachmentPickerModule extends ExpoModule {
     let target: CacheTarget | undefined = undefined;
     try {
       target = await this.prepareCacheFile('camera.jpg');
-      const profile = new cameraPicker.PickerProfile();
-      profile.cameraPosition = camera.CameraPosition.CAMERA_POSITION_BACK;
-      profile.saveUri = target.uri;
+      // Some HarmonyOS runtimes expose PickerProfile fields as read-only after construction.
+      const profile: cameraPicker.PickerProfile = {
+        cameraPosition: camera.CameraPosition.CAMERA_POSITION_BACK,
+        saveUri: target.uri,
+      };
       const result = await cameraPicker.pick(
         this.context.uiAbilityContext,
         [cameraPicker.PickerMediaType.PHOTO],
