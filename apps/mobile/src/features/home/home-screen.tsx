@@ -37,7 +37,7 @@ export function HomeScreen() {
   const params = useLocalSearchParams<{ tab?: HomeTab }>();
   const insets = useSafeAreaInsets();
   const { session, authorized, disconnect, lastSession, rememberSession } = useMobileSession();
-  const { interactions } = useInteractions();
+  const { pendingCount } = useInteractions();
   const openInteractions = () => router.push('/interactions');
   const requestedTab = params.tab === 'interactions' || params.tab === 'devices' || params.tab === 'profile' ? params.tab : 'sessions';
   const tab = requestedTab;
@@ -134,15 +134,15 @@ export function HomeScreen() {
           </Pressable>
         ) : null}
 
-        {interactions.length > 0 ? (
+        {pendingCount > 0 ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${interactions.length} 个待处理的审批或提问`}
+            accessibilityLabel={`${pendingCount} 个待处理的审批或提问`}
             onPress={openInteractions}
             style={[styles.banner, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}
           >
             <Text style={[styles.bannerText, { color: theme.accent }]}>
-              {interactions.length} 个待处理的审批或提问
+              {pendingCount} 个待处理的审批或提问
             </Text>
             <Text style={[styles.bannerAction, { color: theme.accent }]}>去处理</Text>
           </Pressable>
@@ -191,7 +191,7 @@ export function HomeScreen() {
           />
         )}
       </View>
-      <TabBar active={tab} onChange={setTab} badge={interactions.length} />
+      <TabBar active={tab} onChange={setTab} badge={pendingCount} />
     </View>
   );
 }

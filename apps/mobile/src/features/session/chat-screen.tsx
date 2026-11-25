@@ -96,7 +96,7 @@ function ChatScreenContent() {
   // screen resolves one connection snapshot and refreshes it with the session.
   const [attachmentAuth, setAttachmentAuth] = useState<AttachmentAuth | null>(null);
   const { settings: voiceSettings, hydrated: voiceHydrated, speak, pauseSpeaking, restorePlaybackAudioMode } = useVoice();
-  const { interactions, busyId, decide } = useInteractions();
+  const { interactions, pendingCount, feedback, busyId, decide } = useInteractions();
   const params = useLocalSearchParams<{
     sessionId: string;
     deviceId: string;
@@ -1223,10 +1223,9 @@ function ChatScreenContent() {
               key={interaction.interactionId}
               interaction={interaction}
               busy={busyId === interaction.interactionId}
+              feedback={feedback[interaction.interactionId]}
               onDecision={(decision) => {
-                void decide(interaction, decision).catch((cause: unknown) => {
-                  Alert.alert('提交失败', describeMobileApiError(cause));
-                });
+                void decide(interaction, decision);
               }}
             />
           ))}
@@ -1411,7 +1410,7 @@ function ChatScreenContent() {
         </View>
       )}
       {voiceActive || keyboard.visible ? null : (
-        <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />
+        <TabBar active="sessions" onChange={changeTab} badge={pendingCount} />
       )}
       <MoreOptionsSheet
         visible={moreOptionsOpen}

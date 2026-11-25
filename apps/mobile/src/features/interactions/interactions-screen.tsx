@@ -1,7 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/empty-state';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { describeMobileApiError, getMobileAccessOverview } from '@/lib/mobile-api';
+import { getMobileAccessOverview } from '@/lib/mobile-api';
 import { useInteractions, type InteractionDecision } from '@/providers/interactions-provider';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import type { MobileDesktopAccess, MobileInteraction } from '@shared/types/mobile';
@@ -36,7 +35,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { interactions, busyId, refresh, decide } = useInteractions();
+  const { interactions, feedback, busyId, refresh, decide } = useInteractions();
   const { authorized, status } = useMobileSession();
   const [refreshing, setRefreshing] = useState(false);
   const [withoutApproval, setWithoutApproval] = useState<MobileDesktopAccess[]>([]);
@@ -68,9 +67,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
 
   const onDecision = useCallback(
     (interaction: MobileInteraction, decision: InteractionDecision) => {
-      void decide(interaction, decision).catch((error: unknown) => {
-        Alert.alert('提交失败', describeMobileApiError(error));
-      });
+      void decide(interaction, decision);
     },
     [decide],
   );
@@ -140,6 +137,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
               <InteractionCard
                 interaction={interaction}
                 busy={busyId === interaction.interactionId}
+                feedback={feedback[interaction.interactionId]}
                 onDecision={(decision) => onDecision(interaction, decision)}
               />
               <Pressable
