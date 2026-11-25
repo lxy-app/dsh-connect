@@ -11,6 +11,15 @@ type ReactApi = typeof ReactTypes;
 type Translate = (key: string) => string;
 type Disposable = () => void;
 
+interface PendingDesktopInteraction {
+  readonly interactionId: string;
+  readonly kind: 'approval' | 'question';
+  readonly sessionId: string;
+  readonly title: string;
+  readonly toolName?: string;
+  readonly expiresAt: string;
+}
+
 interface RpcSuccess<T = unknown> {
   readonly ok: true;
   readonly value: T;
@@ -102,6 +111,9 @@ window.__ModuleLoader__.load({
         selectedWorkspaceSummary: '已选 {count} 个', filterKeepsSelection: '筛选不影响其他已选项',
         grantsInvalid: '至少保留 1 个工作区和 1 个动作后才能保存。',
         grantSaveDirty: '变更尚未生效，保存后无需重新配对。', grantSaveClean: '当前授权已保存；调整后先进入未保存状态。',
+        pendingTitle: '等待手机处理', pendingCopy: '手机拥有当前处理窗口。你可以立即收回处理权，随后在 DSH 桌面会话中审批或回答；此操作本身不会批准工具调用。',
+        pendingApproval: '工具审批', pendingQuestion: '用户提问', pendingRemaining: '约 {seconds} 秒后转回桌面', takeover: '立即在桌面处理', takingOver: '正在转交…',
+        takeoverStarted: '已撤回手机处理权，请在 DSH 桌面会话中继续处理。',
       },
       en: {
         appName: 'DSH Connect', title: 'Desktop Connector', subtitle: 'Securely connect this DSH desktop for remote control',
@@ -132,6 +144,9 @@ window.__ModuleLoader__.load({
         selectedWorkspaceSummary: '{count} selected', filterKeepsSelection: 'Filters do not change other selections',
         grantsInvalid: 'Keep at least one workspace and one action selected before saving.',
         grantSaveDirty: 'Changes are not active yet. Save to apply them without re-pairing.', grantSaveClean: 'Grants are saved. Edits enter an unsaved draft first.',
+        pendingTitle: 'Waiting for phone', pendingCopy: 'The phone owns this response window. You can take back control and answer in the DSH desktop session. This action never approves a tool by itself.',
+        pendingApproval: 'Tool approval', pendingQuestion: 'User question', pendingRemaining: 'About {seconds}s until desktop handoff', takeover: 'Handle on desktop now', takingOver: 'Transferring…',
+        takeoverStarted: 'Phone access withdrawn. Continue in the DSH desktop session.',
       },
     };
 
@@ -169,6 +184,8 @@ window.__ModuleLoader__.load({
       .dsc-warning{padding:12px 14px;border-radius:11px;background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 10%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:11px;margin-top:16px}
       .dsc-error{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent);color:var(--dsw-alias-state-error-primary);margin-bottom:14px;white-space:pre-wrap}
       .dsc-notice{padding:11px 13px;border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent);color:var(--dsw-alias-state-success-primary);margin-bottom:14px}
+      .dsc-pending-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--dsw-alias-border-l1)}.dsc-pending-detail{min-width:0}.dsc-pending-title{font-weight:650;overflow-wrap:anywhere}.dsc-pending-meta{font-size:11px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}.dsc-pending-item .dsc-button{flex:0 0 auto}
+      @media(max-width:600px){.dsc-pending-item{align-items:stretch;flex-direction:column}.dsc-pending-item .dsc-button{align-self:flex-end}}
       .dsc-foot{text-align:center;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:18px}.dsc-empty{color:var(--dsw-alias-label-secondary);padding:14px 0}
       @media(max-width:600px){.dsc-wrap{padding:22px 14px}.dsc-card{padding:17px}.dsc-scopes{grid-template-columns:1fr}.dsc-row{flex-direction:column;gap:3px}.dsc-value{text-align:left}}
     `;
@@ -210,6 +227,7 @@ window.__ModuleLoader__.load({
     function Connector({ ctx, t }: ConnectorProps): ReactTypes.ReactElement {
       const [status, setStatus] = useState<ConnectorStatus | null>(null);
       const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
+      const [pendingInteractions, setPendingInteractions] = useState<readonly PendingDesktopInteraction[]>([]);
       const [serverUrl, setServerUrl] = useState('');
       const [pairingCode, setPairingCode] = useState('');
       const [deviceName, setDeviceName] = useState('DSH Desktop');
@@ -229,12 +247,14 @@ window.__ModuleLoader__.load({
 
       const refresh = useCallback(async (): Promise<void> => {
         const generation = ++refreshGeneration.current;
-        const [nextStatus, nextWorkspaces] = await Promise.all([
+        const [nextStatus, nextWorkspaces, nextPending] = await Promise.all([
           call<ConnectorStatus>(ctx, 'status.get'), call<WorkspaceInfo[]>(ctx, 'workspace.list'),
+          call<PendingDesktopInteraction[]>(ctx, 'interaction.pending'),
         ]);
         if (generation !== refreshGeneration.current) return;
         setStatus(nextStatus);
         setWorkspaces(nextWorkspaces);
+        setPendingInteractions(nextPending);
         if (!initialized.current) {
           setServerUrl(nextStatus.serverUrl ?? 'http://127.0.0.1:8787');
           setDeviceName(nextStatus.deviceName ?? 'DSH Desktop');
@@ -358,6 +378,13 @@ window.__ModuleLoader__.load({
         }, t('grantsSaved'));
       };
 
+      const takeOver = (interactionId: string): void => {
+        void run('takeover', async () => {
+          await call(ctx, 'interaction.takeover', { interactionId });
+          setPendingInteractions((current) => current.filter((item) => item.interactionId !== interactionId));
+        }, t('takeoverStarted'));
+      };
+
       const currentGrant = grantDraft ?? baseGrant();
       const selectedWorkspaceSet = new Set(currentGrant.workspaces);
       const selectedWorkspaceCount = workspaces.filter((workspace) => selectedWorkspaceSet.has(workspace.id)).length;
@@ -408,6 +435,21 @@ window.__ModuleLoader__.load({
               status.connected
                 ? h(Button, { disabled: Boolean(busy), onClick: () => void run('disconnect', () => call(ctx, 'connection.disconnect'), t('disconnected')) }, t('disconnect'))
                 : h(Button, { primary: true, disabled: Boolean(busy), onClick: () => void run('connect', () => call(ctx, 'connection.connect')) }, t('retry')))),
+          pendingInteractions.length > 0 && h('section', { className: 'dsc-card', 'aria-label': t('pendingTitle') },
+            h('h2', { className: 'dsc-heading' }, t('pendingTitle')),
+            h('p', { className: 'dsc-copy' }, t('pendingCopy')),
+            pendingInteractions.map((item) => {
+              const remaining = Math.max(0, Math.ceil((Date.parse(item.expiresAt) - Date.now()) / 1_000));
+              return h('div', { className: 'dsc-pending-item', key: item.interactionId },
+                h('div', { className: 'dsc-pending-detail' },
+                  h('div', { className: 'dsc-pending-title' }, item.title),
+                  h('div', { className: 'dsc-pending-meta' },
+                    `${t(item.kind === 'approval' ? 'pendingApproval' : 'pendingQuestion')} · ${item.sessionId} · ${t('pendingRemaining').replace('{seconds}', String(remaining))}`)),
+                h(Button, {
+                  primary: true, disabled: Boolean(busy) || remaining === 0,
+                  onClick: () => takeOver(item.interactionId),
+                }, busy === 'takeover' ? t('takingOver') : t('takeover')));
+            })),
           settingsCard,
           h('section', { className: 'dsc-card dsc-grant-card' },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 } },

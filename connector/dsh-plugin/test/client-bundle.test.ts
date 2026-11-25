@@ -67,6 +67,16 @@ test('Desktop grant editor supports bounded search, selected-only review and glo
   assert.match(source, /!grantDirty \|\| !grantSelectionValid/);
 });
 
+test('Desktop pending interactions expose a local handoff button, not an approval decision', async () => {
+  const source = await readFile(new URL('../../dist/client.js', import.meta.url), 'utf8');
+  assert.match(source, /call\(ctx, 'interaction\.pending'\)/);
+  assert.match(source, /call\(ctx, 'interaction\.takeover', \{ interactionId \}\)/);
+  assert.match(source, /pendingInteractions\.map\(\(item\) =>/);
+  assert.match(source, /onClick: \(\) => takeOver\(item\.interactionId\)/);
+  assert.match(source, /此操作本身不会批准工具调用/);
+  assert.doesNotMatch(source, /call\(ctx, 'interaction\.respond'/);
+});
+
 test('Background status polling does not erase authorization errors', async () => {
   const source = await readFile(new URL('../../dist/client.js', import.meta.url), 'utf8');
   const refresh = source.split('const refresh = useCallback')[1]?.split('useEffect')[0];
