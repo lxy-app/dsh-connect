@@ -273,16 +273,16 @@ App 发送 requestId
 
 实现范围覆盖 DSH 的两个一次性交互 seam：`approval/request`（工具审批）和 `user-questions/request`（`ask_user_question` 选择题/自定义输入）。
 
-1. Connector 以 `prepend` 注册 answerer，在本进程内先看到请求；通过 `interaction.audience` 判断是否有 `approve` 手机正在轮询。有则手机先接管（不启动桌面链），无则直接交给桌面原生链。
+1. Connector 以 `prepend` 注册 answerer，在本进程内先看到请求；通过 `interaction.audience` 判断是否有 `approve` 手机正在轮询，并读取 Server 当前审批 TTL。有则手机先接管（不启动桌面链），无则直接交给桌面原生链。
 2. 创建唯一 `interactionId`，只发送裁剪后的工具名、原因、选项与上下文，不发送 Host 对象、工具参数或 DSH 内部类型。
 3. App 以 2 秒轮询读取待处理列表（`/v1/mobile/interactions`），展示设备、工作区、工具/问题、选项与有效期；轮询同时是“手机在场”的心跳。
 4. 用户在 App 选择 `allow-once`/`reject`，或提交各题选项/自定义文本；Server 先做一次 CAS 预留，再经 `interaction.respond` 命令回到 Connector。
-5. Connector 校验请求未过期、未消费、答案与题目匹配，再 resolve 对应的 DSH waterfall；手机在 grace 窗口内未作答时，Connector 先撤回手机副本再调用 `next()`，由桌面原生审批链接管，因此不会同时出现两张卡或残留失效卡片。
+5. Connector 校验请求未过期、未消费、答案与题目匹配，再 resolve 对应的 DSH waterfall；手机在窗口内未作答时，Connector 先撤回手机副本再调用 `next()`，由桌面原生审批链接管。窗口默认 60 秒，可通过 `DSH_CONNECT_INTERACTION_GRACE_MS` 配置 1000–600000 毫秒；以 `createdAt + min(配置窗口, Server TTL - 1 秒传输裕量)` 计算绝对截止，`interaction.request.expiresAt` 与本地可答截止、定时移交共用这一时刻，不再额外加 5 秒。Server 使用相同或更早的截止时间并在决策前做 CAS 检查；管理员运行时收紧 TTL 会使既有卡片提前失效，以 Server 最新状态为准。
 
 安全约束：
 
 - 只允许一次性批准，不默认提供永久允许。
-- 桌面原生审批链始终可用：无手机在场时立即接管，手机在场但未在 grace 窗口（默认 6 秒）内作答时由桌面接管。
+- 桌面原生审批链始终可用：无手机在场时立即接管；手机在场但未在默认 60 秒内作答、Connector 断线或桌面所有者主动点击本地接管时，由桌面接管。
 - 同一请求只在一端展示：手机接管成功则桌面不弹卡；移交桌面时先撤回手机副本。
 - 超时、离线、重复响应或协议错误失败关闭；不伪造批准。
 - App 不直接执行工具，不通过远程接入自动改为 `never`。

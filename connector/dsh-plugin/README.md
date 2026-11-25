@@ -25,7 +25,7 @@
 - 创建会话也要求 `prompt` scope。
 - 不支持任意 `cwd`、任意 Shell 或远程关闭审批。附件只接受会话中明确声明的交付文件：手机仅持有不透明 id，Connector 校验工作区边界、敏感名单、符号链接与声明基线后通过 Host `workspaceFiles` 读取，不提供任意路径读盘。正文 Markdown 图片只在目标路径与同轮声明精确匹配时改写为 `dsh-attachment://<id>`；普通链接、同名文件和歧义重复声明不做猜测，也不修改 DSH Session Log。
 - 远程审批/提问使用 `prepend` 注册 `approval/request` 与 `user-questions/request` answerer，并先向 Server 查询 `interaction.audience`：只有“有 `approve` 的手机正在轮询”时，手机才接管这次请求。
-- 手机接管时先不启动桌面审批链，手机独占一个 grace 窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 6 秒）；窗口内作答则桌面完全不会弹卡。窗口结束则**先撤回手机副本**，再调用 `next()` 交给桌面原生审批链，因此两端不会同时出现两张卡，也不会留下已失效的卡片。
+- 手机接管时先不启动桌面审批链，手机独占一个窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 60 秒，可设 1000–600000 毫秒）；Server 的 `interaction.audience.ttlMs` 会减去 1 秒传输裕量并限制实际窗口。`interaction.request.expiresAt` 即可答/移交截止，不再额外加 5 秒；窗口内作答则桌面不会弹卡。窗口结束或断线时先结束本地手机可答状态、撤回手机副本，再调用 `next()` 交给桌面原生审批链；Server 管理员中途收紧 TTL 时可提前使手机副本失效。
 - 没有手机在轮询时直接走桌面原生链，手机不会收到无法处理的副本。
 - 桌面授权可在面板中随时收窄或放宽：保存后 Connector 立即按新范围重建 Host 策略，后续指令（包括已授权手机发起的指令）都按新范围校验，无需重新配对，也不删除 DSH 本地会话。被收窄掉的手机权限需要重新申请并再次由桌面确认。若旧设备记录缺少 `approve`，在“桌面授权范围”中勾选“远程审批”并保存即可；随后需在手机上重新申请包含“远程审批”的访问授权并由桌面确认。未授权时 Connector 不转发任何审批，桌面链保持原样。
 - 只有同时具备 `approve` scope 且会话所属工作区已授权时才转发；Server 侧还要求手机 grant 含 `approve`，形成双重校验。撤回、离线、无答案都不会伪造批准。

@@ -15,7 +15,7 @@ Server 是透明中继：会话、历史页和 follow 快照由 Connector 从 DS
 
 ## 远程审批/提问 v1
 
-DSH 的 `approval/request` 与 `user-questions/request` 都是一次性 waterfall。Connector 以 `prepend` 注册并行 answerer 并立即 `next()`，因此桌面审批链不会被替换；手机与桌面谁先回答谁生效。
+DSH 的 `approval/request` 与 `user-questions/request` 都是一次性 waterfall。Connector 以 `prepend` 注册 answerer；有获授权且正在轮询的手机时暂不调用桌面链的 `next()`，保持单端可答。
 
 ```text
 Connector event  kind=interaction.request  data=InteractionRequestData
@@ -25,12 +25,12 @@ App REST         GET  /v1/mobile/interactions
 App REST         POST /v1/mobile/interactions/{interactionId}/decision
 ```
 
-- 转发前 Connector 通过 `interaction.audience`（桌面 Connector 的 request 信封）确认是否有具备用户级 `approve` 权限的手机在轮询；没有时直接走桌面原生链，不下发手机副本。
+- 转发前 Connector 通过 `interaction.audience`（桌面 Connector 的 request 信封）确认是否有具备用户级 `approve` 权限的手机在轮询；响应为 `{watching:boolean, ttlMs?:number}`，其中 `ttlMs` 是 Server 当前审批有效期上限，供 Connector 留出 1 秒传输裕量后限制手机窗口。旧 Server 若未返回 `ttlMs`，Connector 退回至不超过 6 秒的旧窗口；没有手机时直接走桌面原生链，不下发手机副本。
 - `interaction.request` 仍使用标准 `event` 信封与真实 `sessionId`；Server 只存内存待处理表，不落 DSH 文件，Connector 断连或 Server 重启即清空。
 - 用户访问策略与桌面设备授权都必须含 `approve`；Server 在决定时再次校验用户、设备、工作区与 scope。
 - 决定一次有效：Server 先 CAS 预留 `interactionId`，再转发命令；转发失败会释放预留，让桌面或其他手机仍可回答。
 - 审批只接受 `allow-once`/`reject`；提问答案必须匹配题目 id、选项集合与单选/多选约束。
-- 手机在场时拥有 grace 窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 6 秒）；窗口结束先下发 `interaction.resolved(desktop)` 撤回手机副本，再由 Connector 调用原桌面审批链。
+- 手机在场时独占窗口（`DSH_CONNECT_INTERACTION_GRACE_MS`，默认 60 秒，配置范围 1000–600000 毫秒）；`interaction.request.expiresAt` 等于 Connector 的实际截止/移交时刻，而非比移交再晚 5 秒。Server 可能因管理员中途收紧 TTL 而提前使卡片失效，最终判定仍由 Server 决策校验负责。窗口结束、Connector 断线或桌面所有者主动接管时，先将该请求移出手机可答集合并下发 `interaction.resolved(desktop)`，再调用原桌面审批链；断线下发可能失败，Server 已断开该设备时移除手机副本。
 - 超时、撤回或协议错误失败关闭，不伪造批准。
 
 ## Create / Prompt / Model Selection 幂等边界

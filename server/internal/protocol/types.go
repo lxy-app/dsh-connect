@@ -319,6 +319,8 @@ type MobileWorkspaceSummary struct {
 // phone first instead of racing two UIs.
 type InteractionAudienceResponse struct {
 	Watching bool `json:"watching"`
+	// TTLMS caps newly offered phone windows; Connector reserves transit time.
+	TTLMS int64 `json:"ttlMs,omitempty"`
 }
 
 // ConnectorUpdateGrants replaces this desktop's own authorized workspaces and
