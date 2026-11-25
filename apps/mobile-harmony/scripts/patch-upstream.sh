@@ -5,6 +5,7 @@
 # 3. react-native-pdf 旧包缺少 ArkTS Package；新版有效注册必须保留。
 # 4. expo-audio 在普通音频模式写入时无条件切换输出路由，Pad 会报 System error。
 # 5. 鸿蒙 WebView 使用空白页初始化并保护控制器生命周期，同步修补 HAR。
+# 6. RNOH 网络模块需将 RN 二进制请求体中的 base64 字段解码再发送。
 # 同时处理 npm 侧的 HAR、ohpm 已解压副本与生成脚本；重复执行是幂等的。
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -12,6 +13,7 @@ bash "$ROOT/scripts/patch-safe-area.sh"
 bash "$ROOT/scripts/patch-pdf-autolinking.sh"
 bash "$ROOT/scripts/patch-audio-routing.sh"
 bash "$ROOT/scripts/patch-webview.sh"
+bash "$ROOT/scripts/patch-networking-base64.sh"
 HAR="$ROOT/node_modules/@expo-harmony/expo-image/harmony/library.har"
 EXTRACTED="$ROOT/harmony/oh_modules/@expo-harmony/expo-image/src/main/ets/ExpoImageUtils.ets"
 
