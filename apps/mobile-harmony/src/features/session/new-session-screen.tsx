@@ -77,7 +77,7 @@ export function NewSessionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const layout = useResponsiveLayout();
-  const { interactions } = useInteractions();
+  const { pendingCount } = useInteractions();
   const params = useLocalSearchParams<{ deviceId?: string; workspaceId?: string }>();
   const { authorized, lastSession, rememberSession } = useMobileSession();
   const [overview, setOverview] = useState<MobileAccessOverview | null>(null);
@@ -378,7 +378,7 @@ export function NewSessionScreen() {
   return (
     <AdaptivePage
       active="sessions"
-      badge={interactions.length}
+      badge={pendingCount}
       onChange={(tab) => router.replace({ pathname: '/', params: { tab } })}
       master={<SessionMaster currentDeviceId={desktop?.deviceId} currentWorkspaceId={workspace?.id} />}
     >

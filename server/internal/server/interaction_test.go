@@ -204,6 +204,9 @@ func TestConnectorInteractionAudienceFollowsPhonePolling(t *testing.T) {
 	if audience().Watching {
 		t.Fatal("phone must not count as watching before it polls")
 	}
+	if got := audience().TTLMS; got != 600_000 {
+		t.Fatalf("audience TTLMS=%d; want default 600000", got)
+	}
 	// The phone's own list read is the presence signal.
 	listInteractions(t, environment, phone)
 	if !audience().Watching {
@@ -220,6 +223,27 @@ func TestConnectorInteractionAudienceFollowsPhonePolling(t *testing.T) {
 	}
 	if other.Watching {
 		t.Fatal("ungranted workspace must not report a watching phone")
+	}
+}
+
+func TestInteractionTTLCapProtectsConnectorDeadline(t *testing.T) {
+	store := NewInteractionStore(30 * time.Second)
+	now := nowUTC()
+	if got := store.TTL(); got != 30*time.Second {
+		t.Fatalf("TTL=%v; want 30s", got)
+	}
+	store.Put("dev_1", protocol.InteractionRequestData{
+		InteractionID: "int_window", Kind: protocol.InteractionKindApproval,
+		SessionID: "sess-1", WorkspaceID: "ws-1", Title: "bash",
+		CreatedAt: now, ExpiresAt: now.Add(29 * time.Second),
+	}, now.Add(100*time.Millisecond))
+	items := store.list(now)
+	if len(items) != 1 || !items[0].ExpiresAt.Equal(now.Add(29*time.Second)) {
+		t.Fatalf("server changed connector's answer deadline: %+v", items)
+	}
+	store.SetTTL(30*time.Second, now)
+	if got := store.TTL(); got != 30*time.Second {
+		t.Fatalf("TTL after update=%v; want 30s", got)
 	}
 }
 

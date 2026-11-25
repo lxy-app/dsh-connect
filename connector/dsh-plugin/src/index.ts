@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { HostContext, RpcResult } from './host-api.js';
+import type { HostContext, Peer, RpcResult } from './host-api.js';
 import type {
   ConnectorStatus,
   PairingCompletion,
@@ -41,6 +41,41 @@ export interface ConnectorApi {
   listWorkspaces(): WorkspaceInfo[];
   updateGrants(grants: WorkspaceGrants): Promise<unknown>;
   status(): Promise<ConnectorStatus>;
+}
+
+interface TakeoverRequest {
+  readonly interactionId: string;
+}
+
+function takeoverRequest(input: unknown): TakeoverRequest {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)
+    || Object.keys(input).length !== 1 || !Object.hasOwn(input, 'interactionId')
+    || typeof (input as { interactionId: unknown }).interactionId !== 'string') {
+    throw protocolError('invalid_request', 'A single interactionId is required');
+  }
+  const interactionId = (input as { interactionId: string }).interactionId;
+  if (!/^int_[0-9a-f-]{36}$/.test(interactionId)) {
+    throw protocolError('invalid_request', 'A valid interactionId is required');
+  }
+  return { interactionId };
+}
+
+/** Owner-only local RPC; no Server or mobile endpoint can invoke desktop takeover. */
+export function localInteractionRpc(
+  endpoint: 'interaction.pending' | 'interaction.takeover',
+  payload: unknown,
+  peer: Peer,
+  runtime: Pick<ConnectorRuntime, 'pendingForDesktop' | 'takeover'> | null,
+): RpcResult {
+  if (peer.principal.kind !== 'owner') {
+    return failure('remote-access/denied', 'Owner peer required', { endpoint });
+  }
+  if (endpoint === 'interaction.pending') return success(runtime?.pendingForDesktop() ?? []);
+  const { interactionId } = takeoverRequest(payload);
+  if (!runtime?.takeover(interactionId)) {
+    throw protocolError('interaction_not_found', 'This interaction is no longer awaiting a phone decision');
+  }
+  return success({ accepted: true, interactionId });
 }
 
 /** Host entry. Pairing/authorization are explicit calls from the desktop RPC panel. */
@@ -228,6 +263,8 @@ export function apply(ctx: HostContext): void {
           case 'pair.cancel': return success(api.cancelPairing());
           case 'connection.connect': return success(await api.connect());
           case 'connection.disconnect': return success(api.disconnect());
+          case 'interaction.pending':
+          case 'interaction.takeover': return localInteractionRpc(endpoint, payload, peer, runtime);
           default: return failure('gateway/bad-request', `Unknown Connector endpoint: ${endpoint}`);
         }
       } catch (error) {

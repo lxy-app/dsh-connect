@@ -1,24 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { interactionFeedbackText, remainingInteractionSeconds, type InteractionFeedback } from '@shared/lib/interaction-feedback';
 import type { MobileInteraction, MobileInteractionAnswer } from '@shared/types/mobile';
 
 type InteractionCardProps = {
   interaction: MobileInteraction;
   busy: boolean;
+  feedback?: InteractionFeedback;
   onDecision: (decision: { decision?: 'allow-once' | 'reject'; answers?: MobileInteractionAnswer[] }) => void;
 };
 
 /**
- * One pending DSH interaction rendered above the composer. Answers are one-shot:
- * the card disappears as soon as the Server accepts the decision, and the
- * desktop keeps its own prompt until DSH records the outcome.
+ * One pending DSH interaction. Once resolved, the card briefly remains
+ * disabled so the Server result or uncertainty stays visible.
  */
-export function InteractionCard({ interaction, busy, onDecision }: InteractionCardProps) {
+export function InteractionCard({ interaction, busy, feedback, onDecision }: InteractionCardProps) {
   const theme = useAppTheme();
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (feedback) return;
+    const kickoff = setTimeout(() => setNow(Date.now()), 0);
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => { clearTimeout(kickoff); clearInterval(timer); };
+  }, [feedback]);
+  const seconds = now === 0 ? 0 : remainingInteractionSeconds(interaction.expiresAt, now);
+  const unavailable = now === 0 || busy || !!feedback || seconds === 0;
+  const statusText = feedback ? interactionFeedbackText(feedback)
+    : busy ? '正在提交…'
+    : now === 0 ? '正在核对截止时间…'
+    : seconds === 0 ? '手机处理时间已到，请在桌面继续处理'
+    : `剩余 ${seconds} 秒${seconds <= 10 ? ' · 即将转桌面' : ' · 到期后请在桌面处理'}`;
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [custom, setCustom] = useState<Record<string, string>>({});
   const questions = interaction.questions ?? [];
@@ -63,6 +78,9 @@ export function InteractionCard({ interaction, busy, onDecision }: InteractionCa
         </Text>
       </View>
 
+      <Text accessibilityLiveRegion="polite" style={[styles.status, { color: !feedback && !busy && seconds > 0 && seconds <= 10 ? theme.warning : theme.textSecondary }]}>
+        {statusText}
+      </Text>
       <Text style={[styles.title, { color: theme.text }]} numberOfLines={3}>
         {interaction.title || (isApproval ? 'DSH 请求批准一次工具调用' : 'DSH 需要你的回答')}
       </Text>
@@ -75,12 +93,12 @@ export function InteractionCard({ interaction, busy, onDecision }: InteractionCa
           <ActionButton
             label="拒绝"
             variant="danger"
-            disabled={busy}
+            disabled={unavailable}
             onPress={() => onDecision({ decision: 'reject' })}
           />
           <ActionButton
             label="允许一次"
-            disabled={busy}
+            disabled={unavailable}
             loading={busy}
             onPress={() => onDecision({ decision: 'allow-once' })}
           />
@@ -111,6 +129,7 @@ export function InteractionCard({ interaction, busy, onDecision }: InteractionCa
                           accessibilityRole="radio"
                           accessibilityState={{ checked: active }}
                           key={option.label}
+                          disabled={unavailable}
                           onPress={() => toggleOption(question.id, option.label, question.multiSelect === true)}
                           style={[
                             styles.option,
@@ -135,6 +154,7 @@ export function InteractionCard({ interaction, busy, onDecision }: InteractionCa
                 ) : null}
                 <TextInput
                   accessibilityLabel={`补充回答：${question.question}`}
+                  editable={!unavailable}
                   multiline
                   maxLength={4_096}
                   placeholder="输入你的答案（可选）"
@@ -149,7 +169,7 @@ export function InteractionCard({ interaction, busy, onDecision }: InteractionCa
               </View>
             );
           })}
-          <ActionButton label="提交回答" loading={busy} disabled={busy} onPress={submitQuestion} />
+          <ActionButton label="提交回答" loading={busy} disabled={unavailable} onPress={submitQuestion} />
         </View>
       )}
     </View>
@@ -184,6 +204,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: Typography.caption,
     lineHeight: 18,
+  },
+  status: {
+    fontSize: Typography.secondary,
+    lineHeight: 20,
+    fontWeight: '700',
   },
   title: {
     fontSize: Typography.reading,

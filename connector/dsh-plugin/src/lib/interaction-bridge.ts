@@ -14,7 +14,9 @@ import { protocolError } from './request-cache.js';
 import type { WorkspacePolicy } from './workspace-policy.js';
 
 /** How long an actively-watching phone owns the prompt before the desktop takes over. */
-const DEFAULT_GRACE_MS = 6_000;
+const DEFAULT_GRACE_MS = 60_000;
+/** Reserve transit time before the Server's stricter policy TTL can expire. */
+const SERVER_TTL_MARGIN_MS = 1_000;
 const MAX_QUESTIONS = 8;
 const MAX_OPTIONS = 16;
 const MAX_LABEL = 512;
@@ -36,7 +38,8 @@ export interface InteractionBridgeOptions {
   readonly deviceId: string;
   readonly emit: (event: TransportEnvelope) => void;
   /** True when a granted phone is actively polling for interactions right now. */
-  readonly audience?: (workspaceId: string) => Promise<boolean>;
+  /** Optional Server TTL lets the Connector hand off before Server policy expiry. */
+  readonly audience?: (workspaceId: string) => Promise<boolean | { readonly watching: boolean; readonly ttlMs?: number }>;
   readonly logger?: Logger;
   readonly graceMs?: number;
 }
@@ -45,6 +48,8 @@ interface PendingRelay {
   readonly interactionId: string;
   readonly kind: RelayKind;
   readonly sessionId: string;
+  readonly title: string;
+  readonly toolName?: string;
   readonly createdAt: number;
   readonly expiresAt: number;
   readonly questions: readonly AskUserQuestionItem[];
@@ -54,6 +59,7 @@ interface PendingRelay {
   reject: (error: unknown) => void;
   timer: NodeJS.Timeout | null;
   detachAbort: (() => void) | null;
+  handOff: (() => Promise<void>) | null;
 }
 
 function bounded(value: unknown, limit: number): string | undefined {
@@ -86,7 +92,7 @@ export class InteractionBridge {
   readonly #policy: WorkspacePolicy;
   readonly #deviceId: string;
   readonly #emit: (event: TransportEnvelope) => void;
-  readonly #audience: ((workspaceId: string) => Promise<boolean>) | undefined;
+  readonly #audience: ((workspaceId: string) => Promise<boolean | { readonly watching: boolean; readonly ttlMs?: number }>) | undefined;
   readonly #logger: Logger;
   readonly #graceMs: number;
   readonly #pending = new Map<string, PendingRelay>();
@@ -135,6 +141,9 @@ export class InteractionBridge {
     if (!pending || pending.settled || pending.delegated) {
       throw protocolError('interaction_not_found', 'The interaction is no longer pending on the desktop');
     }
+    if (Date.now() >= pending.expiresAt) {
+      throw protocolError('interaction_expired', 'The phone answer window has closed');
+    }
     if (params.kind !== pending.kind) {
       throw protocolError('interaction_invalid', 'The decision does not match the pending interaction');
     }
@@ -148,6 +157,33 @@ export class InteractionBridge {
       this.#settle(pending, 'remote', answer);
     }
     return { accepted: true, interactionId: params.interactionId };
+  }
+
+  /** A minimal, display-safe list for the desktop owner's local panel. */
+  pendingForDesktop(): readonly {
+    interactionId: string; kind: RelayKind; sessionId: string; title: string; toolName?: string; expiresAt: string;
+  }[] {
+    return [...this.#pending.values()].filter((item) => !item.settled && !item.delegated && Date.now() < item.expiresAt)
+      .map((item) => ({
+        interactionId: item.interactionId, kind: item.kind, sessionId: item.sessionId,
+        title: item.title, ...(item.toolName ? { toolName: item.toolName } : {}),
+        expiresAt: new Date(item.expiresAt).toISOString(),
+      }));
+  }
+
+  /** Owner-requested handoff shares the timer's withdraw-before-next path. */
+  takeover(interactionId: string): boolean {
+    const pending = this.#pending.get(interactionId);
+    if (!pending || pending.settled || pending.delegated || Date.now() >= pending.expiresAt || !pending.handOff) return false;
+    void pending.handOff();
+    return true;
+  }
+
+  /** Offline phone delivery can no longer succeed; restore the desktop immediately. */
+  handoffAllToDesktop(): void {
+    for (const pending of [...this.#pending.values()]) {
+      if (!pending.settled && !pending.delegated) void pending.handOff?.();
+    }
   }
 
   dispose(): void {
@@ -220,7 +256,8 @@ export class InteractionBridge {
     next: () => Promise<unknown>,
     signal: AbortSignal | undefined,
   ): Promise<unknown> {
-    if (!(await this.#watching(view.workspaceId))) {
+    const audience = await this.#watching(view.workspaceId);
+    if (!audience.watching) {
       this.#skip(kind, 'no-watching-phone', {
         sessionId: view.sessionId,
         workspaceId: view.workspaceId,
@@ -230,7 +267,14 @@ export class InteractionBridge {
     }
 
     const interactionId = `int_${randomUUID()}`;
-    const pending = this.#open(kind, interactionId, view.sessionId, this.#questionsOf(view.questions ?? []));
+    // A legacy Server without a TTL hint keeps its original short window.
+    // Current Servers leave one second of transit margin before their cap.
+    const graceMs = audience.ttlMs === undefined
+      ? (audience.legacy ? Math.min(this.#graceMs, 6_000) : this.#graceMs)
+      : Math.min(this.#graceMs, Math.max(200, audience.ttlMs - SERVER_TTL_MARGIN_MS));
+    const pending = this.#open(kind, interactionId, view.sessionId, view.title, view.toolName,
+      this.#questionsOf(view.questions ?? []), graceMs);
+    pending.handOff = () => this.#handOff(pending, next);
     const settled = new Promise<unknown>((resolve, reject) => {
       pending.resolve = resolve;
       pending.reject = reject;
@@ -280,8 +324,8 @@ export class InteractionBridge {
     // The phone owns the prompt for the grace window. If it does not answer,
     // the desktop takes over and the phone copy is withdrawn first.
     pending.timer = setTimeout(() => {
-      void this.#handOff(pending, next);
-    }, this.#graceMs);
+      void pending.handOff?.();
+    }, Math.max(0, pending.expiresAt - Date.now()));
     pending.timer.unref();
     return settled;
   }
@@ -290,15 +334,20 @@ export class InteractionBridge {
     kind: RelayKind,
     interactionId: string,
     sessionId: string,
+    title: string,
+    toolName: string | undefined,
     questions: readonly AskUserQuestionItem[],
+    graceMs: number,
   ): PendingRelay {
     const now = Date.now();
     const pending: PendingRelay = {
       interactionId,
       kind,
       sessionId,
+      title,
+      ...(toolName ? { toolName } : {}),
       createdAt: now,
-      expiresAt: now + this.#graceMs + 5_000,
+      expiresAt: now + graceMs,
       questions,
       settled: false,
       delegated: false,
@@ -306,6 +355,7 @@ export class InteractionBridge {
       reject: () => undefined,
       timer: null,
       detachAbort: null,
+      handOff: null,
     };
     this.#pending.set(interactionId, pending);
     return pending;
@@ -379,13 +429,19 @@ export class InteractionBridge {
     }
   }
 
-  async #watching(workspaceId: string): Promise<boolean> {
-    if (!this.#audience) return false;
+  async #watching(workspaceId: string): Promise<{ watching: boolean; ttlMs?: number; legacy?: boolean }> {
+    if (!this.#audience) return { watching: false };
     try {
-      return await this.#audience(workspaceId);
+      const response = await this.#audience(workspaceId);
+      if (typeof response === 'boolean') return { watching: response };
+      if (response.ttlMs === undefined) return { watching: response.watching, legacy: true };
+      if (!Number.isSafeInteger(response.ttlMs) || response.ttlMs < 1_200 || response.ttlMs > 600_000) {
+        return { watching: false };
+      }
+      return { watching: response.watching, ttlMs: response.ttlMs };
     } catch (error) {
       this.#logger.warn?.('DSH Connect: interaction audience query failed', error);
-      return false;
+      return { watching: false };
     }
   }
 

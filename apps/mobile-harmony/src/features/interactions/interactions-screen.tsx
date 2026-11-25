@@ -1,7 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,7 +14,7 @@ import { AdaptivePage } from '@/components/adaptive-page';
 import { EmptyState } from '@/components/empty-state';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { describeMobileApiError, getMobileAccessOverview } from '@/lib/mobile-api';
+import { getMobileAccessOverview } from '@/lib/mobile-api';
 import { useInteractions, type InteractionDecision } from '@/providers/interactions-provider';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
@@ -39,7 +38,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
   const layout = useResponsiveLayout(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { interactions, busyId, refresh, decide } = useInteractions();
+  const { interactions, pendingCount, feedback, busyId, refresh, decide } = useInteractions();
   const { authorized, status } = useMobileSession();
   const [refreshing, setRefreshing] = useState(false);
   const [withoutApproval, setWithoutApproval] = useState<MobileDesktopAccess[]>([]);
@@ -71,9 +70,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
 
   const onDecision = useCallback(
     (interaction: MobileInteraction, decision: InteractionDecision) => {
-      void decide(interaction, decision).catch((error: unknown) => {
-        Alert.alert('提交失败', describeMobileApiError(error));
-      });
+      void decide(interaction, decision);
     },
     [decide],
   );
@@ -110,7 +107,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
           <Text style={[styles.iconText, { color: theme.text }]}>‹</Text>
         </Pressable> : null}
         <View style={styles.headText}>
-          <Text style={[styles.title, (embedded || layout.isExpanded) && styles.pageTitle, { color: theme.text }]}>待处理{interactions.length > 0 ? ` · ${interactions.length}` : ''}</Text>
+          <Text style={[styles.title, (embedded || layout.isExpanded) && styles.pageTitle, { color: theme.text }]}>待处理{pendingCount > 0 ? ` · ${pendingCount}` : ''}</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             需要你确认的审批与提问
           </Text>
@@ -143,6 +140,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
               <InteractionCard
                 interaction={interaction}
                 busy={busyId === interaction.interactionId}
+                feedback={feedback[interaction.interactionId]}
                 onDecision={(decision) => onDecision(interaction, decision)}
               />
               <Pressable
@@ -160,7 +158,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
   );
   if (embedded) return content;
   return (
-    <AdaptivePage active="interactions" badge={interactions.length} onChange={(tab) => router.replace({ pathname: '/', params: { tab } })}>
+    <AdaptivePage active="interactions" badge={pendingCount} onChange={(tab) => router.replace({ pathname: '/', params: { tab } })}>
       {content}
     </AdaptivePage>
   );

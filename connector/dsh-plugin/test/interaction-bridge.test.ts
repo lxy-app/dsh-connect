@@ -65,7 +65,7 @@ class FakeTransport implements MessageTransport {
 
 function build(
   scopes: readonly string[] = ['read', 'approve'],
-  options: { watching?: boolean; graceMs?: number; audienceThrows?: boolean; logs?: string[] } = {},
+  options: { watching?: boolean; graceMs?: number; ttlMs?: number; audienceThrows?: boolean; logs?: string[] } = {},
 ) {
   const cordis = fakeCordis();
   const transport = new FakeTransport();
@@ -77,12 +77,12 @@ function build(
     policy: policy(scopes),
     deviceId: 'dev-1',
     emit: (event) => transport.send(event),
-    graceMs: options.graceMs ?? 60_000,
+    graceMs: options.graceMs,
     logger: { info: (message) => logs.push(message) },
     audience: async () => {
       state.audienceCalls += 1;
       if (options.audienceThrows) throw new Error('server offline');
-      return state.watching;
+      return { watching: state.watching, ttlMs: options.ttlMs ?? 600_000 };
     },
   });
   bridge.attach();
@@ -102,6 +102,92 @@ function approvalRequest(signal?: AbortSignal) {
     ...(signal ? { signal } : {}),
   };
 }
+
+test('offline handoff restores desktop immediately without an implicit decision', async () => {
+  const { bridge, cordis, transport } = build();
+  let desktopCalled = 0;
+  const result = cordis.fire('approval/request', approvalRequest(), () => {
+    desktopCalled++;
+    return Promise.resolve('rejected');
+  }) as Promise<string>;
+  await tick();
+  const interactionId = String(bridge.pendingForDesktop()[0]?.interactionId);
+  bridge.handoffAllToDesktop();
+  bridge.handoffAllToDesktop();
+  assert.equal(await result, 'rejected');
+  assert.equal(desktopCalled, 1);
+  assert.equal(transport.sent.find((message) => message.kind === 'interaction.resolved')?.data?.resolution, 'desktop');
+  assert.throws(() => bridge.respond({ interactionId, kind: 'approval', decision: 'allow-once' }), /no longer pending/);
+});
+
+test('local owner takeover withdraws the phone before opening the desktop', async () => {
+  const { bridge, cordis, transport } = build();
+  let desktopCalled = 0;
+  const result = cordis.fire('approval/request', approvalRequest(), () => {
+    desktopCalled++;
+    assert.equal(transport.sent.at(-1)?.data?.resolution, 'desktop');
+    return Promise.resolve('rejected');
+  }) as Promise<string>;
+  await tick();
+  const pending = bridge.pendingForDesktop();
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0]?.title, 'bash');
+  assert.equal(bridge.takeover(String(pending[0]?.interactionId)), true);
+  assert.equal(bridge.pendingForDesktop().length, 0);
+  assert.equal(bridge.takeover(String(pending[0]?.interactionId)), false);
+  assert.throws(() => bridge.respond({ interactionId: String(pending[0]?.interactionId), kind: 'approval', decision: 'allow-once' }), /no longer pending/);
+  assert.equal(await result, 'rejected');
+  assert.equal(desktopCalled, 1);
+});
+
+test('a phone decision wins before desktop takeover and cannot be replayed', async () => {
+  const { bridge, cordis, transport } = build();
+  let desktopCalled = 0;
+  const result = cordis.fire('approval/request', approvalRequest(), () => {
+    desktopCalled++;
+    return Promise.resolve('rejected');
+  }) as Promise<string>;
+  await tick();
+  const interactionId = String(bridge.pendingForDesktop()[0]?.interactionId);
+  bridge.respond({ interactionId, kind: 'approval', decision: 'allow-once' });
+  assert.equal(bridge.takeover(interactionId), false);
+  assert.equal(await result, 'allowed-once');
+  assert.equal(desktopCalled, 0);
+  assert.equal(transport.sent.find((message) => message.kind === 'interaction.resolved')?.data?.resolution, 'remote');
+});
+
+test('default phone window is sixty seconds and its advertised deadline matches handoff', async () => {
+  const { bridge, cordis, transport } = build();
+  const result = cordis.fire('approval/request', approvalRequest(), () => Promise.resolve('rejected')) as Promise<string>;
+  await tick();
+  const request = transport.sent.find((message) => message.kind === 'interaction.request');
+  assert.ok(request?.data);
+  const created = Date.parse(String(request.data.createdAt));
+  const deadline = Date.parse(String(request.data.expiresAt));
+  assert.equal(deadline - created, 60_000);
+  bridge.respond({ interactionId: String(request.data.interactionId), kind: 'approval', decision: 'reject' });
+  assert.equal(await result, 'rejected');
+});
+
+test('Server TTL caps the phone window, and the connector rejects a late answer before handoff', async () => {
+  const { bridge, cordis, transport } = build(['read', 'approve'], { graceMs: 60_000, ttlMs: 1_300 });
+  let desktopCalled = 0;
+  const result = cordis.fire('approval/request', approvalRequest(), () => {
+    desktopCalled += 1;
+    return Promise.resolve('rejected');
+  }) as Promise<string>;
+  await tick();
+  const request = transport.sent.find((message) => message.kind === 'interaction.request');
+  assert.ok(request?.data);
+  assert.equal(Date.parse(String(request.data.expiresAt)) - Date.parse(String(request.data.createdAt)), 300);
+  const interactionId = String(request.data.interactionId);
+  await sleep(310);
+  assert.throws(() => bridge.respond({ interactionId, kind: 'approval', decision: 'allow-once' }),
+    /no longer pending|window has closed/);
+  assert.equal(await result, 'rejected');
+  assert.equal(desktopCalled, 1);
+});
+
 
 test('a watching phone answers without starting the desktop prompt', async () => {
   const { bridge, cordis, transport, state } = build();

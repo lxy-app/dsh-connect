@@ -120,6 +120,13 @@ func (s *InteractionStore) SetTTL(ttl time.Duration, now time.Time) {
 	}
 }
 
+// TTL returns the current server-side maximum lifetime for a newly offered prompt.
+func (s *InteractionStore) TTL() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ttl
+}
+
 // Clear drops all remote copies and polling presence. Desktop-native approval
 // state is owned by the Connector and is deliberately untouched.
 func (s *InteractionStore) Clear() {
@@ -404,6 +411,7 @@ func (s *Server) connectorInteractionAudience(ctx context.Context, deviceID stri
 	}
 	return protocol.InteractionAudienceResponse{
 		Watching: s.interactions.Watching(candidates, nowUTC(), interactionPresenceWindow),
+		TTLMS:    s.interactions.TTL().Milliseconds(),
 	}, nil
 }
 

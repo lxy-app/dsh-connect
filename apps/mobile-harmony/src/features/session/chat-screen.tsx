@@ -81,7 +81,7 @@ const VOICE_WAVE_BARS = [6, 6, 10, 6, 14, 10, 20, 10, 14, 6, 10, 20, 14, 10, 6, 
 
 export function ChatScreen() {
   const router = useRouter();
-  const { interactions } = useInteractions();
+  const { pendingCount } = useInteractions();
   const params = useLocalSearchParams<{ sessionId: string; deviceId: string; workspaceId: string }>();
   const sessionId = single(params.sessionId);
   const deviceId = single(params.deviceId);
@@ -94,7 +94,7 @@ export function ChatScreen() {
     <AdaptivePage
       active="sessions"
       onChange={changeTab}
-      badge={interactions.length}
+      badge={pendingCount}
       master={<SessionMaster currentSessionId={sessionId} currentDeviceId={deviceId} currentWorkspaceId={workspaceId} />}
     >
       <SessionModelProvider key={identity} deviceId={deviceId} workspaceId={workspaceId} sessionId={sessionId}>
@@ -114,7 +114,7 @@ function ChatScreenContent() {
   // screen resolves one connection snapshot and refreshes it with the session.
   const [attachmentAuth, setAttachmentAuth] = useState<AttachmentAuth | null>(null);
   const { settings: voiceSettings, hydrated: voiceHydrated, speak, pauseSpeaking, restorePlaybackAudioMode } = useVoice();
-  const { interactions, busyId, decide } = useInteractions();
+  const { interactions, pendingCount, feedback, busyId, decide } = useInteractions();
   const params = useLocalSearchParams<{
     sessionId: string;
     deviceId: string;
@@ -1251,10 +1251,9 @@ function ChatScreenContent() {
               key={interaction.interactionId}
               interaction={interaction}
               busy={busyId === interaction.interactionId}
+              feedback={feedback[interaction.interactionId]}
               onDecision={(decision) => {
-                void decide(interaction, decision).catch((cause: unknown) => {
-                  Alert.alert('提交失败', describeMobileApiError(cause));
-                });
+                void decide(interaction, decision);
               }}
             />
           ))}
@@ -1441,7 +1440,7 @@ function ChatScreenContent() {
           </Pressable>
         </View>
       )}
-      {voiceActive || layout.isExpanded ? null : <TabBar active="sessions" onChange={changeTab} badge={interactions.length} />}
+      {voiceActive || layout.isExpanded ? null : <TabBar active="sessions" onChange={changeTab} badge={pendingCount} />}
       <MoreOptionsSheet
         visible={moreOptionsOpen}
         catalog={modelCatalog}

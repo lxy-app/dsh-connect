@@ -77,6 +77,9 @@ export class ConnectorRuntime extends EventEmitter {
       void this.#commands.handle(message).catch((error: unknown) => this.#logger.warn?.('Command handling failed', error));
     });
     this.#transport.on('disconnected', () => {
+      // No remote decision can be delivered now: withdraw local phone ownership
+      // and restore the native DSH answerer rather than waiting out the window.
+      this.#interactions?.handoffAllToDesktop();
       // DSH remains the source of truth; clients follow a fresh snapshot.
       this.#host?.dispose();
       this.#commands?.dispose(protocolError('connector_offline', 'Server connection was lost', true));
@@ -137,11 +140,27 @@ export class ConnectorRuntime extends EventEmitter {
     this.#transport.stop();
   }
 
-  /** Whether an authorized phone is actively waiting for interactions right now. */
-  async interactionAudience(workspaceId: string): Promise<boolean> {
-    if (!this.#transport.connected) return false;
+  /** Whether a phone is watching, and the Server's policy cap on its answer window. */
+  async interactionAudience(workspaceId: string): Promise<{ watching: boolean; ttlMs?: number }> {
+    if (!this.#transport.connected) return { watching: false };
     const result = await this.#callServer('interaction.audience', { workspaceId }, 2_000);
-    return isRecord(result) && result.watching === true;
+    if (!isRecord(result)) return { watching: false };
+    const ttlMs = result.ttlMs;
+    return {
+      watching: result.watching === true,
+      ...(typeof ttlMs === 'number' ? { ttlMs } : {}),
+    };
+  }
+
+  pendingForDesktop(): readonly {
+    interactionId: string; kind: 'approval' | 'question'; sessionId: string;
+    title: string; toolName?: string; expiresAt: string;
+  }[] {
+    return this.#interactions?.pendingForDesktop() ?? [];
+  }
+
+  takeover(interactionId: string): boolean {
+    return this.#interactions?.takeover(interactionId) ?? false;
   }
 
   /**
@@ -387,5 +406,5 @@ function interactionGraceMs(): number | undefined {
   const raw = process.env.DSH_CONNECT_INTERACTION_GRACE_MS;
   if (!raw) return undefined;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 1_000 && parsed <= 30_000 ? parsed : undefined;
+  return Number.isSafeInteger(parsed) && parsed >= 1_000 && parsed <= 600_000 ? parsed : undefined;
 }

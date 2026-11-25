@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     assert.equal(runtime.pairing.publicChallenge()?.deviceId, challenge.deviceId);
     const authorizing = runtime.authorize({
       workspaces: [{ id: 'ws-1', name: 'E2E Workspace', path: workspaceRoot }],
-      scopes: ['read', 'prompt', 'cancel'],
+      scopes: ['read', 'prompt', 'cancel', 'approve'],
     });
     const deviceId = challenge.deviceId;
     pairedDeviceId = deviceId;
@@ -212,7 +212,7 @@ async function main(): Promise<void> {
       body: {
         name: `E2E mobile policy ${Date.now()}-${process.pid}`,
         memberIds: [mobileUser.id],
-        rules: [{ deviceId, workspaceIds: ['ws-1'], scopes: ['read', 'prompt', 'cancel'] }],
+        rules: [{ deviceId, workspaceIds: ['ws-1'], scopes: ['read', 'prompt', 'cancel', 'approve'] }],
       },
     });
     const phone = await mobileRequest<{ readonly accessToken: string }>('/v1/mobile/auth/login', '', {
@@ -238,6 +238,44 @@ async function main(): Promise<void> {
     assert.ok(desktopAccess.availableWorkspaces.find((workspace) => workspace.id === 'ws-1')?.scopes?.includes('prompt'));
     assert.ok(desktopAccess.availableScopes.includes('read'));
     assert.ok(desktopAccess.availableScopes.includes('prompt'));
+    assert.ok(desktopAccess.availableScopes.includes('approve'));
+
+    // A real Server audience check requires a recent, authorized phone poll.
+    // The Host's approval waterfall then pauses at Connector until the phone
+    // posts its one-shot decision through Server back to the same Host request.
+    const beforeApproval = await mobileRequest<{ readonly interactions: readonly unknown[] }>(
+      '/v1/mobile/interactions', phone.accessToken,
+    );
+    assert.equal(beforeApproval.interactions.length, 0);
+    const approval = host.requestApproval();
+    type PendingApproval = { readonly interactionId: string; readonly kind: string; readonly sessionId: string;
+      readonly createdAt: string; readonly expiresAt: string };
+    let pendingApproval: PendingApproval | undefined;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const current = await mobileRequest<{ readonly interactions: readonly PendingApproval[] }>(
+        '/v1/mobile/interactions', phone.accessToken,
+      );
+      pendingApproval = current.interactions.find((item) => item.kind === 'approval');
+      if (pendingApproval) break;
+      await delay(20);
+    }
+    assert.ok(pendingApproval, 'an authorized watching phone must receive the Host approval');
+    assert.equal(pendingApproval.sessionId, existingSessionId);
+    assert.equal(Date.parse(pendingApproval.expiresAt) - Date.parse(pendingApproval.createdAt), 60_000);
+    assert.equal(host.approvalDesktopCalls, 0, 'desktop waterfall must not start while phone owns the request');
+    const approvalDecision = await mobileRequest<{ readonly accepted: boolean; readonly interactionId: string }>(
+      `/v1/mobile/interactions/${pendingApproval.interactionId}/decision`, phone.accessToken,
+      { method: 'POST', body: { requestId: `approval-e2e-${Date.now()}-${process.pid}`, decision: 'allow-once' } },
+    );
+    assert.equal(approvalDecision.accepted, true);
+    assert.equal(approvalDecision.interactionId, pendingApproval.interactionId);
+    assert.equal(await approval, 'allowed-once');
+    assert.equal(host.approvalDesktopCalls, 0, 'a phone decision must not also open a desktop approval');
+    const afterApproval = await mobileRequest<{ readonly interactions: readonly PendingApproval[] }>(
+      '/v1/mobile/interactions', phone.accessToken,
+    );
+    assert.ok(!afterApproval.interactions.some((item) => item.interactionId === pendingApproval.interactionId),
+      'a consumed interaction must not remain answerable');
     type ModelCatalogResponse = {
       readonly sessionId?: string;
       readonly projectionKind: string;
@@ -441,6 +479,7 @@ async function main(): Promise<void> {
         'mobile model catalog + Session-only selection + model/selection event',
         'device token reconnect',
         'mobile email/password login + user-policy/desktop-grant intersection',
+        'mobile approval: presence → 60s deadline → one-shot decision → Host outcome',
         'mobile workspaces/sessions/create/transcript/prompt',
         'phone image/file upload → Connector download → Host receipts → attachment-only prompt',
         'present attachment → Host bytes → upload → mobile download + attachment.ready',
@@ -571,6 +610,8 @@ interface HostFixture {
   promptCalls: number;
   attachmentReads: number;
   modelSelectCalls: number;
+  approvalDesktopCalls: number;
+  requestApproval(): Promise<string>;
   readonly uploads: { readonly kind: 'image' | 'file'; readonly name: string; readonly mime: string; readonly bytes: Uint8Array }[];
   readonly prompts: SessionPromptRequest[];
   readonly defaultModel: ModelSelection;
@@ -586,18 +627,35 @@ function createHost(workspaceRoot: string, attachmentPath: string, attachmentByt
   }];
   const follows = new Map<string, FollowQueue>();
   const defaultModel: ModelSelection = { provider: 'deepseek', model: 'deepseek-chat' };
+  const interactionListeners = new Map<string, (...args: never[]) => unknown>();
   let selectedModel = defaultModel;
   const host: HostFixture = {
     createCalls: 0,
     promptCalls: 0,
     attachmentReads: 0,
     modelSelectCalls: 0,
+    approvalDesktopCalls: 0,
+    requestApproval() {
+      const listener = interactionListeners.get('approval/request');
+      assert.ok(listener, 'Connector must register the Host approval seam');
+      const request = { agent: { id: existingSessionId }, toolName: 'bash', callId: 'approval-e2e-call',
+        reason: 'test remote approval', displayReason: { en: 'Test remote approval' } };
+      const next = () => {
+        host.approvalDesktopCalls += 1;
+        return Promise.resolve('rejected');
+      };
+      return listener(...([request, next] as never[])) as Promise<string>;
+    },
     uploads: [],
     prompts: [],
     defaultModel,
     currentModel: () => selectedModel,
     followAborted: (sessionId) => follows.get(sessionId)?.signal.aborted ?? false,
     ctx: {
+      on(name, listener) {
+        interactionListeners.set(name, listener);
+        return () => { if (interactionListeners.get(name) === listener) interactionListeners.delete(name); };
+      },
       llm: {
         listProviders: () => [{ id: 'deepseek' }],
         async listModels(provider) {
