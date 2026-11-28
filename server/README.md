@@ -53,6 +53,16 @@ DSH_CONNECT_DATABASE_URL=sqlite://./data/dsh-connect.db
 
 Owner 引导是幂等的：只在 `users` 表为空时创建，已有账号不会被覆盖或重置密码。
 
+## HTTP 路由分组
+
+主 Server 使用 `net/http` Handler + Chi v5，对外仍保持原有 `/v1/*` URL、方法、DTO 与 WebSocket 协议。`internal/server/routes.go` 负责组装，`routes_admin.go`、`routes_mobile.go`、`routes_connector.go`、`routes_bootstrap.go` 分别集中注册 Web 管理端、手机端、桌面 Connector 和 bootstrap-only 调试入口；业务处理器不直接注册路由。
+
+- Admin 按已登录、owner/admin/auditor 可读、owner/admin 可管理、owner-only 分组复用鉴权与角色中间件；手机设备管理虽操作手机记录，仍归 Admin 权限组。
+- Mobile 的登录/刷新是公开凭据交换；普通 REST 共用 header-only Mobile Access Token 鉴权，只有浏览器事件 WebSocket 握手额外允许短时 `accessToken` 查询参数。
+- Connector 组不能统一套设备 Token 中间件：未配对桌面必须能打开 `/v1/connector/ws`；附件上传和暂存上传下载在处理器内同时校验设备凭据、记录归属与字节约束。
+- Bootstrap 调试组只接受 bootstrap token，与 Admin 登录会话、Mobile 和 Connector 凭据保持隔离。外层 CORS 与 Admin SPA 包装边界不变。
+- `routes_compat_test.go` 固定完整路由表、GET 对 HEAD、404/405、OPTIONS/CORS、路径规范化、转义参数和跨端凭据隔离；修改路由后必须先更新并验证这些兼容契约。
+
 ### SQLite 单实例边界
 
 - 仅支持单个 Server 实例和本机磁盘；不要让多个副本共享数据库文件，也不要把 WAL 数据库放在 NFS 等网络文件系统上。高并发写入或多实例部署继续使用 PostgreSQL。

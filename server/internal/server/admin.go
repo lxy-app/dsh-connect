@@ -11,42 +11,6 @@ import (
 	"github.com/deepseek/dsh-connect/server/internal/store"
 )
 
-func (s *Server) adminRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v1/admin/auth/login", s.handleAdminLogin)
-	mux.HandleFunc("POST /v1/admin/auth/logout", s.adminAuth(s.handleAdminLogout))
-	mux.HandleFunc("GET /v1/admin/auth/me", s.adminAuth(s.handleAdminMe))
-
-	mux.HandleFunc("GET /v1/admin/overview", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminOverview))
-	mux.HandleFunc("GET /v1/admin/sessions", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminSessions))
-	mux.HandleFunc("GET /v1/admin/interactions", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminInteractions))
-	mux.HandleFunc("GET /v1/admin/approval-policy", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminApprovalPolicy))
-	mux.HandleFunc("PATCH /v1/admin/approval-policy", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateApprovalPolicy))
-	mux.HandleFunc("GET /v1/admin/settings", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminSettings))
-
-	mux.HandleFunc("GET /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminUsers))
-	mux.HandleFunc("POST /v1/admin/users", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateUser))
-	mux.HandleFunc("PATCH /v1/admin/users/{userId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateUser))
-	mux.HandleFunc("DELETE /v1/admin/users/{userId}", s.requireRole(store.RoleOwner)(s.handleAdminDeleteUser))
-	mux.HandleFunc("GET /v1/admin/users/{userId}/access-preview", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminAccessPreview))
-
-	mux.HandleFunc("GET /v1/admin/policies", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminAccessPolicies))
-	mux.HandleFunc("POST /v1/admin/policies", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreateAccessPolicy))
-	mux.HandleFunc("PATCH /v1/admin/policies/{policyId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateAccessPolicy))
-	mux.HandleFunc("DELETE /v1/admin/policies/{policyId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminDeleteAccessPolicy))
-
-	mux.HandleFunc("GET /v1/admin/devices", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminDevices))
-	mux.HandleFunc("PATCH /v1/admin/devices/{deviceId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminUpdateDevice))
-	mux.HandleFunc("DELETE /v1/admin/devices/{deviceId}", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminDeleteDevice))
-	mux.HandleFunc("POST /v1/admin/devices/{deviceId}/revoke", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminRevokeDevice))
-
-	mux.HandleFunc("GET /v1/admin/audit", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminAudit))
-
-	// Pairing codes are how a new desktop joins, so the Web Admin needs its own
-	// entry point: /v1/pairing/desktop-codes only accepts the bootstrap token.
-	mux.HandleFunc("POST /v1/admin/pairing-codes", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminCreatePairingCode))
-	mux.HandleFunc("GET /v1/admin/pairing-codes", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminListPairingCodes))
-}
-
 // ---------- auth ----------
 
 type loginRequest struct {

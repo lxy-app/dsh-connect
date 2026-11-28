@@ -10,23 +10,6 @@ import (
 	"github.com/deepseek/dsh-connect/server/internal/store"
 )
 
-func (s *Server) routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/connector/ws", s.handleConnector)
-	mux.HandleFunc("POST /v1/pairing/desktop-codes", s.requireAdmin(s.handleCreatePairingCode))
-	mux.HandleFunc("GET /v1/devices", s.requireAdmin(s.handleDevices))
-	mux.HandleFunc("GET /v1/sessions", s.requireAdmin(s.handleSessionList))
-	mux.HandleFunc("POST /v1/sessions", s.requireAdmin(s.handleSessionCreate))
-	mux.HandleFunc("GET /v1/sessions/{sessionId}/page", s.requireAdmin(s.handleSessionPage))
-	mux.HandleFunc("POST /v1/sessions/{sessionId}/prompt", s.requireAdmin(s.handleSessionPrompt))
-	mux.HandleFunc("POST /v1/sessions/{sessionId}/cancel", s.requireAdmin(s.handleSessionCancel))
-	mux.HandleFunc("GET /v1/events/ws", s.requireAdmin(s.handleEvents))
-	s.mobileRoutes(mux)
-	s.attachmentRoutes(mux)
-	s.adminRoutes(mux)
-	return s.corsMiddleware(mux)
-}
-
 func (s *Server) handleCreatePairingCode(w http.ResponseWriter, r *http.Request) {
 	_, response, commandError := s.issuePairingCode(r)
 	if commandError != nil {

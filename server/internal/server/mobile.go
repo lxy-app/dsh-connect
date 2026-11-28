@@ -20,64 +20,44 @@ type mobileActor struct {
 }
 
 // mobileAuth authenticates a mobile login device with its short-lived access token.
-// It never accepts the bootstrap or Web Admin credentials.
-func (s *Server) mobileAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token, ok := bearerToken(r.Header.Get("Authorization"))
-		if !ok || token == "" {
-			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile access token required", false))
-			return
-		}
-		device, user, err := s.store.AuthenticateMobileAccess(r.Context(), store.HashToken(token), nowUTC())
-		if err != nil {
-			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile access token is invalid or expired", false))
-			return
-		}
-		actor := mobileActor{Device: device, User: user}
-		next(w, r.WithContext(context.WithValue(r.Context(), mobileContextKey{}, actor)))
-	}
+// It never accepts the bootstrap, Web Admin or Connector device credentials.
+func (s *Server) mobileAuth(next http.Handler) http.Handler {
+	return s.mobileAuthentication(false)(next)
 }
 
 // mobileAuthWS is the WebSocket variant of mobileAuth. Browsers cannot set
 // custom Authorization headers on a WebSocket handshake, so a short-lived
 // access token may also arrive as a query parameter. Prefer the header on
 // native clients; never use the query form for ordinary HTTP APIs.
-func (s *Server) mobileAuthWS(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token, ok := bearerToken(r.Header.Get("Authorization"))
-		if !ok || token == "" {
-			token = r.URL.Query().Get("accessToken")
-		}
-		if token == "" {
-			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile access token required", false))
-			return
-		}
-		device, user, err := s.store.AuthenticateMobileAccess(r.Context(), store.HashToken(token), nowUTC())
-		if err != nil {
-			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile access token is invalid or expired", false))
-			return
-		}
-		actor := mobileActor{Device: device, User: user}
-		next(w, r.WithContext(context.WithValue(r.Context(), mobileContextKey{}, actor)))
+func (s *Server) mobileAuthWS(next http.Handler) http.Handler {
+	return s.mobileAuthentication(true)(next)
+}
+
+func (s *Server) mobileAuthentication(allowQueryToken bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token, ok := bearerToken(r.Header.Get("Authorization"))
+			if allowQueryToken && (!ok || token == "") {
+				token = r.URL.Query().Get("accessToken")
+			}
+			if token == "" || (!ok && !allowQueryToken) {
+				writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile access token required", false))
+				return
+			}
+			device, user, err := s.store.AuthenticateMobileAccess(r.Context(), store.HashToken(token), nowUTC())
+			if err != nil {
+				writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "mobile access token is invalid or expired", false))
+				return
+			}
+			actor := mobileActor{Device: device, User: user}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mobileContextKey{}, actor)))
+		})
 	}
 }
 
 func mobileFromContext(ctx context.Context) (mobileActor, bool) {
 	actor, ok := ctx.Value(mobileContextKey{}).(mobileActor)
 	return actor, ok
-}
-
-func (s *Server) mobileRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v1/mobile/auth/login", s.handleMobileLogin)
-	mux.HandleFunc("POST /v1/mobile/auth/refresh", s.handleMobileRefresh)
-	mux.HandleFunc("POST /v1/mobile/auth/logout", s.mobileAuth(s.handleMobileLogout))
-	mux.HandleFunc("GET /v1/mobile/me", s.mobileAuth(s.handleMobileMe))
-	mux.HandleFunc("GET /v1/mobile/events/ws", s.mobileAuthWS(s.handleMobileEvents))
-	s.mobileAccessRoutes(mux)
-	s.mobileInteractionRoutes(mux)
-
-	mux.HandleFunc("GET /v1/admin/mobile-devices", s.requireRole(store.RoleOwner, store.RoleAdmin, store.RoleAuditor)(s.handleAdminMobileDevices))
-	mux.HandleFunc("POST /v1/admin/mobile-devices/{mobileDeviceId}/revoke", s.requireRole(store.RoleOwner, store.RoleAdmin)(s.handleAdminRevokeMobileDevice))
 }
 
 func (s *Server) handleMobileLogin(w http.ResponseWriter, r *http.Request) {

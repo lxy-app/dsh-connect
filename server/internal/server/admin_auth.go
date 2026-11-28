@@ -24,8 +24,8 @@ type adminActor struct {
 //  1. The bootstrap bearer token, used by automation and the debug CLI. It acts
 //     as a synthetic owner with full access.
 //  2. A browser login session token issued by /v1/admin/auth/login.
-func (s *Server) adminAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (s *Server) adminAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := bearerToken(r.Header.Get("Authorization"))
 		if !ok || token == "" {
 			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "bearer token required", false))
@@ -44,7 +44,7 @@ func (s *Server) adminAuth(next http.HandlerFunc) http.HandlerFunc {
 					UpdatedAt:   nowUTC(),
 				},
 			}
-			next(w, r.WithContext(context.WithValue(r.Context(), adminContextKey{}, actor)))
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), adminContextKey{}, actor)))
 			return
 		}
 		user, err := s.store.AdminSessionUser(r.Context(), token, nowUTC())
@@ -53,18 +53,19 @@ func (s *Server) adminAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		actor := adminActor{User: user}
-		next(w, r.WithContext(context.WithValue(r.Context(), adminContextKey{}, actor)))
-	}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), adminContextKey{}, actor)))
+	})
 }
 
-// requireRole guards a handler behind a minimum role.
-func (s *Server) requireRole(roles ...string) func(http.HandlerFunc) http.HandlerFunc {
+// requireRole authenticates an Admin actor and then enforces the route group's
+// role boundary. It never turns Mobile or Connector credentials into Admin ones.
+func (s *Server) requireRole(roles ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(roles))
 	for _, role := range roles {
 		allowed[role] = struct{}{}
 	}
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		return s.adminAuth(func(w http.ResponseWriter, r *http.Request) {
+	return func(next http.Handler) http.Handler {
+		return s.adminAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			actor, ok := adminFromContext(r.Context())
 			if !ok {
 				writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "authentication required", false))
@@ -74,8 +75,8 @@ func (s *Server) requireRole(roles ...string) func(http.HandlerFunc) http.Handle
 				writeAPIError(w, protocol.NewError(protocol.CodeForbidden, "role "+actor.User.Role+" cannot perform this action", false))
 				return
 			}
-			next(w, r)
-		})
+			next.ServeHTTP(w, r)
+		}))
 	}
 }
 

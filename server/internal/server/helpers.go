@@ -62,15 +62,15 @@ func tokensEqual(left, right string) bool {
 	return subtle.ConstantTimeCompare(leftHash[:], rightHash[:]) == 1
 }
 
-func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (s *Server) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := bearerToken(r.Header.Get("Authorization"))
 		if !ok || !tokensEqual(token, s.config.BootstrapToken) {
 			writeAPIError(w, protocol.NewError(protocol.CodeUnauthorized, "valid bootstrap bearer token required", false))
 			return
 		}
-		next(w, r)
-	}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, limit int64, destination any) *protocol.Error {
