@@ -109,6 +109,7 @@ apps/mobile-harmony/
 ├── src/platform/      # 平台实现与适配边界
 ├── src/shims/         # 鸿蒙 API 兼容与明确降级
 ├── modules/harmony-audio-stream/ # ArkTS AudioCapturer 实时 PCM 原生模块
+├── modules/harmony-pcm-output/   # ArkTS AudioRenderer 连续 PCM 朗读模块
 ├── modules/harmony-attachment-picker/ # 系统拍照、相册图片与文件选择模块
 ├── modules/harmony-file-export/  # DocumentViewPicker 原附件本地保存模块
 ├── scripts/           # 可重复的补丁、prebuild 和 HAP 构建脚本
@@ -119,6 +120,13 @@ apps/mobile-harmony/
 ```
 
 通用业务代码放在 `apps/mobile-shared/`。平台差异不要写进共享目录；主线也不要为了鸿蒙修改 SDK 版本。
+
+## 会话朗读：连续 PCM 与回退
+
+- 火山 Agent Plan TTS 优先使用 `harmony-pcm-output` 的单个 ArkTS `AudioRenderer`：WebSocket 一次发送完整回复文本，持续接收 24 kHz/单声道/Int16 PCM；原生有界缓冲持续输出，避免旧版 Expo WAV 播放列表逐项切曲的可闻间隙。首个音频帧可用后开播，不等整篇 MP3 合成完成。仅在首声之前失败、原生模块缺失或倍速超出原生支持范围时，回退现有整篇 HTTP MP3；已出声后失败不从头重播。暂停与取消由现有会话状态机控制。
+- 流式连接中的首包、帧间超时与完整完成标记仍由 `volc-tts-stream` 检查；PCM 只在整篇音频成功接收后发布为完整缓存。HTTP 同 key 缓存发布等待可由当前播放取消，但不会取消其他等待者的发布任务。TTS Endpoint 只允许 HTTPS/WSS，以免明文发送 API Key；开发构建仅记录时长与文本长度，不记录正文或 API Key。
+- 2026-11-28 SGT-AL00 真机反馈：PCM 流式首声快、播报连续；退后台朗读停止、回前台继续。原因是新建的 AudioRenderer 不被 Expo Audio 的后台任务统计，已有 `audioPlayback` 声明并不替自研播放器保活。PCM 模块现自行激活 AVSession，并只在后台且仍播放时申请 `audioPlayback` 长时任务；暂停、回前台、结束时释放任务。此修复需重新构建签名 HAP 并真机复测，尤其注意 PCM 与 HTTP MP3 回退在同一 Ability 上的后台任务切换。
+- 该接口是**流式音频输出**，自动朗读仍从已完成的 `final.text` 开始；不是 Agent 边生成文本边播。原生模块变更须重新 `setup:native` 并构建/安装 HAP。静态检查与模块代码不能证明后台和锁屏可用；务必在鸿蒙手机与 Pad 上分别验证长回复、弱网、暂停/续播、录音打断、切后台和锁屏。
 
 ## 附件选择与文档预览
 

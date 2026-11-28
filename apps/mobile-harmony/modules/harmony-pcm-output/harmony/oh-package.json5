@@ -1,0 +1,11 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "harmony_pcm_output-harmony",
+  "version": "1.0.0",
+  "license": "MIT",
+  "dependencies": { "harmony-pcm-output": "./library" },
+  "overrides": {
+    "@expo-harmony/expo-modules-core": "55.0.26-harmony.3",
+    "@rnoh/react-native-openharmony": "0.84.1"
+  }
+}

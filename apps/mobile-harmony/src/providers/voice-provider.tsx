@@ -8,6 +8,7 @@ import { Alert, Platform } from 'react-native';
 import { activateAudioLockScreen, audioStatusError, clearAudioLockScreen } from '@/lib/audio-compat';
 import { PAUSED_AUDIO_MODE, PLAYBACK_AUDIO_MODE } from '@/lib/audio-session';
 import { speechSegmentsForPlatform } from '@/lib/speech-segments';
+import { HarmonyStreamPlayer } from '@/lib/harmony-stream-player';
 import type { VolcAsrProtocol } from '@/lib/volc-asr';
 import { VolcPcmPlayer } from '@/lib/volc-pcm-player';
 import {
@@ -25,7 +26,7 @@ import {
   VOLC_TTS_DEFAULT_VOICE,
   type VolcTtsVoiceId,
 } from '@/lib/volc-tts-voices';
-import { shouldUseStreamingPcm, voicePlaybackStatusFromAudio, type VoicePlayback, type VoicePlaybackStatus } from '@/lib/voice-playback';
+import { shouldUseHarmonyPcm, shouldUseStreamingPcm, voicePlaybackStatusFromAudio, type VoicePlayback, type VoicePlaybackStatus } from '@/lib/voice-playback';
 
 export type { VoicePlayback, VoicePlaybackStatus } from '@/lib/voice-playback';
 
@@ -116,6 +117,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const playbackRef = useRef<VoicePlayback | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
   const pcmPlayerRef = useRef<VolcPcmPlayer | null>(null);
+  const harmonyPlayerRef = useRef<HarmonyStreamPlayer | null>(null);
   const synthesisControllerRef = useRef<AbortController | null>(null);
   const cacheScopeOwnerRef = useRef<number | null>(null);
   const playbackGeneration = useRef(0);
@@ -149,6 +151,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       if (Platform.OS === 'ios') iosAudioReleaseUntilRef.current = Date.now() + 150;
       void pcmPlayer.stop().catch(() => undefined);
     }
+    const harmonyPlayer = harmonyPlayerRef.current;
+    harmonyPlayerRef.current = null;
+    if (harmonyPlayer) void harmonyPlayer.stop().catch(() => undefined);
     releaseVolcTtsCacheScope(cacheScopeOwnerRef.current);
     cacheScopeOwnerRef.current = null;
   }, []);
@@ -234,11 +239,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       changePlaybackStatus(generation, 'paused');
     } else {
       const pcmPlayer = pcmPlayerRef.current;
+      const harmonyPlayer = harmonyPlayerRef.current;
       playerRef.current?.pause();
       // Publish paused before awaiting native work so a lock-screen resume sees
       // the real transition and cannot be overwritten when this promise returns.
       changePlaybackStatus(generation, 'paused');
       if (pcmPlayer) await pcmPlayer.pause();
+      if (harmonyPlayer) await harmonyPlayer.pause();
       // keepAudioSessionActive covers segment gaps. Mixing while intentionally
       // paused releases Android's exclusive focus and lets iOS apps share audio,
       // without disabling the native lock-screen resume path.
@@ -253,6 +260,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const generation = playbackGeneration.current;
     const player = playerRef.current;
     const pcmPlayer = pcmPlayerRef.current;
+    const harmonyPlayer = harmonyPlayerRef.current;
     await applyAudioMode(PLAYBACK_AUDIO_MODE);
     if (generation !== playbackGeneration.current || playbackRef.current !== current) return;
     if (current.provider === 'system') {
@@ -261,6 +269,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     } else {
       if (pcmPlayer) {
         await pcmPlayer.resume();
+      } else if (harmonyPlayer) {
+        await harmonyPlayer.resume();
       } else {
         if (!player) {
           await stopSpeaking();
@@ -314,6 +324,55 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Unsupported playback rates keep their existing MP3 behavior rather than silently changing speed.
+    if (Number.isFinite(config.rate) && config.rate >= 0.25 && config.rate <= 4
+      && shouldUseHarmonyPcm(Platform.OS, HarmonyStreamPlayer.isAvailable)) {
+      cacheScopeOwnerRef.current = generation;
+      activateVolcTtsCacheScope(generation, [{
+        text: content,
+        speaker: config.voice,
+        endpoint: config.endpoint,
+        format: 'pcm',
+      }]);
+      const harmonyPlayer = new HarmonyStreamPlayer({
+        apiKey: config.apiKey,
+        text: content,
+        speaker: config.voice,
+        endpoint: config.endpoint,
+      }, config.rate, () => applyAudioMode(PLAYBACK_AUDIO_MODE), {
+        onPlaying: () => changePlaybackStatus(generation, 'playing'),
+        onPaused: () => changePlaybackStatus(generation, 'paused'),
+        onFinished: () => {
+          if (generation !== playbackGeneration.current) return;
+          releasePlayback();
+          settle();
+        },
+        onError: (cause) => {
+          if (generation !== playbackGeneration.current) return;
+          releasePlayback();
+          settle();
+          Alert.alert('语音播报失败', cause.message);
+        },
+      });
+      harmonyPlayerRef.current = harmonyPlayer;
+      try {
+        if (generation !== playbackGeneration.current) return;
+        await harmonyPlayer.start();
+        return;
+      } catch (cause) {
+        // Never replay full text once native audio may have started before its event reaches JS.
+        if (generation !== playbackGeneration.current) return;
+        harmonyPlayerRef.current = null;
+        releaseVolcTtsCacheScope(cacheScopeOwnerRef.current);
+        cacheScopeOwnerRef.current = null;
+        if (!harmonyPlayer.canFallbackToHttp) {
+          settle();
+          Alert.alert('语音播报失败', cause instanceof Error ? cause.message : '流式语音播放失败，请重试。');
+          return;
+        }
+      }
+    }
+
     if (shouldUseStreamingPcm(Platform.OS)) {
       cacheScopeOwnerRef.current = generation;
       activateVolcTtsCacheScope(generation, [{
@@ -364,6 +423,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     synthesisControllerRef.current = controller;
     const segments = speechSegmentsForPlatform(content, Platform.OS);
+    const httpStartedAt = Date.now();
     cacheScopeOwnerRef.current = generation;
     activateVolcTtsCacheScope(generation, segments.map((segment) => ({
       text: segment,
@@ -440,6 +500,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     try {
       const firstFile = await resolveSegment(0);
       if (generation !== playbackGeneration.current) return;
+      if (__DEV__) console.info('[TTS] http_file', {
+        firstFileMs: Date.now() - httpStartedAt,
+        textLength: content.length,
+      });
       files.set(0, firstFile);
 
       await applyAudioMode(PLAYBACK_AUDIO_MODE);
