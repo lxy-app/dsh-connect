@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DevicePickerSheet } from '@shared/components/device-picker-sheet';
-import { DesktopIndicator, DeviceMenuChevron } from '@shared/components/session-header';
+import { DesktopIndicator, DeviceMenuChevron, WorkspaceDisclosureChevron } from '@shared/components/session-header';
 import { ChatIcon } from '@/components/chat-icon';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -235,7 +235,7 @@ export function SessionDrawer({
                       <Text style={[styles.workspaceIcon, { color: workspace.id === workspaceId ? theme.accent : theme.textSecondary }]}>▱</Text>
                       <Text numberOfLines={1} style={[styles.workspaceName, { color: workspace.id === workspaceId ? theme.accent : theme.textSecondary }]}>{workspace.name}</Text>
                       <Text style={[styles.workspaceCount, { color: theme.textSecondary }]}>{items.length}</Text>
-                      <Text style={[styles.chevron, { color: theme.textSecondary }]}>{open ? '⌄' : '›'}</Text>
+                      <WorkspaceDisclosureChevron expanded={open} color={theme.textSecondary} />
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"

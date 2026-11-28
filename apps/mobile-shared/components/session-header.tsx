@@ -42,6 +42,14 @@ export function DeviceMenuChevron({ expanded, color }: { expanded: boolean; colo
   );
 }
 
+export function WorkspaceDisclosureChevron({ expanded, color }: { expanded: boolean; color: string }) {
+  return (
+    <View style={[styles.workspaceDisclosure, expanded && styles.workspaceDisclosureExpanded]} accessible={false}>
+      <View style={[styles.chevron, { borderColor: color }]} />
+    </View>
+  );
+}
+
 export function SessionHeader({
   Icon, colors, title, deviceName, workspaceName, online, refreshing, status, onOpenDrawer, onCreate, onRefresh, children,
 }: {
@@ -128,6 +136,9 @@ const styles = StyleSheet.create({
   disclosureArm: { position: 'absolute', top: 8, width: 8, height: 1.8, borderRadius: 1 },
   leftArm: { left: 2.3, transform: [{ rotate: '45deg' }] },
   rightArm: { right: 2.3, transform: [{ rotate: '-45deg' }] },
+  workspaceDisclosure: { width: 18, height: 18, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
+  // The down-facing two-stroke chevron needs a slight optical lift after rotation.
+  workspaceDisclosureExpanded: { top: -1, transform: [{ rotate: '90deg' }] },
   dot: { position: 'absolute', right: 0, top: 0, borderWidth: 1 },
   actions: { flexDirection: 'row', alignItems: 'center' },
   pill: { position: 'absolute', left: 0, right: 0, top: 2, height: 40, borderRadius: 20 },
