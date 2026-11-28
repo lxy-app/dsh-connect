@@ -113,13 +113,6 @@ func (s *Server) attachmentsWritable() bool {
 	return s.config.AttachmentsMode == attachmentsModeReadWrite
 }
 
-func (s *Server) attachmentRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/mobile/attachments/{attachmentId}", s.mobileAuth(s.handleMobileAttachment))
-	mux.HandleFunc("GET /v1/mobile/attachments/{attachmentId}/preview", s.mobileAuth(s.handleMobileAttachmentPreview))
-	s.mobileAttachmentRoutes(mux)
-	mux.HandleFunc("POST /v1/connector/attachments/{attachmentId}", s.handleConnectorAttachmentUpload)
-}
-
 // handleMobileAttachment serves the bytes of one declared attachment.
 //
 // Authorization is deliberately reversed: the Server looks the row up by id and

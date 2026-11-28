@@ -32,13 +32,6 @@ var uploadImageMIMEs = map[string]bool{
 	"image/gif":  true,
 }
 
-// mobileAttachmentRoutes registers the phone-side upload endpoint beside the
-// download endpoint. Both live behind the same mobile bearer auth.
-func (s *Server) mobileAttachmentRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/attachments", s.mobileAuth(s.handleMobileAttachmentUpload))
-	mux.HandleFunc("GET /v1/connector/uploads/{attachmentId}", s.handleConnectorUploadDownload)
-}
-
 // handleConnectorUploadDownload hands one staged phone upload to the desktop
 // Connector that owns the Session, so it can stage the bytes in DSH and cite a
 // receipt instead of trusting a caller-supplied path.

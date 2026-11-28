@@ -14,21 +14,6 @@ import (
 	"github.com/deepseek/dsh-connect/server/internal/store"
 )
 
-// ---------- mobile REST: access, workspaces and sessions ----------
-
-func (s *Server) mobileAccessRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/mobile/access", s.mobileAuth(s.handleMobileAccessOverview))
-	mux.HandleFunc("GET /v1/mobile/workspaces", s.mobileAuth(s.handleMobileWorkspaces))
-	mux.HandleFunc("GET /v1/mobile/workspaces/{workspaceId}/model", s.mobileAuth(s.handleMobileWorkspaceModel))
-	mux.HandleFunc("GET /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionList))
-	mux.HandleFunc("POST /v1/mobile/sessions", s.mobileAuth(s.handleMobileSessionCreate))
-	mux.HandleFunc("GET /v1/mobile/sessions/{sessionId}/messages", s.mobileAuth(s.handleMobileSessionMessages))
-	mux.HandleFunc("GET /v1/mobile/sessions/{sessionId}/model", s.mobileAuth(s.handleMobileSessionModel))
-	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/model", s.mobileAuth(s.handleMobileSessionModelSelect))
-	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/prompt", s.mobileAuth(s.handleMobileSessionPrompt))
-	mux.HandleFunc("POST /v1/mobile/sessions/{sessionId}/cancel", s.mobileAuth(s.handleMobileSessionCancel))
-}
-
 type mobileUserWorkspaceAccess struct {
 	summary protocol.MobileWorkspaceSummary
 	scopes  []string

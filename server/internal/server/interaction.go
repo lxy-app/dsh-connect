@@ -272,13 +272,6 @@ func (s *Server) ingestInteractionEvent(event protocol.Event) {
 	}
 }
 
-// ---------- Mobile routes ----------
-
-func (s *Server) mobileInteractionRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/mobile/interactions", s.mobileAuth(s.handleMobileInteractions))
-	mux.HandleFunc("POST /v1/mobile/interactions/{interactionId}/decision", s.mobileAuth(s.handleMobileInteractionDecision))
-}
-
 func (s *Server) handleMobileInteractions(w http.ResponseWriter, r *http.Request) {
 	actor, ok := mobileFromContext(r.Context())
 	if !ok {
