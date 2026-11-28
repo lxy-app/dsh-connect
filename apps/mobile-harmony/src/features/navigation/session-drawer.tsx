@@ -11,6 +11,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useResponsiveLayout } from '@shared/hooks/use-responsive-layout';
+import { DevicePickerSheet } from '@shared/components/device-picker-sheet';
+import { DesktopIndicator, DeviceMenuChevron } from '@shared/components/session-header';
+import { ChatIcon } from '@/components/chat-icon';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError, getMobileAccessOverview, getMobileSessions } from '@/lib/mobile-api';
@@ -38,6 +42,7 @@ export function SessionDrawer({
   onCreateSession: (deviceId: string, workspaceId: string) => void;
   onOpenSession: (session: MobileSession) => void;
 }) {
+  const layout = useResponsiveLayout();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const { authorized } = useMobileSession();
@@ -143,16 +148,34 @@ export function SessionDrawer({
   };
 
   const selectDevice = (next: MobileDesktopAccess) => {
+    setDeviceMenu(false);
+    if (next.deviceId === desktop?.deviceId) return;
     const firstWorkspace = next.grant?.workspaces[0]?.id ?? '';
     setDeviceId(next.deviceId);
     setWorkspaceId(firstWorkspace);
     setExpandedWorkspace(firstWorkspace);
     setSessionLimit(5);
-    setDeviceMenu(false);
   };
+  const closePicker = () => setDeviceMenu(false);
+  const picker = deviceMenu && (
+    <DevicePickerSheet
+      devices={desktops}
+      selectedId={desktop?.deviceId}
+      loading={loading}
+      error={error}
+      colors={theme}
+      desktopIcon={<ChatIcon name="desktop" size={24} color={theme.text} />}
+      bottomInset={inline ? 0 : insets.bottom}
+      centeredWidth={inline ? layout.sheetMaxWidth : undefined}
+      onSelect={selectDevice}
+      onClose={closePicker}
+    />
+  );
 
   const drawer = (
     <Animated.View
+          accessibilityElementsHidden={deviceMenu}
+          importantForAccessibility={deviceMenu ? 'no-hide-descendants' : 'auto'}
           style={[
             styles.drawer,
             inline && styles.inlineDrawer,
@@ -168,37 +191,19 @@ export function SessionDrawer({
           <View style={styles.deviceWrap}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="切换桌面设备"
+              accessibilityLabel={desktop ? `切换桌面设备，${desktop.deviceName}，${desktop.online ? '在线' : '离线'}` : '选择桌面设备'}
               accessibilityState={{ expanded: deviceMenu }}
-              onPress={() => setDeviceMenu((value) => !value)}
+              onPress={() => setDeviceMenu(true)}
               style={({ pressed }) => [styles.deviceButton, pressed && styles.pressed]}
             >
-              <View style={[styles.deviceIcon, { backgroundColor: theme.accentSoft }]}>
-                <Text style={[styles.deviceIconText, { color: theme.accent }]}>▣</Text>
-                <View style={[styles.onlineDot, { backgroundColor: desktop?.online ? theme.success : theme.textSecondary, borderColor: theme.surface }]} />
-              </View>
+              <DesktopIndicator Icon={ChatIcon} size={28} color={theme.text} online={desktop?.online}
+                colors={theme} background={theme.surface} />
               <View style={styles.deviceText}>
                 <Text numberOfLines={1} style={[styles.deviceName, { color: theme.text }]}>{desktop?.deviceName ?? '选择桌面'}</Text>
-                <Text style={[styles.deviceMeta, { color: theme.textSecondary }]}>{desktop?.online ? '在线 · Connector 已连接' : '离线 · 可查看历史会话'}</Text>
+                <Text style={[styles.deviceMeta, { color: theme.textSecondary }]}>{desktop ? (desktop.online ? '在线 · Connector 已连接' : '离线 · 可查看历史会话') : '请选择桌面设备'}</Text>
               </View>
-              <Text style={[styles.chevron, { color: theme.textSecondary }]}>{deviceMenu ? '⌃' : '⌄'}</Text>
+              <DeviceMenuChevron expanded={deviceMenu} color={theme.text} />
             </Pressable>
-            {deviceMenu ? (
-              <View style={[styles.deviceMenu, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                {desktops.map((item) => (
-                  <Pressable
-                    key={item.deviceId}
-                    accessibilityRole="button"
-                    onPress={() => selectDevice(item)}
-                    style={[styles.deviceOption, item.deviceId === desktop?.deviceId && { backgroundColor: theme.accentSoft }]}
-                  >
-                    <View style={[styles.smallDot, { backgroundColor: item.online ? theme.success : theme.textSecondary }]} />
-                    <Text style={[styles.deviceOptionText, { color: theme.text }]}>{item.deviceName}</Text>
-                    {item.deviceId === desktop?.deviceId ? <Text style={{ color: theme.accent }}>✓</Text> : null}
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
           </View>
 
           <View style={styles.drawerActions}>
@@ -312,12 +317,18 @@ export function SessionDrawer({
           </View>
     </Animated.View>
   );
-  if (inline) return drawer;
+  if (inline) return (
+    <>
+      {drawer}
+      {deviceMenu && <Modal visible transparent animationType="fade" onRequestClose={closePicker}>{picker}</Modal>}
+    </>
+  );
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={deviceMenu ? closePicker : onClose}>
       <View style={styles.layer}>
-        <Pressable accessibilityLabel="关闭会话侧边栏" onPress={onClose} style={[styles.backdrop, { backgroundColor: '#00000066' }]} />
+        <Pressable accessible={!deviceMenu} accessibilityLabel="关闭会话侧边栏" onPress={onClose} style={[styles.backdrop, { backgroundColor: '#00000066' }]} />
         {drawer}
+        {picker}
       </View>
     </Modal>
   );
@@ -328,17 +339,11 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFill },
   drawer: { width: '86%', maxWidth: 340, borderRightWidth: 1, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 20, elevation: 12 },
   inlineDrawer: { flex: 1, minHeight: 0, width: '100%', maxWidth: '100%', borderRightWidth: 0, shadowOpacity: 0, elevation: 0 },
-  deviceWrap: { paddingHorizontal: 14, paddingTop: 15, paddingBottom: 9, position: 'relative', zIndex: 3 },
-  deviceButton: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 5 },
-  deviceIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  deviceIconText: { fontSize: 18, fontWeight: '700' },
-  onlineDot: { position: 'absolute', width: 9, height: 9, borderRadius: 5, right: -1, top: -1, borderWidth: 2 },
+  deviceWrap: { paddingHorizontal: 14, paddingTop: 15, paddingBottom: 9 },
+  deviceButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 2 },
   deviceText: { flex: 1, minWidth: 0 },
   deviceName: { fontSize: Typography.control, lineHeight: 21, fontWeight: '700' },
   deviceMeta: { fontSize: Typography.caption, lineHeight: 18, marginTop: 3 },
-  deviceMenu: { position: 'absolute', top: 67, left: 14, right: 14, borderWidth: 1, borderRadius: 12, padding: 5, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 14, elevation: 8 },
-  deviceOption: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, borderRadius: 8 },
-  deviceOptionText: { flex: 1, fontSize: Typography.body, lineHeight: 20 },
   smallDot: { width: 7, height: 7, borderRadius: 4 },
   drawerActions: { marginHorizontal: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center', gap: 8 },
   newButton: { flex: 1, minWidth: 0, minHeight: 42, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10 },

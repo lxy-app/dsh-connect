@@ -35,6 +35,7 @@ import { ReadAloudButton } from '@/components/read-aloud-button';
 import { TurnCard } from '@/components/turn-card';
 import { ChatIcon } from '@/components/chat-icon';
 import { StatusBadge } from '@/components/status-badge';
+import { SessionHeader } from '@shared/components/session-header';
 import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { RECORDING_AUDIO_MODE } from '@/lib/audio-session';
@@ -58,6 +59,7 @@ import {
   createRequestId,
   describeMobileApiError,
   getMobileTranscript,
+  MobileApiError,
   promptMobileSession,
   uploadMobileAttachment,
 } from '@/lib/mobile-api';
@@ -140,6 +142,7 @@ function ChatScreenContent() {
   }, [deviceId, deviceName, rememberSession, scopes, sessionId, title, workspaceId, workspaceName]);
 
   const [transcript, setTranscript] = useState<MobileTranscript | null>(null);
+  const [deviceOnline, setDeviceOnline] = useState<boolean>();
   const [older, setOlder] = useState<MobileMessage[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | undefined>();
   const [olderHasMore, setOlderHasMore] = useState(false);
@@ -364,6 +367,7 @@ function ChatScreenContent() {
           getMobileTranscript(serverUrl, token, sessionId, { deviceId, workspaceId, limit: 30 }),
         );
         setTranscript(next);
+        setDeviceOnline(true);
         setOptimistic((current) => {
           if (!current) return current;
           const matched = next.messages.some(
@@ -389,6 +393,7 @@ function ChatScreenContent() {
         }
         setError(null);
       } catch (cause) {
+        setDeviceOnline(cause instanceof MobileApiError && cause.code === 'device_offline' ? false : undefined);
         setError(describeMobileApiError(cause));
       } finally {
         inflight.current = false;
@@ -1019,70 +1024,19 @@ function ChatScreenContent() {
       style={[styles.page, { backgroundColor: theme.background }]}
     >
       <View style={{ paddingTop: insets.top }}>
-        <View style={styles.head}>
-          {!layout.isExpanded ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="打开会话侧边栏"
-              hitSlop={10}
-              onPress={() => setDrawerOpen(true)}
-              style={({ pressed }) => [
-                styles.iconButton,
-                { backgroundColor: theme.surface, borderColor: theme.border },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.iconText, { color: theme.text }]}>≡</Text>
-            </Pressable>
-          ) : null}
-          <View style={styles.headText}>
-            <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
-              {title}
-            </Text>
-            <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {[deviceName, workspaceName].filter(Boolean).join(' · ') || '已授权会话'}
-            </Text>
-          </View>
-          <View style={styles.headStatus}>
-            {transcript?.active ? (
-              <StatusBadge label="运行中" tone="accent" />
-            ) : awaitingReply ? (
-              <StatusBadge label="等待中" tone="warning" />
-            ) : (
-              <StatusBadge label="空闲" tone="neutral" />
-            )}
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="新建会话"
-            hitSlop={8}
-            onPress={() => openNewSession()}
-            style={({ pressed }) => [
-              styles.iconButton,
-              { backgroundColor: theme.surface, borderColor: theme.border },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.addIcon, { color: theme.accent }]}>＋</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="刷新对话"
-            disabled={refreshing}
-            hitSlop={8}
-            onPress={() => void loadLatest('refresh')}
-            style={({ pressed }) => [
-              styles.iconButton,
-              { backgroundColor: theme.surface, borderColor: theme.border },
-              pressed && styles.pressed,
-            ]}
-          >
-            {refreshing ? (
-              <ActivityIndicator color={theme.accent} size="small" />
-            ) : (
-              <Text style={[styles.refreshIcon, { color: theme.accent }]}>↻</Text>
-            )}
-          </Pressable>
+        <SessionHeader
+          Icon={ChatIcon}
+          colors={theme}
+          title={title}
+          deviceName={deviceName || '桌面设备'}
+          online={deviceOnline}
+          workspaceName={workspaceName}
+          refreshing={refreshing}
+          status={<StatusBadge label={transcript?.active ? '运行中' : awaitingReply ? '等待中' : '空闲'} tone={transcript?.active ? 'accent' : awaitingReply ? 'warning' : 'neutral'} />}
+          onOpenDrawer={layout.isExpanded ? undefined : () => setDrawerOpen(true)}
+          onCreate={() => openNewSession()}
+          onRefresh={() => void loadLatest('refresh')}
+        >
           {canCancel && transcript?.active ? (
             <Pressable
               accessibilityRole="button"
@@ -1099,7 +1053,7 @@ function ChatScreenContent() {
               </Text>
             </Pressable>
           ) : null}
-        </View>
+        </SessionHeader>
       </View>
 
       {error ? (
@@ -1617,52 +1571,6 @@ function single(value: string | string[] | undefined): string {
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-  },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconText: {
-    fontSize: 25,
-    lineHeight: 27,
-    marginTop: -3,
-  },
-  addIcon: {
-    fontSize: 21,
-    lineHeight: 23,
-    fontWeight: '600',
-  },
-  refreshIcon: {
-    fontSize: 19,
-    lineHeight: 23,
-    fontWeight: '600',
-  },
-  headText: {
-    flex: 1,
-    gap: 2,
-  },
-  headStatus: {
-    alignSelf: 'center',
-  },
-  title: {
-    fontSize: Typography.reading,
-    lineHeight: 22,
-    fontWeight: '600',
-  },
-  subtitle: {
-    fontSize: Typography.caption,
-    lineHeight: 18,
   },
   stop: {
     borderWidth: 1,
