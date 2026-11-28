@@ -28,23 +28,28 @@ test('uses the purple app icon and palette, persists dark mode and stays within 
   await expect(page.locator('.ant-spin-spinning')).toHaveCount(0);
   const selectedNav = page.locator('.ant-menu-item-selected');
   await expect(selectedNav).toHaveCSS('background-color', 'rgb(238, 237, 255)');
-  await expect(selectedNav).toHaveCSS('color', 'rgb(85, 67, 214)');
+  await expect(selectedNav).toHaveCSS('color', 'rgb(98, 91, 246)');
+  await expect(page.locator('.admin-sidebar')).toHaveCSS('width', '224px');
+  await expect(page.locator('.admin-sidebar-nav .ant-menu-item-group-title')).toHaveCount(3);
   await page.screenshot({ path: testInfo.outputPath('overview-light.png'), fullPage: true });
 
   await page.getByRole('button', { name: '切换为深色主题' }).click();
   await expect(selectedNav).toHaveCSS('background-color', 'rgb(50, 47, 81)');
-  await expect(selectedNav).toHaveCSS('color', 'rgb(242, 242, 245)');
+  await expect(selectedNav).toHaveCSS('color', 'rgb(146, 139, 255)');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('dsh-connect.admin.theme'))).toBe('dark');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByRole('button', { name: '切换为浅色主题' })).toBeVisible();
   await expect(page.locator('.ant-spin-spinning')).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath('overview-dark.png'), fullPage: true });
+  await expect.poll(() => page.locator('.admin-sidebar').evaluate((sidebar) => Math.round(sidebar.getBoundingClientRect().width))).toBe(224);
+  await page.screenshot({ path: testInfo.outputPath('overview-dark.png'), fullPage: true, animations: 'disabled' });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(logo).toBeVisible();
+  await expect(page.locator('.admin-sidebar-nav .ant-menu-item-group-title').first()).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('overview-narrow.png'), fullPage: true });
 });
 
 test('uses exact violet and contrasting text on light and dark primary buttons', async ({ page }) => {

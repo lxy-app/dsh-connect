@@ -1,11 +1,15 @@
 :root {
   color-scheme: light;
   --dsh-bg: #F4F5F9;
+  --admin-nav-muted: #686D80;
+  --admin-nav-border: #E5E6ED;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
   --dsh-bg: #17181E;
+  --admin-nav-muted: #A6A7B5;
+  --admin-nav-border: #353641;
 }
 
 /* Keep the confirmed violet exact on dark primary buttons without affecting danger actions. */
@@ -31,6 +35,61 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* The sidebar follows the lightweight grouped-navigation preview in both themes. */
+.admin-sidebar .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.admin-sidebar-brand {
+  flex: 0 0 77px;
+  border-bottom: 1px solid var(--admin-nav-border);
+}
+
+.admin-sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 13px 0;
+}
+
+.admin-sidebar-nav .ant-menu-item-group-title {
+  margin: 13px 10px 4px;
+  padding: 0 11px;
+  color: var(--admin-nav-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.admin-sidebar-nav .ant-menu-item-group:first-child .ant-menu-item-group-title {
+  margin-top: 5px;
+}
+
+.admin-sidebar-nav .ant-menu-item {
+  height: 42px;
+  line-height: 42px;
+  margin-block: 2px;
+  border-radius: 9px;
+}
+
+.admin-sidebar-footer {
+  margin: 0 18px;
+  padding: 15px 0 17px;
+  border-top: 1px solid var(--admin-nav-border);
+  color: var(--admin-nav-muted);
+  font-size: 11px;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-nav .ant-menu-item-group-title {
+  display: none;
+}
+
+.admin-sidebar--collapsed .admin-sidebar-nav .ant-menu-item-group + .ant-menu-item-group {
+  margin-top: 14px;
 }
 
 /* Keep long IDs and fingerprints from stretching table rows. */
