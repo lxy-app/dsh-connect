@@ -20,6 +20,10 @@ test('TTS URL appends the Agent Plan unidirectional path exactly once', () => {
   assert.equal(full, 'https://openspeech.bytedance.com/api/v3/plan/tts/unidirectional');
 });
 
+test('TTS refuses to send the API Key through HTTP', () => {
+  assert.throws(() => buildVolcTtsUrl('http://localhost:8787'), /HTTPS/);
+});
+
 test('TTS parser joins base64 audio chunks in order', () => {
   const body = [
     JSON.stringify({ code: 0, data: fromByteArray(new Uint8Array([1, 2])) }),

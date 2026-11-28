@@ -1,13 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { shouldUseStreamingPcm, voiceControlAction, voicePlaybackStatusFromAudio, type VoicePlayback } from './voice-playback';
+import { shouldUseHarmonyPcm, shouldUseStreamingPcm, voiceControlAction, voicePlaybackStatusFromAudio, type VoicePlayback } from './voice-playback';
 
 function playback(status: VoicePlayback['status'], canPause = true): VoicePlayback {
   return { key: 'turn-1', status, provider: 'volcengine', canPause };
 }
 
-test('Harmony M0 uses continuous MP3 playback instead of chunked PCM', () => {
+test('Harmony uses native continuous PCM only when its module is installed', () => {
+  assert.equal(shouldUseHarmonyPcm('harmony', true), true);
+  assert.equal(shouldUseHarmonyPcm('harmony', false), false);
+  assert.equal(shouldUseHarmonyPcm('ios', true), false);
+  assert.equal(shouldUseHarmonyPcm('web', true), false);
+});
+
+test('Harmony avoids the Expo WAV playlist with audible segment gaps', () => {
   assert.equal(shouldUseStreamingPcm('harmony'), false);
   assert.equal(shouldUseStreamingPcm('web'), false);
   assert.equal(shouldUseStreamingPcm('ios'), true);

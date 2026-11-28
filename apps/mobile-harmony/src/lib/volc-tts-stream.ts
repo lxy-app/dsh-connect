@@ -29,10 +29,10 @@ export type VolcTtsStreamFrame = {
 
 export function buildVolcTtsStreamUrl(endpoint = VOLC_TTS_DEFAULT_ENDPOINT): string {
   const url = new URL(endpoint);
-  if (!['https:', 'http:', 'wss:', 'ws:'].includes(url.protocol)) {
-    throw new Error('火山 TTS 流式地址必须使用 HTTPS 或 WSS。');
+  if (!['https:', 'wss:'].includes(url.protocol)) {
+    throw new Error('火山 TTS 流式地址必须使用 HTTPS 或 WSS，不能通过明文连接发送 API Key。');
   }
-  url.protocol = url.protocol === 'http:' || url.protocol === 'ws:' ? 'ws:' : 'wss:';
+  url.protocol = 'wss:';
   url.pathname = VOLC_TTS_STREAM_PATH;
   url.search = '';
   url.hash = '';

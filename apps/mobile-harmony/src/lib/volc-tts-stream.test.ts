@@ -18,6 +18,11 @@ test('streaming URL uses the Agent Plan unidirectional WebSocket path', () => {
   );
 });
 
+test('streaming URL refuses insecure WebSocket authentication', () => {
+  assert.throws(() => buildVolcTtsStreamUrl('http://localhost:8787'), /HTTPS 或 WSS/);
+  assert.throws(() => buildVolcTtsStreamUrl('ws://localhost:8787'), /HTTPS 或 WSS/);
+});
+
 test('stream request encodes full text, voice and PCM/24 kHz without model override', () => {
   const frame = encodeVolcTtsStreamRequest({ apiKey: 'secret', text: '整段朗读', speaker: 'voice-a' });
   assert.deepEqual([...frame.slice(0, 4)], [0x11, 0x10, 0x10, 0]);

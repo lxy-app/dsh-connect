@@ -11,7 +11,11 @@ export type VoicePlayback = {
 
 export type VoiceControlAction = 'start' | 'cancel' | 'pause' | 'resume' | 'stop';
 
-/** Harmony M0 uses continuous MP3 files because short WAV playlist items have audible gaps. */
+export function shouldUseHarmonyPcm(platform: string, nativeAvailable: boolean): boolean {
+  return platform === 'harmony' && nativeAvailable;
+}
+
+/** The Expo WAV playlist has audible gaps on Harmony; its native PCM renderer is selected separately. */
 export function shouldUseStreamingPcm(platform: string): boolean {
   return platform !== 'web' && platform !== 'harmony';
 }
