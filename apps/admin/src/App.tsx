@@ -44,14 +44,20 @@ const SETTINGS_ROLES: readonly Role[] = ['owner', 'admin'];
 
 const NAV: ReadonlyArray<{ key: string; icon: ReactNode; label: string; roles?: readonly Role[] }> = [
   { key: '/overview', icon: <DashboardOutlined />, label: '概览' },
+  { key: '/running', icon: <MonitorOutlined />, label: '运行会话' },
+  { key: '/approvals', icon: <CheckSquareOutlined />, label: '远程审批' },
   { key: '/users', icon: <TeamOutlined />, label: '用户与角色' },
   { key: '/devices', icon: <CloudServerOutlined />, label: '设备管理' },
   { key: '/policies', icon: <SafetyCertificateOutlined />, label: '访问策略' },
-  { key: '/running', icon: <MonitorOutlined />, label: '运行会话' },
-  { key: '/approvals', icon: <CheckSquareOutlined />, label: '远程审批' },
-  { key: '/settings', icon: <SettingOutlined />, label: '系统设置', roles: SETTINGS_ROLES },
   { key: '/audit', icon: <AuditOutlined />, label: '审计日志' },
+  { key: '/settings', icon: <SettingOutlined />, label: '系统设置', roles: SETTINGS_ROLES },
 ];
+
+const NAV_GROUPS = [
+  { label: '工作台', keys: ['/overview', '/running', '/approvals'] },
+  { label: '资源与权限', keys: ['/users', '/devices', '/policies'] },
+  { label: '系统', keys: ['/audit', '/settings'] },
+] as const;
 
 export function App() {
   const { user, loading, signOut } = useAuth();
@@ -78,6 +84,11 @@ export function App() {
 
   const canViewManagement = MANAGEMENT_ROLES.includes(user.role);
   const navItems = canViewManagement ? NAV.filter((item) => !item.roles || item.roles.includes(user.role)) : [];
+  const groupedNavItems = NAV_GROUPS.map((group) => ({
+    type: 'group' as const,
+    label: group.label,
+    children: group.keys.map((key) => navItems.find((item) => item.key === key)).filter((item) => item !== undefined),
+  })).filter((group) => group.children.length > 0);
   const selected = navItems.find((item) => location.pathname.startsWith(item.key))?.key ?? '/overview';
   const guardRoute = (page: ReactNode, roles: readonly Role[], title: string, subTitle: string) =>
     roles.includes(user.role) ? <>{page}</> : <Result status="403" title={title} subTitle={subTitle} />;
@@ -99,17 +110,19 @@ export function App() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider
+        className={`admin-sidebar${effectiveCollapsed ? ' admin-sidebar--collapsed' : ''}`}
         collapsible
         collapsed={effectiveCollapsed}
         onCollapse={setCollapsed}
         trigger={null}
-        width={216}
+        width={224}
         theme={dark ? 'dark' : 'light'}
         style={{ borderRight: `1px solid ${token.colorBorderSecondary}` }}
       >
         <div
+          className="admin-sidebar-brand"
           style={{
-            height: 64,
+            height: 77,
             display: 'flex',
             alignItems: 'center',
             gap: 10,
@@ -122,7 +135,7 @@ export function App() {
             className="admin-app-logo"
             src={appIcon}
             alt=""
-            style={{ width: 30, height: 30, flex: '0 0 30px', borderRadius: 9, objectFit: 'cover' }}
+            style={{ width: 32, height: 32, flex: '0 0 32px', borderRadius: 10, objectFit: 'cover' }}
           />
           {effectiveCollapsed ? null : (
             <div>
@@ -132,13 +145,15 @@ export function App() {
           )}
         </div>
         <Menu
+          className="admin-sidebar-nav"
           theme={dark ? 'dark' : 'light'}
           mode="inline"
           selectedKeys={[selected]}
-          items={navItems}
+          items={groupedNavItems}
           onClick={({ key }) => navigate(key)}
           style={{ borderInlineEnd: 'none' }}
         />
+        {canViewManagement && !effectiveCollapsed ? <div className="admin-sidebar-footer">DSH CONNECT · ADMIN</div> : null}
       </Sider>
 
       <Layout>

@@ -371,6 +371,28 @@ test('reads runtime settings without rendering unexpected secret fields', async 
   expect(scenario.unexpectedRequests).toEqual([]);
 });
 
+test('shows grouped navigation without changing routes or role visibility', async ({ page }) => {
+  await mockAdminApi(page);
+  await page.goto('/overview');
+  const nav = page.locator('.admin-sidebar-nav');
+  await expect(nav.locator('.ant-menu-item-group-title')).toHaveText(['工作台', '资源与权限', '系统']);
+  await expect(nav.locator('.ant-menu-item')).toHaveText([
+    '概览', '运行会话', '远程审批', '用户与角色', '设备管理', '访问策略', '审计日志', '系统设置',
+  ]);
+  await nav.getByText('运行会话', { exact: true }).click();
+  await expect(page).toHaveURL(/\/running$/);
+  await expect(nav.locator('.ant-menu-item-selected')).toContainText('运行会话');
+
+  const auditor: MockUser = { ...owner, id: 'usr-auditor-e2e', role: 'auditor' };
+  const auditorPage = await page.context().newPage();
+  await mockAdminApi(auditorPage, auditor);
+  await auditorPage.goto('/overview');
+  await expect(auditorPage.locator('.admin-sidebar-nav .ant-menu-item-group-title')).toHaveText(['工作台', '资源与权限', '系统']);
+  await expect(auditorPage.locator('.admin-sidebar-nav .ant-menu-item')).toHaveCount(7);
+  await expect(auditorPage.locator('.admin-sidebar-nav')).not.toContainText('系统设置');
+  await auditorPage.close();
+});
+
 test('blocks member management routes before any global data request', async ({ page }) => {
   const member: MockUser = { ...owner, id: 'usr-member-e2e', displayName: 'E2E Member', role: 'member' };
   const scenario = await mockAdminApi(page, member);
