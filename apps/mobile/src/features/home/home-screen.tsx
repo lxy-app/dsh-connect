@@ -19,6 +19,7 @@ import {
 } from '@/lib/mobile-api';
 import { InteractionsScreen } from '@/features/interactions/interactions-screen';
 import { useInteractions } from '@/providers/interactions-provider';
+import { settleMobileOverviewAndSessions } from '@shared/lib/mobile-overview-and-sessions';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import type {
   MobileAccessOverview,
@@ -54,13 +55,18 @@ export function HomeScreen() {
       if (mode === 'refresh') setRefreshing(true);
       if (mode === 'initial') setLoading(true);
       try {
-        const [nextOverview, nextSessions] = await Promise.all([
+        const result = await settleMobileOverviewAndSessions(
           authorized((serverUrl, token) => getMobileAccessOverview(serverUrl, token)),
           authorized((serverUrl, token) => getMobileSessions(serverUrl, token)),
-        ]);
-        setOverview(nextOverview);
-        setSessionList(nextSessions);
-        setError(null);
+          { overview: setOverview, sessions: setSessionList },
+        );
+        if (result.overview.status === 'rejected') {
+          setError(describeMobileApiError(result.overview.reason));
+        } else if (result.sessions.status === 'rejected') {
+          setError(describeMobileApiError(result.sessions.reason));
+        } else {
+          setError(null);
+        }
       } catch (cause) {
         setError(describeMobileApiError(cause));
       } finally {
