@@ -38,11 +38,40 @@ export async function resolveVolcTtsSegment(options: VolcTtsOptions): Promise<Re
   // An older playback may already be publishing this segment. Await that
   // complete file instead of reading a partial destination or synthesizing twice.
   const pending = PUBLICATIONS.get(key);
-  if (pending) return { file: await pending, cacheHit: true };
+  if (pending) return { file: await waitForPublication(pending, options.signal), cacheHit: true };
 
   const audio = await synthesizeVolcTts(options);
   const published = await PUBLICATIONS.run(key, () => publishAtomically(key, file, audio));
   return { file: published, cacheHit: false };
+}
+
+function waitForPublication(pending: Promise<File>, signal?: AbortSignal): Promise<File> {
+  if (!signal) return pending;
+  const abortError = () => {
+    const error = new Error('播放已取消。');
+    error.name = 'AbortError';
+    return error;
+  };
+  if (signal.aborted) return Promise.reject(abortError());
+  return new Promise<File>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(abortError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    pending.then(
+      (published) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(published);
+      },
+      (cause: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(cause);
+      },
+    );
+    // Cover abort between the initial check and listener registration.
+    if (signal.aborted) onAbort();
+  });
 }
 
 export function activateVolcTtsCacheScope(owner: number, identities: VolcTtsCacheIdentity[]): void {

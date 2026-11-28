@@ -32,6 +32,9 @@ export type VolcTtsOptions = {
 
 export function buildVolcTtsUrl(endpoint = VOLC_TTS_DEFAULT_ENDPOINT): string {
   const normalized = endpoint.trim().replace(/\/+$/, '');
+  if (new URL(normalized).protocol !== 'https:') {
+    throw new Error('火山 TTS 地址必须使用 HTTPS，不能通过明文连接发送 API Key。');
+  }
   return normalized.endsWith(TTS_PATH) ? normalized : `${normalized}${TTS_PATH}`;
 }
 
