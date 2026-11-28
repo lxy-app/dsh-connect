@@ -4,6 +4,7 @@
 - 类型：独立、可交互 HTML
 - 状态：用于产品评审与交互演示
 - 数据：全部为模拟数据
+- 管理后台侧栏视觉对比：[离线 A/B 预览](../prototype/previews/admin-sidebar-options.html)；[浅色方案](../prototype/previews/admin-sidebar-light.png)、[深色方案](../prototype/previews/admin-sidebar-dark.png) 与 [浅色落地截图](../prototype/previews/admin-sidebar-implemented-light.png)、[深色落地截图](../prototype/previews/admin-sidebar-implemented-dark.png)。A/B 是设计备选，并非两个均已实现。
 
 ## 1. 打开方式
 
