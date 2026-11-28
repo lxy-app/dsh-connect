@@ -15,6 +15,7 @@ import { Typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { describeMobileApiError, getMobileAccessOverview, getMobileSessions } from '@/lib/mobile-api';
 import { formatRelative } from '@shared/lib/format';
+import { settleMobileOverviewAndSessions } from '@shared/lib/mobile-overview-and-sessions';
 import { useMobileSession } from '@/providers/mobile-session-provider';
 import type { MobileDesktopAccess, MobileSession } from '@shared/types/mobile';
 
@@ -56,25 +57,39 @@ export function SessionDrawer({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [access, list] = await Promise.all([
+      let available: MobileDesktopAccess[] = [];
+      const result = await settleMobileOverviewAndSessions(
         authorized((server, token) => getMobileAccessOverview(server, token)),
         authorized((server, token) => getMobileSessions(server, token)),
-      ]);
-      const available = access.desktops.filter((desktop) => desktop.grant?.status === 'active');
-      setDesktops(available);
-      setSessions(list.sessions);
-      setError(null);
-      const identity = identityRef.current;
-      const current = list.sessions.find((item) => item.sessionId === identity.currentSessionId);
-      const nextDevice = current?.deviceId ?? identity.currentDeviceId ?? available[0]?.deviceId ?? '';
-      const nextDesktop = available.find((desktop) => desktop.deviceId === nextDevice) ?? available[0];
-      const nextWorkspace = current?.workspaceId
-        ?? (nextDesktop?.deviceId === identity.currentDeviceId ? identity.currentWorkspaceId : undefined)
-        ?? nextDesktop?.grant?.workspaces[0]?.id ?? '';
-      setDeviceId(nextDesktop?.deviceId ?? '');
-      setWorkspaceId(nextWorkspace);
-      setExpandedWorkspace(nextWorkspace);
-      setSessionLimit(5);
+        {
+          overview: (access) => {
+            available = access.desktops.filter((desktop) => desktop.grant?.status === 'active');
+            setDesktops(available);
+          },
+          sessions: (list) => setSessions(list.sessions),
+        },
+      );
+      if (result.overview.status === 'fulfilled') {
+        const identity = identityRef.current;
+        const currentSessions = result.sessions.status === 'fulfilled' ? result.sessions.value.sessions : [];
+        const current = currentSessions.find((item) => item.sessionId === identity.currentSessionId);
+        const nextDevice = current?.deviceId ?? identity.currentDeviceId ?? available[0]?.deviceId ?? '';
+        const nextDesktop = available.find((desktop) => desktop.deviceId === nextDevice) ?? available[0];
+        const nextWorkspace = current?.workspaceId
+          ?? (nextDesktop?.deviceId === identity.currentDeviceId ? identity.currentWorkspaceId : undefined)
+          ?? nextDesktop?.grant?.workspaces[0]?.id ?? '';
+        setDeviceId(nextDesktop?.deviceId ?? '');
+        setWorkspaceId(nextWorkspace);
+        setExpandedWorkspace(nextWorkspace);
+        setSessionLimit(5);
+      }
+      if (result.overview.status === 'rejected') {
+        setError(describeMobileApiError(result.overview.reason));
+      } else if (result.sessions.status === 'rejected') {
+        setError(describeMobileApiError(result.sessions.reason));
+      } else {
+        setError(null);
+      }
     } catch (cause) {
       setError(describeMobileApiError(cause));
     } finally {
