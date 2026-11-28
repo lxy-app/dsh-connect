@@ -64,7 +64,7 @@ export function ProfileTab({
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>我的</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          DSH Connect Mobile · v{Constants.expoConfig?.version ?? '0.1.0'}
+          DSH Connect Mobile · v{Constants.expoConfig?.version ?? '0.2.0'}
         </Text>
       </View>
 

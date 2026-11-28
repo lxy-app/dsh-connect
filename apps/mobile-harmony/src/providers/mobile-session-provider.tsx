@@ -424,7 +424,7 @@ function loginDevice(): { name: string; platform: MobilePlatform } {
 }
 
 function appVersion(): string {
-  return (Constants.expoConfig?.version ?? '0.1.0').slice(0, 64);
+  return (Constants.expoConfig?.version ?? '0.2.0').slice(0, 64);
 }
 
 function clearDocumentCacheBestEffort(): void {
