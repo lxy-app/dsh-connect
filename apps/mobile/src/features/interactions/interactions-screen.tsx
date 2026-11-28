@@ -35,7 +35,7 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
   const theme = useAppTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { interactions, feedback, busyId, refresh, decide } = useInteractions();
+  const { interactions, pendingCount, feedback, busyId, refresh, decide } = useInteractions();
   const { authorized, status } = useMobileSession();
   const [refreshing, setRefreshing] = useState(false);
   const [withoutApproval, setWithoutApproval] = useState<MobileDesktopAccess[]>([]);
@@ -89,29 +89,31 @@ export function InteractionsScreen({ embedded = false }: { embedded?: boolean })
 
   return (
     <View style={[styles.page, { backgroundColor: theme.background, paddingTop: embedded ? 0 : insets.top }]}>
-      {!embedded ? (
-      <View style={styles.head}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="返回"
-          hitSlop={10}
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.iconButton,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={[styles.iconText, { color: theme.text }]}>‹</Text>
-        </Pressable>
+      <View style={[styles.head, embedded && styles.embeddedHead]}>
+        {!embedded ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="返回"
+            hitSlop={10}
+            onPress={() => router.back()}
+            style={({ pressed }) => [
+              styles.iconButton,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.iconText, { color: theme.text }]}>‹</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.headText}>
-          <Text style={[styles.title, { color: theme.text }]}>待处理</Text>
+          <Text style={[styles.title, embedded && styles.pageTitle, { color: theme.text }]}>
+            待处理{embedded && pendingCount > 0 ? ` · ${pendingCount}` : ''}
+          </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            桌面上等待你决定的审批与提问
+            {embedded ? '需要你确认的审批与提问' : '桌面上等待你决定的审批与提问'}
           </Text>
         </View>
       </View>
-      ) : null}
 
       <ScrollView
         contentContainerStyle={styles.body}
@@ -172,6 +174,16 @@ function ApprovalScopeNotice({ desktops }: { desktops: MobileDesktopAccess[] }) 
 const styles = StyleSheet.create({
   page: {
     flex: 1,
+  },
+  embeddedHead: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  pageTitle: {
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -0.6,
   },
   head: {
     flexDirection: 'row',
