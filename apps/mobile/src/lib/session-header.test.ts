@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import type * as PickerModule from '@shared/components/device-picker-sheet';
-import type { SessionHeader as Header } from '@shared/components/session-header';
+import type { SessionHeader as Header, WorkspaceDisclosureChevron as WorkspaceChevron } from '@shared/components/session-header';
 import type { ComponentProps } from 'react';
 
 // Render the same shared TSX with React Native Web in the headless test process.
@@ -23,7 +23,10 @@ function loadComponent<T>(name: string): T {
   });
   return exports;
 }
-const header = loadComponent<{ SessionHeader: typeof Header }>('session-header');
+const header = loadComponent<{
+  SessionHeader: typeof Header;
+  WorkspaceDisclosureChevron: typeof WorkspaceChevron;
+}>('session-header');
 const { DevicePickerSheet } = loadComponent<typeof PickerModule>('device-picker-sheet');
 const { renderToStaticMarkup } = load('react-dom/server');
 const { Text } = load('react-native-web');
@@ -46,6 +49,33 @@ test('compact header shows device before workspace and exposes distinct drawer, 
   for (const label of ['打开会话侧边栏', '新建会话', '刷新对话', '评估产品付费方案，李伟的 Mac mini，设备在线，memflow']) {
     assert.ok(html.includes(`aria-label="${label}"`));
   }
+});
+
+test('workspace disclosure centers a geometric chevron in both states', () => {
+  const { StyleSheet } = load('react-native-web');
+  const collapsed = header.WorkspaceDisclosureChevron({ expanded: false, color: '#777' });
+  const expanded = header.WorkspaceDisclosureChevron({ expanded: true, color: '#777' });
+  const collapsedStyle = StyleSheet.flatten(collapsed.props.style);
+  const expandedStyle = StyleSheet.flatten(expanded.props.style);
+
+  for (const element of [collapsed, expanded]) {
+    const frameStyle = StyleSheet.flatten(element.props.style);
+    const glyphStyle = StyleSheet.flatten(element.props.children.props.style);
+    assert.equal(frameStyle.width, 18);
+    assert.equal(frameStyle.height, 18);
+    assert.equal(frameStyle.alignItems, 'center');
+    assert.equal(frameStyle.justifyContent, 'center');
+    assert.equal(glyphStyle.width, 6);
+    assert.equal(glyphStyle.height, 6);
+    assert.equal(glyphStyle.borderTopWidth, 1.5);
+    assert.equal(glyphStyle.borderRightWidth, 1.5);
+    assert.equal(glyphStyle.borderColor, '#777');
+    assert.equal(glyphStyle.transform[0].rotate, '45deg');
+  }
+  assert.equal(collapsedStyle.transform, undefined);
+  assert.equal(collapsedStyle.top, undefined);
+  assert.equal(expandedStyle.transform[0].rotate, '90deg');
+  assert.equal(expandedStyle.top, -1);
 });
 
 test('session header preserves running, waiting and idle status beside its actions', () => {
