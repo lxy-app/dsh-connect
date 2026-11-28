@@ -7,6 +7,9 @@ import { Image } from 'expo-image';
 // width follows from the aspect; sizing the wide speaker motif in a square box
 // used to shrink it to its width and make it read smaller than the portrait ones.
 const CHAT_ICONS = {
+  desktop: { source: require('../../assets/tab-icons/devices.png'), aspect: 1 },
+  newSession: { source: require('../../assets/chat-icons/new-session.png'), aspect: 1 },
+  refresh: { source: require('../../assets/chat-icons/refresh.png'), aspect: 1 },
   voice: { source: require('../../assets/chat-icons/voice-input.png'), aspect: 59 / 66 },
   keyboard: { source: require('../../assets/chat-icons/keyboard-input.png'), aspect: 67 / 56 },
   read: { source: require('../../assets/chat-icons/read-aloud.png'), aspect: 79 / 60 },

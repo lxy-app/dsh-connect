@@ -16,6 +16,8 @@
 - `lib/responsive-layout.ts`：按应用窗口宽高计算 compact / expanded、导航 rail、会话主栏和阅读宽度。
 - `useResponsiveLayout(false)` / `resolveResponsiveLayout({ width, height, hasMaster: false })` 用于无主栏页面，不扣除会话主栏宽度；默认保留会话布局兼容性。容器不改变详情树的位置，旋转时避免重建详情状态。
 - `components/app-navigation.tsx`：底部 Tab 与 Pad 导航 rail 的展示组件，图标和主题由壳注入。
+- `components/session-header.tsx`：会话页用圆形菜单展开侧栏，胶囊内分别新建会话和刷新，保留会话运行中/等待中/空闲状态。设备图标在副标题和抽屉中复用，绿点表示设备在线，副标题依次显示设备名和工作区名，窄屏点击可打开侧栏。
+- `components/device-picker-sheet.tsx`：点击抽屉顶部设备行打开设备选择面板。手机使用底部面板，鸿蒙常驻主栏使用居中面板；点选设备后返回工作区列表。
 - `components/session-master-detail.tsx`：会话主栏与详情的通用容器，不持有路由或会话状态。
 - `hooks/use-responsive-layout.ts`：监听旋转、分屏和窗口尺寸变化。
 
